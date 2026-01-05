@@ -214,11 +214,52 @@ python manage.py createsuperuser
 python manage.py seed_dev
 ```
 
-5. Run server:
+5. Verify DEV environment & static files:
+
+```bash
+python manage.py check_dev --collectstatic
+```
+
+6. Run server (DEV):
 
 ```bash
 python manage.py runserver
 ```
+
+Or using Gunicorn (DEV server with systemd + nginx):
+
+- Copy `.env.example` -> `.env` and update values as described earlier
+- Install dependencies and create virtualenv on server:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+- Run migrations, collectstatic and seed:
+
+```bash
+python manage.py migrate
+python manage.py collectstatic --noinput
+python manage.py seed_dev
+```
+
+- Deploy Gunicorn systemd unit and NGINX (templates provided under `deploy/`):
+
+```bash
+# copy service file
+sudo cp deploy/gunicorn.goexplorer.service /etc/systemd/system/gunicorn-goexplorer.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now gunicorn-goexplorer
+
+# copy nginx conf (verify path and server_name)
+sudo cp deploy/nginx.goexplorer.dev.conf /etc/nginx/sites-available/goexplorer-dev
+sudo ln -s /etc/nginx/sites-available/goexplorer-dev /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+After this the app should be accessible at http://goexplorer-dev.cloud
 
 This is a dev-only setup: keep `DEBUG=True`, use the dev DB, and do not set production secrets here.
 
