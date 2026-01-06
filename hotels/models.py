@@ -15,6 +15,11 @@ class Hotel(TimeStampedModel):
         (4, '4 Star'),
         (5, '5 Star'),
     ]
+
+    INVENTORY_SOURCES = [
+        ('external_cm', 'External Channel Manager'),
+        ('internal_cm', 'Internal (GoExplorer)'),
+    ]
     
     name = models.CharField(max_length=200)
     description = models.TextField()
@@ -35,6 +40,19 @@ class Hotel(TimeStampedModel):
     image = models.ImageField(upload_to='hotels/', null=True, blank=True)
     is_featured = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+
+    # Inventory ownership
+    inventory_source = models.CharField(
+        max_length=20,
+        choices=INVENTORY_SOURCES,
+        default='internal_cm',
+        help_text="Defines whether this property is managed by an external channel manager or GoExplorer internal inventory",
+    )
+    channel_manager_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Optional external channel manager provider name",
+    )
     
     # Amenities
     has_wifi = models.BooleanField(default=True)
@@ -66,6 +84,24 @@ class Hotel(TimeStampedModel):
     def __str__(self):
         return f"{self.name} - {self.city.name}"
 
+    # Image helpers
+    def get_primary_image(self):
+        """Return the primary image file with sensible fallbacks."""
+        if self.image:
+            return self.image
+
+        primary = self.images.filter(is_primary=True).first()
+        if primary:
+            return primary.image
+
+        first = self.images.first()
+        return first.image if first else None
+
+    @property
+    def primary_image_url(self):
+        image = self.get_primary_image()
+        return image.url if image else ''
+
 
 class HotelImage(models.Model):
     """Additional images for hotels"""
@@ -76,6 +112,7 @@ class HotelImage(models.Model):
     
     def __str__(self):
         return f"{self.hotel.name} - Image"
+
 
 
 class RoomType(TimeStampedModel):
@@ -115,6 +152,33 @@ class RoomType(TimeStampedModel):
     
     def __str__(self):
         return f"{self.hotel.name} - {self.name}"
+
+
+class ChannelManagerRoomMapping(TimeStampedModel):
+    """Maps internal room types to external channel manager room identifiers."""
+
+    PROVIDER_CHOICES = [
+        ('generic', 'Generic'),
+        ('staah', 'STAAH'),
+        ('ratehawk', 'RateHawk'),
+        ('djubo', 'Djubo'),
+        ('other', 'Other'),
+    ]
+
+    hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name='channel_mappings')
+    room_type = models.OneToOneField('RoomType', on_delete=models.CASCADE, related_name='channel_mapping')
+    provider = models.CharField(max_length=50, choices=PROVIDER_CHOICES, default='generic')
+    external_room_id = models.CharField(max_length=120)
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['hotel__name', 'room_type__name']
+        verbose_name = 'Channel Manager Mapping'
+        verbose_name_plural = 'Channel Manager Mappings'
+
+    def __str__(self):
+        return f"{self.hotel.name} -> {self.external_room_id} ({self.provider})"
 
 
 class RoomAvailability(models.Model):

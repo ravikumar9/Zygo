@@ -399,6 +399,17 @@
     color: #666;
     font-size: 1.1rem;
 }
+
+input[type="date"] {
+    color: #212529;
+    background-color: #fff;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-input-placeholder {
+    color: #212529;
+    opacity: 1;
+}
 </style>
 
 <script>
@@ -599,12 +610,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    const params = new URLSearchParams(window.location.search);
+
     dateInputs.forEach(id => {
         const input = document.getElementById(id);
         if (input) {
             input.min = todayStr;
 
-            // Pre-populate hotel dates for quick search
+            // Pre-populate hotel dates for quick search (honor query params first)
+            const qsVal = params.get(id === 'hotelCheckin' ? 'checkin' : id === 'hotelCheckout' ? 'checkout' : 'date');
+            if (qsVal) {
+                input.value = qsVal;
+            }
             if (!input.value) {
                 if (id === 'hotelCheckin') input.value = todayStr;
                 if (id === 'hotelCheckout') input.value = tomorrowStr;

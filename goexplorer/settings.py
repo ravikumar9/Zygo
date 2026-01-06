@@ -139,6 +139,8 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+# Serve media from Django when enabled; default to on so dev/staging hosts show images
+SERVE_MEDIA_FILES = config("SERVE_MEDIA_FILES", default=True, cast=bool)
 
 # --------------------------------------------------
 # Email (DEV only)

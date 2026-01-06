@@ -28,9 +28,11 @@ urlpatterns = [
     path('api/users/', include(('users.urls', 'users'), namespace='users-api')),
 ]
 
-# Serve media files in development
-if settings.DEBUG:
+# Serve media files (enable in dev or when SERVE_MEDIA_FILES is true)
+if getattr(settings, "SERVE_MEDIA_FILES", settings.DEBUG):
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 # Admin site customization

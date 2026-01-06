@@ -2,7 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from core.models import TimeStampedModel
-from hotels.models import RoomType
+from hotels.models import Hotel, RoomType
 from buses.models import BusSchedule, SeatLayout, BusRoute
 from packages.models import PackageDeparture
 import uuid
@@ -25,6 +25,11 @@ class Booking(TimeStampedModel):
         ('bus', 'Bus'),
         ('package', 'Package'),
     ]
+
+    INVENTORY_CHANNELS = [
+        ('internal_cm', 'Internal CM'),
+        ('external_cm', 'External CM'),
+    ]
     
     booking_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings')
@@ -38,6 +43,11 @@ class Booking(TimeStampedModel):
     booking_source = models.CharField(max_length=20, choices=[('internal','Internal'), ('external','External')], default='internal')
     booking_type = models.CharField(max_length=20, choices=BOOKING_TYPES)
     status = models.CharField(max_length=20, choices=BOOKING_STATUS, default='pending')
+
+    inventory_channel = models.CharField(max_length=20, choices=INVENTORY_CHANNELS, default='internal_cm')
+    lock_id = models.CharField(max_length=128, blank=True)
+    cm_booking_id = models.CharField(max_length=128, blank=True)
+    payment_reference = models.CharField(max_length=128, blank=True)
     
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     paid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -206,3 +216,43 @@ class BookingAuditLog(TimeStampedModel):
     
     def __str__(self):
         return f"Log for {self.booking.booking_id} - {self.field_name} by {self.edited_by}"
+
+
+class InventoryLock(TimeStampedModel):
+    """Track inventory locks for both external and internal channel managers."""
+
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('confirmed', 'Confirmed'),
+        ('released', 'Released'),
+        ('expired', 'Expired'),
+        ('failed', 'Failed'),
+    ]
+
+    SOURCE_CHOICES = [
+        ('external_cm', 'External Channel Manager'),
+        ('internal_cm', 'Internal Channel Manager'),
+    ]
+
+    booking = models.OneToOneField(Booking, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_lock')
+    hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name='inventory_locks')
+    room_type = models.ForeignKey(RoomType, on_delete=models.CASCADE, related_name='inventory_locks')
+
+    reference_id = models.CharField(max_length=80, unique=True)
+    lock_id = models.CharField(max_length=128, blank=True)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
+    provider = models.CharField(max_length=100, blank=True)
+
+    check_in = models.DateField()
+    check_out = models.DateField()
+    num_rooms = models.IntegerField(default=1)
+
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Lock {self.reference_id} ({self.get_status_display()})"

@@ -94,6 +94,12 @@ class BookingAdmin(admin.ModelAdmin):
         ('Booking Information', {
             'fields': ('booking_id', 'user', 'booking_type', 'status')
         }),
+        ('Channel / Inventory', {
+            'fields': (
+                'booking_source', 'channel_name', 'channel_reference', 'external_booking_id',
+                'sync_status', 'last_synced_at', 'inventory_channel', 'lock_id', 'cm_booking_id', 'payment_reference'
+            )
+        }),
         ('Customer Details', {
             'fields': ('customer_name', 'customer_email', 'customer_phone', 'special_requests')
         }),

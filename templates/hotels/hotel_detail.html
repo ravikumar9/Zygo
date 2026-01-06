@@ -104,12 +104,20 @@
     .booking-widget select {
         width: 100%;
         cursor: pointer;
+        color: #212529;
+        background-color: #fff;
     }
 
     .booking-widget input[type="date"]::-webkit-calendar-picker-indicator {
         cursor: pointer;
         width: 100%;
         height: 100%;
+    }
+
+    .booking-widget input[type="date"]::-webkit-datetime-edit,
+    .booking-widget input[type="date"]::-webkit-input-placeholder {
+        color: #212529;
+        opacity: 1;
     }
 
     .btn-book {
@@ -145,11 +153,21 @@
             <!-- Image Gallery -->
             <div class="image-gallery">
                 <img id="mainImage" loading="lazy" style="object-fit: cover; aspect-ratio: 16/9;" 
-                     src="{% if hotel.image %}{{ hotel.image.url }}{% else %}https://via.placeholder.com/800x400?text={{ hotel.name|urlencode }}{% endif %}" 
+                     src="{% if hotel.primary_image_url %}{{ hotel.primary_image_url }}{% else %}https://via.placeholder.com/800x400?text={{ hotel.name|urlencode }}{% endif %}" 
                      alt="{{ hotel.name }}" 
                      class="main-image"
                      onerror="this.src='https://via.placeholder.com/800x400?text=Hotel+Image'">
             </div>
+            {% if hotel.images.all %}
+            <div class="d-flex flex-wrap gap-2 mb-4" id="galleryThumbs">
+                {% for image in hotel.images.all %}
+                    <img src="{{ image.image.url }}" data-main-image="{{ image.image.url }}" loading="lazy" 
+                         alt="{{ hotel.name }} image {{ forloop.counter }}" 
+                         style="width: 120px; height: 80px; object-fit: cover; cursor: pointer; border-radius: 4px;"
+                         onerror="this.style.display='none'">
+                {% endfor %}
+            </div>
+            {% endif %}
 
             <!-- Rating -->
             <div class="rating-section">
@@ -253,6 +271,13 @@
         <div class="col-lg-4">
             <div class="booking-widget">
                 <h4>Book This Hotel</h4>
+                {% if availability_snapshot %}
+                    <div class="alert alert-success small">
+                        <strong>Rooms available:</strong> {{ availability_snapshot.available_rooms|default:"On request" }}
+                        {% if availability_snapshot.rate %}<br>Best rate: ₹{{ availability_snapshot.rate|floatformat:"0" }}/night{% endif %}
+                        <br><span class="text-muted">Source: {{ availability_snapshot.source|default:"N/A"|title }}</span>
+                    </div>
+                {% endif %}
                 <form id="bookingForm" method="post" action="{% url 'hotels:book_hotel' hotel.id %}">
                     {% csrf_token %}
                     
@@ -427,6 +452,27 @@
         const checkoutInput = document.getElementById('checkout');
         const roomSelect = document.getElementById('room_type');
         const numRoomsInput = document.getElementById('num_rooms');
+        const mainImageEl = document.getElementById('mainImage');
+
+        // Apply query param values so desktop fields show selected dates after reload/navigation
+        const params = new URLSearchParams(window.location.search);
+        const qsCheckin = params.get('checkin');
+        const qsCheckout = params.get('checkout');
+        if (checkinInput && qsCheckin) {
+            checkinInput.value = qsCheckin;
+        }
+        if (checkoutInput && qsCheckout) {
+            checkoutInput.value = qsCheckout;
+        }
+
+        document.querySelectorAll('#galleryThumbs img[data-main-image]').forEach((thumb) => {
+            thumb.addEventListener('click', () => {
+                const src = thumb.getAttribute('data-main-image');
+                if (src && mainImageEl) {
+                    mainImageEl.src = src;
+                }
+            });
+        });
 
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
