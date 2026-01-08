@@ -4,6 +4,7 @@
 {% block title %}{{ bus.bus_name }} - GoExplorer{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/booking-styles.css' %}">
 <style>
     .bus-header {
         background: linear-gradient(135deg, #FF6B35, #004E89);
@@ -538,4 +539,5 @@
         updateSeatDisplay();
     });
 </script>
+<script src="{% static 'js/booking-utilities.js' %}"></script>
 {% endblock %}
