@@ -1,7 +1,7 @@
 from django.shortcuts import get_object_or_404
 from django.views.generic import ListView, DetailView
 from django.contrib.auth.decorators import login_required
-from .models import Booking
+from .models import Booking  # Ensure model import
 
 @login_required
 class BookingListView(ListView):
