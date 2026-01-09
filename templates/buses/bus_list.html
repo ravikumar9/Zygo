@@ -257,7 +257,14 @@
     </div>
 </div>
 <div class="container mb-5">
-    {% if buses %}
+    {% if show_empty_message %}
+    <div class="alert alert-info" role="alert">
+        <h4 class="alert-heading"><i class="fas fa-search"></i> No Buses Found</h4>
+        <p>Sorry, we couldn't find any buses matching your search criteria. Please try with different filters or dates.</p>
+        <hr>
+        <p class="mb-0"><a href="{% url 'buses:list' %}">Clear filters and search again</a></p>
+    </div>
+    {% elif buses %}
         <h2 class="mb-4">{{ buses|length }} Buses Available</h2>
         {% for bus in buses %}
             <div class="bus-card">

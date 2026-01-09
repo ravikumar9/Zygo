@@ -30,6 +30,8 @@ def bus_list(request):
     departure_time = request.GET.get('departure_time')  # 'early', 'late'
     boarding_point = request.GET.get('boarding_point')
     
+    has_search = any([source_city, destination_city, travel_date, bus_type, ac_filter, bus_age_min, bus_age_max, departure_time])
+    
     # Filter buses by routes if search parameters provided
     if source_city or destination_city:
         routes = BusRoute.objects.all()
@@ -112,6 +114,8 @@ def bus_list(request):
         'selected_boarding_point': boarding_point,
         'bus_types': Bus.BUS_TYPES,
         'route_map': route_map,
+        'has_search': has_search,
+        'show_empty_message': has_search and len(buses) == 0,
     }
     return render(request, 'buses/bus_list.html', context)
 

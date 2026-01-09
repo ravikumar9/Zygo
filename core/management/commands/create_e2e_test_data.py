@@ -71,16 +71,19 @@ class Command(BaseCommand):
             sys.exit(1)
 
     def clean_data(self):
-        """Delete test data"""
+        """Delete test data in correct FK dependency order"""
         try:
-            BusSchedule.objects.all().delete()
-            DroppingPoint.objects.all().delete()
-            BoardingPoint.objects.all().delete()
-            BusStop.objects.all().delete()
-            SeatLayout.objects.all().delete()
-            BusRoute.objects.all().delete()
-            Bus.objects.all().delete()
-            BusOperator.objects.all().delete()
+            from django.db import transaction
+            with transaction.atomic():
+                # Delete in reverse dependency order
+                BusSchedule.objects.all().delete()
+                DroppingPoint.objects.all().delete()
+                BoardingPoint.objects.all().delete()
+                BusStop.objects.all().delete()
+                SeatLayout.objects.all().delete()
+                BusRoute.objects.all().delete()
+                Bus.objects.all().delete()
+                BusOperator.objects.all().delete()
             self.stdout.write(self.style.SUCCESS('[OK] Cleaned existing data'))
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'Warning during cleanup: {e}'))

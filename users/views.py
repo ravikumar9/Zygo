@@ -92,6 +92,7 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect('core:home')
     
+    login_failed = False
     if request.method == 'POST':
         form = UserLoginForm(request.POST)
         if form.is_valid():
@@ -103,21 +104,30 @@ def login_view(request):
             if user is not None:
                 login(request, user)
                 messages.success(request, f'Welcome back, {user.first_name or user.email}!')
-                next_url = request.GET.get('next', 'core:home')
-                return redirect(next_url)
+                # Handle next parameter from GET or POST
+                next_url = request.POST.get('next') or request.GET.get('next')
+                if next_url and next_url.startswith('/'):
+                    return redirect(next_url)
+                return redirect('core:home')
             else:
                 messages.error(request, 'Invalid email or password')
+                login_failed = True
     else:
         form = UserLoginForm()
     
-    return render(request, 'users/login.html', {'form': form})
+    return render(request, 'users/login.html', {
+        'form': form,
+        'login_failed': login_failed,
+        'next': request.GET.get('next', '')
+    })
 
 
-@login_required(login_url='users:login')
+@require_http_methods(["GET", "POST"])
 def logout_view(request):
-    """User logout view"""
-    logout(request)
-    messages.success(request, 'Logged out successfully!')
+    """User logout view - supports both GET and POST"""
+    if request.user.is_authenticated:
+        logout(request)
+        messages.success(request, 'Logged out successfully!')
     return redirect('core:home')
 
 

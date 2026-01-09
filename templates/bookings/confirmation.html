@@ -13,6 +13,14 @@
         {% endfor %}
     {% endif %}
     
+    {% if not booking %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <h4 class="alert-heading"><i class="fas fa-exclamation-circle"></i> Booking Not Found</h4>
+        <p>Unable to load your booking. Please try again or contact support.</p>
+        <a href="{% url 'core:home' %}" class="btn btn-primary">Return to Home</a>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% else %}
     <div class="alert alert-success alert-dismissible fade show" role="alert">
         <h4 class="alert-heading">
             <i class="fas fa-check-circle"></i> Booking Successful!
@@ -27,11 +35,11 @@
             <div class="card mb-4">
                 <div class="card-body">
                     <h5 class="card-title">{{ booking.get_booking_type_display }} Booking</h5>
-                    <p class="mb-2"><strong>Booking ID:</strong> {{ booking.booking_id }}</p>
+                    <p class="mb-2"><strong>Booking ID:</strong> <code>{{ booking.booking_id }}</code></p>
                     <p class="mb-2"><strong>Status:</strong> <span class="badge bg-warning">{{ booking.get_status_display }}</span></p>
-                    <p class="mb-2"><strong>Guest Name:</strong> {{ booking.customer_name }}</p>
-                    <p class="mb-2"><strong>Email:</strong> {{ booking.customer_email }}</p>
-                    <p class="mb-2"><strong>Phone:</strong> {{ booking.customer_phone }}</p>
+                    <p class="mb-2"><strong>Guest Name:</strong> {{ booking.customer_name|default:"Not specified" }}</p>
+                    <p class="mb-2"><strong>Email:</strong> {{ booking.customer_email|default:"Not specified" }}</p>
+                    <p class="mb-2"><strong>Phone:</strong> {{ booking.customer_phone|default:"Not specified" }}</p>
                     
                     {% if booking.hotel_details %}
                     <hr>
@@ -53,6 +61,11 @@
                     <p class="mb-2"><strong>Seats:</strong> {% for seat in booking.bus_details.bus_booking_seats.all %}{{ seat.seat.seat_number }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
                     <p class="mb-2"><strong>Boarding:</strong> {{ booking.bus_details.boarding_point.name }} ({{ booking.bus_details.boarding_point.pickup_time|time:"H:i" }})</p>
                     <p class="mb-2"><strong>Dropping:</strong> {{ booking.bus_details.dropping_point.name }} ({{ booking.bus_details.dropping_point.drop_time|time:"H:i" }})</p>
+                    {% else %}
+                    <hr>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Booking details are being processed. Please refresh the page.
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -75,5 +88,6 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
