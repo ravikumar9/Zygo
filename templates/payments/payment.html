@@ -265,7 +265,7 @@
         </div>
 
         <!-- Payment Button -->
-        <button id="paymentBtn" class="razorpay-button" onclick="initiatePayment()">
+        <button id="paymentBtn" class="razorpay-button">
             <i class="fas fa-lock"></i> Pay Now - ₹{{ total_amount }}
         </button>
 
@@ -397,6 +397,12 @@ document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
         const btn = document.getElementById('paymentBtn');
         btn.textContent = `\u{1F512} Pay Now via ${this.value.toUpperCase()} - ₹${AMOUNT}`;
     });
+});
+
+// Attach payment button handler
+document.getElementById('paymentBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    initiatePayment();
 });
 </script>
 {% endblock %}

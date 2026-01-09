@@ -277,7 +277,7 @@
                                 <div class="room-price">₹{{ room.base_price }}/night</div>
                                 <p class="text-muted small mb-2">Base Rate + {{ hotel.gst_percentage }}% GST</p>
                                 <p class="text-muted small mb-3">{{ room.total_rooms }} rooms available</p>
-                                <button class="btn btn-primary" onclick="selectRoom('{{ room.id }}', '{{ room.name }}', '{{ room.base_price }}')">
+                                <button class="btn btn-primary select-room-btn" data-room-id="{{ room.id }}" data-room-name="{{ room.name }}" data-room-price="{{ room.base_price }}">
                                     Select Room
                                 </button>
                             </div>
@@ -398,6 +398,10 @@
         event.target.closest('.room-card').classList.add('selected');
         
         updatePrice();
+        
+        // Scroll to booking widget
+        document.querySelector('.booking-widget').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     }
 
     function updatePrice() {
@@ -520,6 +524,17 @@
                     mainImageEl.src = src;
                     console.log('[BOOKING] Changed main image to:', src);
                 }
+            });
+        });
+
+        // Select room button handlers
+        document.querySelectorAll('.select-room-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const roomId = btn.getAttribute('data-room-id');
+                const roomName = btn.getAttribute('data-room-name');
+                const roomPrice = btn.getAttribute('data-room-price');
+                selectRoom(roomId, roomName, roomPrice);
             });
         });
 
