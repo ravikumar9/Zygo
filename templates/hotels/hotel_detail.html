@@ -366,7 +366,7 @@
                     </div>
 
                     {% if user.is_authenticated %}
-                        <button type="submit" id="hotelBookNowBtn" class="btn btn-primary btn-book" onclick="validateAndSubmit(event)" aria-label="Proceed to payment">
+                        <button type="submit" id="hotelBookNowBtn" class="btn btn-primary btn-book" aria-label="Proceed to payment">
                             <i class="fas fa-check-circle"></i> Proceed to Payment
                         </button>
                     {% else %}
@@ -482,6 +482,7 @@
         const roomSelect = document.getElementById('room_type');
         const numRoomsInput = document.getElementById('num_rooms');
         const mainImageEl = document.getElementById('mainImage');
+        const bookingForm = document.getElementById('bookingForm');
 
         console.log('[BOOKING] Initializing hotel booking form...');
 
@@ -650,6 +651,13 @@
         if (roomSelect && !roomSelect.value && roomSelect.options.length > 1) {
             roomSelect.selectedIndex = 1;
             console.log('[BOOKING] Auto-selected first room type');
+        }
+
+        // Form submission handler - validate before submit
+        if (bookingForm) {
+            bookingForm.addEventListener('submit', function(e) {
+                validateAndSubmit(e);
+            });
         }
 
         // Initial price calculation

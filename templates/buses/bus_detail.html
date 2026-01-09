@@ -530,25 +530,7 @@
             totalEl.textContent = total.toFixed(0);
         }
 
-        function validateLadiesSeats() {
-            const selected = getSelectedSeats();
-            const gender = genderSelect.value;
-            
-            let hasInvalidSeat = false;
-            selected.forEach(seat => {
-                if (seat.reserved === 'ladies' && gender !== 'F') {
-                    hasInvalidSeat = true;
-                }
-            });
 
-            if (hasInvalidSeat) {
-                ladiesWarning.classList.remove('d-none');
-                if (bookNowBtn) bookNowBtn.disabled = true;
-            } else {
-                ladiesWarning.classList.add('d-none');
-                if (bookNowBtn) bookNowBtn.disabled = selected.length === 0;
-            }
-        }
 
         function updateHiddenInputs() {
             const selected = getSelectedSeats();
