@@ -52,6 +52,29 @@
         margin: 2rem 0;
     }
 
+    .seat-row {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 1rem;
+        gap: 0.5rem;
+    }
+
+    .seat-block-left {
+        display: inline-flex;
+        gap: 0.5rem;
+    }
+
+    .seat-aisle {
+        width: 30px;
+        display: inline-block;
+    }
+
+    .seat-block-right {
+        display: inline-flex;
+        gap: 0.5rem;
+    }
+
     .seat {
         width: 40px;
         height: 40px;
@@ -271,8 +294,9 @@
                         {% if deck_group.grouper > 1 %}<h6 class="mt-4 mb-3">Upper Deck</h6>{% else %}<h6 class="mb-3">Lower Deck</h6>{% endif %}
                         {% regroup deck_group.list by row as seats_by_row %}
                         {% for row_group in seats_by_row %}
-                            <div style="margin-bottom: 1rem;">
+                            <div class="seat-row">
                                 {% for seat in row_group.list %}
+                                    {% if forloop.counter == 4 %}<div class="seat-aisle"></div>{% endif %}
                                     <input type="checkbox" class="seat-checkbox" id="seat-{{ seat.id }}" value="{{ seat.id }}" data-gender="{{ seat.reserved_for }}" data-number="{{ seat.seat_number }}" style="display: none;">
                                     <label for="seat-{{ seat.id }}" class="seat {% if seat.is_booked %}booked{% elif seat.reserved_for == 'ladies' %}ladies{% else %}available{% endif %}" title="Seat {{ seat.seat_number }} - {{ seat.get_reserved_for_display }}">
                                         {{ seat.seat_number }}
@@ -475,7 +499,7 @@
             
             let hasInvalidSeat = false;
             selected.forEach(seat => {
-                if (seat.reserved === 'ladies' && gender === 'M') {
+                if (seat.reserved === 'ladies' && gender !== 'F') {
                     hasInvalidSeat = true;
                 }
             });
