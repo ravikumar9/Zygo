@@ -420,6 +420,43 @@
 
 {% block extra_js %}
 <script>
+    // Define validateLadiesSeats FIRST, before DOM is even parsed
+    function validateLadiesSeats() {
+        const genderSelect = document.getElementById('passenger_gender');
+        const seatCheckboxes = document.querySelectorAll('.seat-checkbox');
+        const bookNowBtn = document.getElementById('bookNowBtn');
+        const ladiesWarning = document.getElementById('ladies_seat_warning');
+        
+        if (!genderSelect) return;
+        
+        const selected = Array.from(seatCheckboxes)
+            .filter(checkbox => checkbox.checked)
+            .map(checkbox => ({
+                id: checkbox.value,
+                number: checkbox.dataset.number,
+                reserved: checkbox.dataset.gender
+            }));
+        
+        const gender = genderSelect.value;
+        let hasInvalidSeat = false;
+        
+        selected.forEach(seat => {
+            if (seat.reserved === 'ladies' && gender !== 'F') {
+                hasInvalidSeat = true;
+            }
+        });
+
+        if (ladiesWarning) {
+            if (hasInvalidSeat) {
+                ladiesWarning.classList.remove('d-none');
+                if (bookNowBtn) bookNowBtn.disabled = true;
+            } else {
+                ladiesWarning.classList.add('d-none');
+                if (bookNowBtn) bookNowBtn.disabled = selected.length === 0;
+            }
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         const routeSelect = document.getElementById('route_select');
         const travelDate = document.getElementById('travel_date');
