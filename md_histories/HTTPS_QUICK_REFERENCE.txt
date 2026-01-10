@@ -1,0 +1,115 @@
+╔══════════════════════════════════════════════════════════════╗
+║         HTTPS DEPLOYMENT QUICK REFERENCE CARD                 ║
+║              goexplorer-dev.cloud                             ║
+╚══════════════════════════════════════════════════════════════╝
+
+📋 PRE-DEPLOYMENT CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+☐ DNS A record for goexplorer-dev.cloud → Server IP
+☐ Port 80 open (firewall/security group)
+☐ Port 443 open (firewall/security group)
+☐ SSH access to server
+☐ Root/sudo permissions
+☐ Git installed on server
+☐ Latest code pulled
+
+🚀 AUTOMATED SETUP (RECOMMENDED)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ssh deployer@goexplorer-dev.cloud
+cd /home/deployer/goexplorer
+git pull origin main
+chmod +x deploy/setup_https.sh
+sudo ./deploy/setup_https.sh
+
+⏱️ Time: ~5 minutes
+✅ Fully automated - sits back and watch
+
+🛠️ MANUAL SETUP (IF NEEDED)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Install Certbot:
+   sudo apt-get update
+   sudo apt-get install -y certbot python3-certbot-nginx
+
+2. Get Certificate:
+   sudo systemctl stop nginx
+   sudo certbot certonly --standalone -d goexplorer-dev.cloud
+   
+3. Deploy Config:
+   sudo cp deploy/nginx.goexplorer.dev.https.conf \
+       /etc/nginx/sites-available/goexplorer-dev
+   sudo ln -sf /etc/nginx/sites-available/goexplorer-dev \
+       /etc/nginx/sites-enabled/goexplorer-dev
+
+4. Test & Restart:
+   sudo nginx -t
+   sudo systemctl restart nginx
+   sudo systemctl restart gunicorn-goexplorer
+
+🧪 VERIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# From server:
+curl -I https://goexplorer-dev.cloud
+# Should return: HTTP/2 200
+
+curl -I http://goexplorer-dev.cloud  
+# Should return: HTTP/1.1 301 (redirect to HTTPS)
+
+# From browser:
+https://goexplorer-dev.cloud
+# Should show 🔒 padlock
+
+# Check certificate:
+sudo certbot certificates
+# Expiry: ~90 days from now
+
+🔄 CERTIFICATE RENEWAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Automatic: ✅ Enabled (checks twice daily)
+Manual:    sudo certbot renew
+Test:      sudo certbot renew --dry-run
+
+⚠️ TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Issue: Certificate not found
+Fix:   sudo certbot certonly --standalone -d goexplorer-dev.cloud
+
+Issue: Port 80 in use
+Fix:   sudo systemctl stop nginx
+       [run certbot]
+       sudo systemctl start nginx
+
+Issue: Nginx won't start
+Fix:   sudo nginx -t  # Check errors
+       sudo tail -f /var/log/nginx/error.log
+
+Issue: Django still uses HTTP
+Fix:   sudo systemctl restart gunicorn-goexplorer
+
+📊 FILES MODIFIED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ templates/buses/bus_detail.html (JS fix)
+✅ templates/hotels/hotel_detail.html (JS fix)
+✅ goexplorer/settings.py (HTTPS security)
+✅ deploy/nginx.goexplorer.dev.https.conf (NEW)
+✅ deploy/setup_https.sh (NEW)
+
+🔐 SECURITY FEATURES ENABLED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ HTTPS/TLS 1.2 & 1.3
+✅ HSTS (1 year)
+✅ Secure cookies
+✅ HTTP → HTTPS redirect
+✅ Modern cipher suites
+✅ Security headers
+✅ Auto certificate renewal
+
+📞 SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Full documentation: JS_HTTPS_FIX_SUMMARY.md
+Nginx config: deploy/nginx.goexplorer.dev.https.conf
+Setup script: deploy/setup_https.sh
+
+╔══════════════════════════════════════════════════════════════╗
+║  Status: READY FOR DEPLOYMENT                                 ║
+║  Estimated deployment time: 5-10 minutes                      ║
+╚══════════════════════════════════════════════════════════════╝

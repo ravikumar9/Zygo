@@ -419,6 +419,9 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ gst_pct|default:0|json_script:"gstData" }}
+{{ conv_fee_pct|default:0|json_script:"feeData" }}
+{{ booked_seat_ids|default:"[]"|json_script:"bookedSeatsData" }}
 <script>
     // Define validateLadiesSeats FIRST, before DOM is even parsed
     function validateLadiesSeats() {
@@ -471,9 +474,9 @@
         const seatIdsContainer = document.getElementById('seat_ids_container');
         const ladiesWarning = document.getElementById('ladies_seat_warning');
 
-        const GST = parseFloat('{{ gst_pct }}') || 0;
-        const FEE = parseFloat('{{ conv_fee_pct }}') || 0;
-        const bookedSeatIds = JSON.parse('{{ booked_seat_ids|default:"[]"|escapejs }}');
+        const GST = JSON.parse(document.getElementById('gstData').textContent);
+        const FEE = JSON.parse(document.getElementById('feeData').textContent);
+        const bookedSeatIds = JSON.parse(document.getElementById('bookedSeatsData').textContent);
 
         // Disable booked seats
         seatCheckboxes.forEach(checkbox => {
