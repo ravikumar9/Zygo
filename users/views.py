@@ -240,7 +240,12 @@ def verify_registration_otp(request):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def login_view(request):
-    """User login view"""
+    """
+    User login view with mandatory dual OTP verification.
+    
+    CRITICAL: Users cannot login until BOTH email_verified_at AND phone_verified_at are set.
+    This enforces Phase 3.1 mandatory dual OTP requirement.
+    """
     if request.user.is_authenticated:
         return redirect('core:home')
     
@@ -254,8 +259,23 @@ def login_view(request):
                 password=form.cleaned_data['password']
             )
             if user is not None:
+                # CRITICAL: Enforce dual OTP verification before allowing login
+                if not user.email_verified_at or not user.phone_verified_at:
+                    messages.error(
+                        request,
+                        'Please verify your email and mobile number before logging in. Check your inbox for OTP.'
+                    )
+                    # Store user ID in session and redirect to OTP verification
+                    request.session['pending_user_id'] = user.id
+                    request.session['pending_email'] = user.email
+                    request.session['pending_phone'] = user.phone
+                    return redirect('users:verify-registration-otp')
+                
+                # User is fully verified - allow login
                 login(request, user)
-                messages.success(request, f'Welcome back, {user.first_name or user.email}!')
+                # Clean, professional success message (no duplicate on booking pages)
+                messages.success(request, 'Login successful!')
+                
                 # Handle next parameter from GET or POST
                 next_url = request.POST.get('next') or request.GET.get('next')
                 if next_url and next_url.startswith('/'):
@@ -276,9 +296,23 @@ def login_view(request):
 
 @require_http_methods(["GET", "POST"])
 def logout_view(request):
-    """User logout view - supports both GET and POST"""
+    """
+    User logout view - supports both GET and POST.
+    
+    Clears all session data to prevent booking/auth flow contamination.
+    """
     if request.user.is_authenticated:
         logout(request)
+        # Clear any booking-related session flags to prevent contamination
+        session_keys_to_clear = [
+            'pending_user_id', 'pending_email', 'pending_phone',
+            'email_verified', 'mobile_verified',
+            'booking_in_progress', 'selected_seats'
+        ]
+        for key in session_keys_to_clear:
+            if key in request.session:
+                del request.session[key]
+        
         messages.success(request, 'Logged out successfully!')
     return redirect('core:home')
 

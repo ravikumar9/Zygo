@@ -127,27 +127,39 @@ class ReviewAdminMixin:
 
 @admin.register(HotelReview)
 class HotelReviewAdmin(ReviewAdminMixin, admin.ModelAdmin):
-    """Admin for hotel reviews."""
+    """Hotel review admin."""
     
     def entity_name(self, obj):
-        return obj.hotel.name
+        """Display hotel name."""
+        try:
+            return obj.hotel.name if obj.hotel else '—'
+        except Exception:
+            return '—'
     entity_name.short_description = 'Hotel'
 
 
 @admin.register(BusReview)
 class BusReviewAdmin(ReviewAdminMixin, admin.ModelAdmin):
-    """Admin for bus reviews."""
+    """Bus review admin."""
     
     def entity_name(self, obj):
-        return obj.bus.bus_name
+        """Display bus name."""
+        try:
+            return obj.bus.bus_number if obj.bus else '—'
+        except Exception:
+            return '—'
     entity_name.short_description = 'Bus'
 
 
 @admin.register(PackageReview)
 class PackageReviewAdmin(ReviewAdminMixin, admin.ModelAdmin):
-    """Admin for package reviews."""
+    """Package review admin."""
     
     def entity_name(self, obj):
-        return obj.package.name
+        """Display package name."""
+        try:
+            return obj.package.name if obj.package else '—'
+        except Exception:
+            return '—'
     entity_name.short_description = 'Package'
 

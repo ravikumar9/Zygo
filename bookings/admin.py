@@ -408,11 +408,16 @@ class HotelBookingAdmin(admin.ModelAdmin):
     booking_id_link.short_description = 'Booking ID'
 
     def hotel_name(self, obj):
-        return obj.hotel.name if obj.hotel else '-'
+        """Get hotel name via room_type relationship."""
+        try:
+            return obj.room_type.hotel.name if obj.room_type and obj.room_type.hotel else '-'
+        except Exception:
+            return '-'
     hotel_name.short_description = 'Hotel'
 
     def room_count(self, obj):
-        return obj.number_of_rooms
+        """Get number of rooms booked (guard against None)."""
+        return obj.number_of_rooms or 0
     room_count.short_description = 'Rooms'
 
     def status_badge(self, obj):
