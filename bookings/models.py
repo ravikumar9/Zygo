@@ -12,13 +12,15 @@ import json
 class Booking(TimeStampedModel):
     """Base booking model"""
     BOOKING_STATUS = [
-        ('pending', 'Pending'),
-        ('payment_pending', 'Payment Pending'),
-        ('confirmed', 'Confirmed'),
-        ('cancelled', 'Cancelled'),
-        ('completed', 'Completed'),
-        ('refunded', 'Refunded'),
-        ('deleted', 'Deleted'),
+        ('reserved', 'Reserved'),           # Booking created, awaiting payment (30 min timeout)
+        ('payment_pending', 'Payment Pending'),  # Legacy - being phased out
+        ('confirmed', 'Confirmed'),         # Payment succeeded, inventory locked
+        ('payment_failed', 'Payment Failed'),    # Payment attempt failed
+        ('expired', 'Expired'),              # 30 min timeout without payment
+        ('cancelled', 'Cancelled'),          # User cancelled
+        ('completed', 'Completed'),          # Journey/stay complete
+        ('refunded', 'Refunded'),            # Refund issued
+        ('deleted', 'Deleted'),              # Admin deleted
     ]
     
     BOOKING_TYPES = [
@@ -43,7 +45,12 @@ class Booking(TimeStampedModel):
     last_synced_at = models.DateTimeField(null=True, blank=True)
     booking_source = models.CharField(max_length=20, choices=[('internal','Internal'), ('external','External')], default='internal')
     booking_type = models.CharField(max_length=20, choices=BOOKING_TYPES)
-    status = models.CharField(max_length=20, choices=BOOKING_STATUS, default='payment_pending')
+    status = models.CharField(max_length=20, choices=BOOKING_STATUS, default='reserved')
+    
+    # State transition timestamps
+    reserved_at = models.DateTimeField(null=True, blank=True)  # When booking was created
+    confirmed_at = models.DateTimeField(null=True, blank=True)  # When payment succeeded
+    expires_at = models.DateTimeField(null=True, blank=True)  # When reservation expires (30 min after reserved_at)
 
     inventory_channel = models.CharField(max_length=20, choices=INVENTORY_CHANNELS, default='internal_cm')
     lock_id = models.CharField(max_length=128, blank=True)

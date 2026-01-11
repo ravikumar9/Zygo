@@ -20,7 +20,7 @@ class HotelAdmin(admin.ModelAdmin):
     list_display = ['name', 'city', 'property_type_tag', 'star_rating', 'review_rating', 'status_indicator', 'is_active']
     list_filter = ['is_active', 'property_type', 'star_rating', 'city', 'has_wifi', 'has_pool', 'has_gym']
     search_fields = ['name', 'city__name', 'address']
-    list_editable = ['is_active']
+    list_editable = ['is_active', 'star_rating']  # ← Allow bulk inline edits
     list_select_related = ['city']
     readonly_fields = ['created_at', 'updated_at', 'image_preview']
     inlines = [HotelImageInline, RoomTypeInline]
@@ -62,7 +62,7 @@ class HotelAdmin(admin.ModelAdmin):
         }),
     )
     
-    actions = ['make_active', 'make_inactive', 'feature_hotels', 'unfeature_hotels']
+    actions = ['make_active', 'make_inactive', 'feature_hotels', 'unfeature_hotels', 'enable_amenities']
     
     def property_type_tag(self, obj):
         color_map = {
@@ -117,8 +117,14 @@ class HotelAdmin(admin.ModelAdmin):
     
     def unfeature_hotels(self, request, queryset):
         updated = queryset.update(is_featured=False)
-        self.message_user(request, f"☆ Unfeatured {updated} hotel(s)")
+        self.message_user(request, f"⭐ Unfeatured {updated} hotel(s)")
     unfeature_hotels.short_description = "☆ Unfeature selected"
+    
+    def enable_amenities(self, request, queryset):
+        """Bulk action: Enable WiFi + Pool + Gym for selected hotels"""
+        updated = queryset.update(has_wifi=True, has_pool=True, has_gym=True)
+        self.message_user(request, f"[OK] WiFi + Pool + Gym enabled on {updated} hotel(s)")
+    enable_amenities.short_description = "Enable WiFi/Pool/Gym on selected"
 
 
 @admin.register(RoomType)

@@ -143,9 +143,15 @@ class RazorpayWebhookView(APIView):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def process_wallet_payment(request):
-    """Process payment using wallet balance and cashback"""
+    """
+    Process payment using wallet balance and cashback.
+    
+    Uses atomic transaction to ensure wallet debit and booking confirmation
+    either both succeed or both fail. If anything fails, entire transaction
+    rolls back and wallet balance is restored.
+    """
     from bookings.models import Booking
-    from .models import Payment, Wallet, CashbackLedger
+    from .models import Payment, Wallet, WalletTransaction, CashbackLedger
     from django.utils import timezone
     from django.db import transaction
     
@@ -174,62 +180,114 @@ def process_wallet_payment(request):
                 'message': f'Insufficient balance. Available: ₹{total_available}, Required: ₹{amount}'
             }, status=400)
         
-        # Process payment with transaction atomicity
-        with transaction.atomic():
-            # Calculate how much to deduct from wallet balance vs cashback
-            wallet_deduction = min(wallet.balance, amount)
-            cashback_needed = amount - wallet_deduction
-            
-            # Deduct from wallet balance
-            if wallet_deduction > 0:
-                wallet.deduct_balance(wallet_deduction, f"Payment for booking {booking_id}")
-            
-            # Use cashback if needed
-            if cashback_needed > 0:
-                # Get available cashback entries (FIFO - oldest first)
-                cashback_entries = CashbackLedger.objects.filter(
-                    wallet=wallet,
-                    is_used=False,
-                    is_expired=False,
-                    expires_at__gt=timezone.now()
-                ).order_by('expires_at')
+        # ATOMIC TRANSACTION: Either both wallet and booking update, or neither
+        try:
+            with transaction.atomic():
+                # Lock rows to prevent race conditions
+                wallet = Wallet.objects.select_for_update().get(pk=wallet.pk)
+                booking = Booking.objects.select_for_update().get(pk=booking.pk)
                 
-                remaining = cashback_needed
-                for cb_entry in cashback_entries:
-                    if remaining <= 0:
-                        break
-                    use_amount = min(cb_entry.amount, remaining)
-                    cb_entry.mark_as_used(use_amount)
-                    remaining -= use_amount
-            
-            # Create payment record
-            payment = Payment.objects.create(
-                booking=booking,
-                amount=amount,
-                payment_method='wallet',
-                status='success',
-                transaction_date=timezone.now(),
-                transaction_id=f"WALLET-{booking_id}",
-                notes=f"Wallet: ₹{wallet_deduction}, Cashback: ₹{cashback_needed}"
-            )
-            
-            # Update booking
-            booking.paid_amount += amount
-            booking.payment_reference = payment.transaction_id
-            booking.save(update_fields=['paid_amount', 'payment_reference', 'updated_at'])
-            
-            # Finalize booking if fully paid
-            if booking.paid_amount >= booking.total_amount:
+                # Calculate how much to deduct from wallet balance vs cashback
+                wallet_deduction = min(wallet.balance, amount)
+                cashback_needed = amount - wallet_deduction
+                
+                # Step 1: Deduct from wallet balance
+                wallet_txn = None
+                if wallet_deduction > 0:
+                    wallet.balance -= wallet_deduction
+                    wallet.save(update_fields=['balance', 'updated_at'])
+                    
+                    # Record transaction
+                    wallet_txn = WalletTransaction.objects.create(
+                        wallet=wallet,
+                        transaction_type='debit',
+                        amount=wallet_deduction,
+                        balance_after=wallet.balance,
+                        description=f"Wallet payment for booking {booking_id}",
+                        booking=booking
+                    )
+                
+                # Step 2: Use cashback if needed
+                cashback_used = Decimal('0')
+                if cashback_needed > 0:
+                    cashback_entries = CashbackLedger.objects.filter(
+                        wallet=wallet,
+                        is_used=False,
+                        is_expired=False,
+                        expires_at__gt=timezone.now()
+                    ).order_by('expires_at')
+                    
+                    remaining = cashback_needed
+                    for cb_entry in cashback_entries:
+                        if remaining <= 0:
+                            break
+                        use_amount = min(cb_entry.amount, remaining)
+                        cb_entry.mark_as_used(use_amount)
+                        cashback_used += use_amount
+                        remaining -= use_amount
+                
+                # Step 3: Create payment record
+                payment = Payment.objects.create(
+                    booking=booking,
+                    amount=amount,
+                    payment_method='wallet',
+                    status='success',
+                    transaction_date=timezone.now(),
+                    transaction_id=f"WALLET-{booking_id}",
+                    gateway_response={
+                        'wallet_amount': float(wallet_deduction),
+                        'cashback_amount': float(cashback_used)
+                    }
+                )
+                
+                # Step 4: Update booking (THIS MUST SUCCEED OR ROLLBACK ENTIRE TX)
+                now = timezone.now()
+                booking.paid_amount += amount
+                booking.payment_reference = payment.transaction_id
+                booking.status = 'confirmed'  # ← CRITICAL: Move from RESERVED to CONFIRMED
+                booking.confirmed_at = now
+                booking.save(update_fields=[
+                    'paid_amount', 'payment_reference', 'status', 'confirmed_at', 'updated_at'
+                ])
+                
+                # Step 5: Finalize booking (lock inventory)
+                from hotels.channel_manager_service import finalize_booking_after_payment
                 finalize_booking_after_payment(booking, payment_reference=payment.transaction_id)
+                
+                # SUCCESS: All steps completed, transaction commits
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Payment successful - booking confirmed',
+                    'payment_id': str(payment.id),
+                    'booking_id': str(booking.booking_id),
+                    'booking_status': 'confirmed'
+                })
+        
+        except Exception as payment_error:
+            # AUTOMATIC ROLLBACK: All DB changes reverted
+            # wallet.balance is restored
+            # booking.status stays RESERVED
+            # Transaction is rolled back
+            
+            booking.status = 'payment_failed'
+            booking.cancelled_at = timezone.now()
+            booking.save(update_fields=['status', 'cancelled_at', 'updated_at'])
+            
+            # Create refund record for audit trail (OUTSIDE atomic block)
+            # This shows admin what failed and was rolled back
+            if wallet_txn:
+                wallet_txn.create_refund(reason=f"Payment failed: {str(payment_error)}")
             
             return JsonResponse({
-                'status': 'success',
-                'message': 'Payment successful',
-                'payment_id': str(payment.id)
-            })
+                'status': 'error',
+                'message': f'Payment processing failed: {str(payment_error)}',
+                'booking_status': 'payment_failed'
+            }, status=500)
     
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
     except Exception as exc:
         return JsonResponse({
             'status': 'error',
-            'message': str(exc)
+            'message': f'Unexpected error: {str(exc)}'
         }, status=500)

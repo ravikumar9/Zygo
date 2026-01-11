@@ -148,6 +148,7 @@ class WalletTransaction(TimeStampedModel):
     TRANSACTION_TYPES = [
         ('credit', 'Credit'),
         ('debit', 'Debit'),
+        ('refund', 'Refund'),     # ← NEW: Reversal of failed debit
     ]
     
     wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='transactions')
@@ -157,11 +158,37 @@ class WalletTransaction(TimeStampedModel):
     description = models.TextField(blank=True)
     reference_id = models.CharField(max_length=200, blank=True)
     
+    # Link to original transaction (for refunds)
+    parent_transaction = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='reversals',  # Original debit → Related refunds
+        help_text="Link to original debit transaction if this is a refund"
+    )
+    
+    booking = models.ForeignKey(Booking, on_delete=models.SET_NULL, null=True, blank=True, related_name='wallet_transactions')
+    
     class Meta:
         ordering = ['-created_at']
     
     def __str__(self):
         return f"{self.wallet.user.username} - {self.transaction_type} - ₹{self.amount}"
+    
+    def create_refund(self, reason="Payment failed"):
+        """Create reverse transaction for failed payment"""
+        refund_txn = WalletTransaction.objects.create(
+            wallet=self.wallet,
+            transaction_type='refund',
+            amount=self.amount,
+            balance_after=self.wallet.balance + self.amount,
+            description=f"Refund: {reason}",
+            reference_id=self.reference_id,
+            parent_transaction=self,
+            booking=self.booking
+        )
+        # Update wallet balance
+        self.wallet.balance += self.amount
+        self.wallet.save(update_fields=['balance', 'updated_at'])
+        return refund_txn
 
 
 class CashbackLedger(TimeStampedModel):

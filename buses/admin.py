@@ -102,9 +102,10 @@ class BusAdmin(admin.ModelAdmin):
     list_display = ['bus_number', 'bus_name', 'operator', 'bus_type', 'bus_age_display', 'total_seats', 'average_rating', 'is_active']
     list_filter = ['bus_type', 'is_active', 'operator', 'manufacturing_year']
     search_fields = ['bus_number', 'bus_name', 'operator__name', 'registration_number']
-    list_editable = ['is_active']
+    list_editable = ['is_active', 'bus_type']  # ← Allow inline editing of multiple buses
     list_select_related = ['operator']
     readonly_fields = ['created_at', 'updated_at', 'get_amenities_display']
+    actions = ['enable_wifi', 'enable_ac', 'disable_ac', 'mark_as_active', 'mark_as_inactive']
     
     fieldsets = (
         ('Basic Information', {
@@ -147,6 +148,36 @@ class BusAdmin(admin.ModelAdmin):
             return mark_safe('<br>'.join([f'✓ {a}' for a in amenities]))
         return 'No amenities'
     get_amenities_display.short_description = 'Amenities Summary'
+    
+    def enable_wifi(self, request, queryset):
+        """Bulk action: Enable WiFi on selected buses"""
+        updated = queryset.update(has_wifi=True)
+        self.message_user(request, f"[OK] WiFi enabled on {updated} bus(es)")
+    enable_wifi.short_description = "Enable WiFi on selected"
+    
+    def enable_ac(self, request, queryset):
+        """Bulk action: Enable AC on selected buses"""
+        updated = queryset.update(has_ac=True)
+        self.message_user(request, f"[OK] AC enabled on {updated} bus(es)")
+    enable_ac.short_description = "Enable AC on selected"
+    
+    def disable_ac(self, request, queryset):
+        """Bulk action: Disable AC on selected buses"""
+        updated = queryset.update(has_ac=False)
+        self.message_user(request, f"[OK] AC disabled on {updated} bus(es)")
+    disable_ac.short_description = "Disable AC on selected"
+    
+    def mark_as_active(self, request, queryset):
+        """Bulk action: Mark buses as active"""
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f"[OK] {updated} bus(es) marked as active")
+    mark_as_active.short_description = "Mark selected as active"
+    
+    def mark_as_inactive(self, request, queryset):
+        """Bulk action: Mark buses as inactive"""
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f"[OK] {updated} bus(es) marked as inactive")
+    mark_as_inactive.short_description = "Mark selected as inactive"
 
 
 class BoardingPointInline(admin.TabularInline):
