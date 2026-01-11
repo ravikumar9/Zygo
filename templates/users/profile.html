@@ -44,6 +44,38 @@
                 </div>
             </div>
 
+            <!-- WALLET & CASHBACK SECTION -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">💰 Wallet & Cashback</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="alert alert-info mb-0">
+                                <h6 class="mb-1">Wallet Balance</h6>
+                                <h3 class="text-primary">{{ wallet_currency }} {{ wallet_balance|floatformat:"2" }}</h3>
+                                <small class="text-muted">Available to spend on next booking</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="alert alert-success mb-0">
+                                <h6 class="mb-1">Active Cashback</h6>
+                                <h3 class="text-success">{{ wallet_currency }} {{ active_cashback|floatformat:"2" }}</h3>
+                                {% if cashback_expiry %}
+                                <small class="text-muted">Expires: {{ cashback_expiry|date:"d M Y" }}</small>
+                                {% else %}
+                                <small class="text-muted">No active cashback</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <p class="mb-0 text-muted small">
+                        💡 Tip: Use your wallet and cashback to get instant discounts on your next booking!
+                    </p>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0">My Bookings</h5>

@@ -133,11 +133,40 @@ def logout_view(request):
 
 @login_required(login_url='users:login')
 def user_profile(request):
-    """User profile page with bookings"""
+    """User profile page with bookings and wallet visibility"""
     from bookings.models import Booking
+    from payments.models import Wallet, CashbackLedger
+    
     bookings = Booking.objects.filter(user=request.user).order_by('-created_at')
+    
+    # Get wallet information
+    wallet = Wallet.objects.filter(user=request.user).first()
+    wallet_balance = wallet.balance if wallet else 0
+    wallet_currency = wallet.currency if wallet else 'INR'
+    
+    # Get active cashback
+    active_cashback = 0
+    cashback_expiry = None
+    if wallet:
+        from django.utils import timezone
+        cashback_ledgers = CashbackLedger.objects.filter(
+            wallet=wallet,
+            is_used=False,
+            is_expired=False,
+            expires_at__gte=timezone.now()
+        ).order_by('expires_at')
+        
+        for ledger in cashback_ledgers:
+            active_cashback += ledger.amount
+            if not cashback_expiry or ledger.expires_at < cashback_expiry:
+                cashback_expiry = ledger.expires_at
+    
     return render(request, 'users/profile.html', {
-        'bookings': bookings
+        'bookings': bookings,
+        'wallet_balance': wallet_balance,
+        'wallet_currency': wallet_currency,
+        'active_cashback': active_cashback,
+        'cashback_expiry': cashback_expiry,
     })
 
 

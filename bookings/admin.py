@@ -54,20 +54,23 @@ class BookingAuditLogInline(admin.TabularInline):
 
 
 def get_status_badge(status):
-    """Return colored status badge"""
-    colors = {
-        'pending': '#FFC107',      # Yellow
-        'confirmed': '#28A745',    # Green
-        'cancelled': '#DC3545',    # Red
-        'completed': '#007BFF',    # Blue
-        'refunded': '#6C757D',     # Gray
-        'deleted': '#721C24',      # Dark Red
+    """Return colored status badge with clear messaging"""
+    messages = {
+        'pending': ('FFC107', 'PENDING', 'Payment awaited or pending confirmation'),
+        'confirmed': ('28A745', 'CONFIRMED', 'Payment complete, booking confirmed'),
+        'cancelled': ('DC3545', 'CANCELLED', 'Booking cancelled by user'),
+        'completed': ('007BFF', 'COMPLETED', 'Journey/stay complete, booking closed'),
+        'refunded': ('6C757D', 'REFUNDED', 'Payment refunded to customer'),
+        'deleted': ('721C24', 'DELETED', 'Admin deleted from system'),
+        'failed': ('DC3545', 'FAILED', 'Payment failed, booking expired'),
+        'expired': ('FF6B6B', 'EXPIRED', 'Booking reservation time expired'),
     }
-    color = colors.get(status, '#6C757D')
+    color, badge_text, message = messages.get(status, ('6C757D', status.upper(), 'Unknown status'))
     return format_html(
-        '<span style="background-color: {}; color: white; padding: 5px 10px; border-radius: 3px;">{}</span>',
+        '<span title="{}" style="background-color: #{}; color: white; padding: 5px 10px; border-radius: 3px; cursor: help;">{}</span>',
+        message,
         color,
-        status.upper()
+        badge_text
     )
 
 
