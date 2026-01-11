@@ -15,14 +15,6 @@ class RoomTypeInline(admin.TabularInline):
     fields = ['name', 'room_type', 'max_occupancy', 'base_price', 'total_rooms', 'is_available']
 
 
-class RoomAvailabilityInline(admin.TabularInline):
-    model = RoomAvailability
-    extra = 0
-    fields = ['date', 'available_rooms']
-    can_delete = False
-    readonly_fields = ['date']
-
-
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
     list_display = ['name', 'city', 'property_type_tag', 'star_rating', 'review_rating', 'status_indicator', 'is_active']
@@ -31,7 +23,7 @@ class HotelAdmin(admin.ModelAdmin):
     list_editable = ['is_active']
     list_select_related = ['city']
     readonly_fields = ['created_at', 'updated_at', 'image_preview']
-    inlines = [HotelImageInline, RoomTypeInline, RoomAvailabilityInline]
+    inlines = [HotelImageInline, RoomTypeInline]
     
     fieldsets = (
         ('Basic Information', {
@@ -46,7 +38,7 @@ class HotelAdmin(admin.ModelAdmin):
             'description': 'Primary image (will be used as thumbnail)'
         }),
         ('Ratings & Reviews', {
-            'fields': ('star_rating', 'review_rating', 'review_count')
+            'fields': ('review_rating', 'review_count')
         }),
         ('Inventory & Channel Manager', {
             'fields': ('inventory_source', 'channel_manager_name')

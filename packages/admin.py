@@ -31,7 +31,7 @@ class PackageDepartureInline(admin.TabularInline):
 
 @admin.register(Package)
 class PackageAdmin(admin.ModelAdmin):
-    list_display = ['name', 'package_type', 'duration_display', 'starting_price', 'status_indicator', 'image_preview']
+    list_display = ['name', 'package_type', 'duration_display', 'starting_price', 'is_active', 'status_indicator', 'image_preview']
     list_filter = ['package_type', 'is_featured', 'is_active', 'duration_days']
     search_fields = ['name', 'description']
     readonly_fields = ['created_at', 'updated_at', 'image_preview']

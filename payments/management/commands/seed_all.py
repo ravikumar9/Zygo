@@ -47,10 +47,10 @@ class Command(BaseCommand):
 
         for cmd, description in seed_order:
             self.stdout.write(
-                self.style.SUCCESS(f"\n{'─'*60}")
+                self.style.SUCCESS(f"\n{'-'*60}")
             )
-            self.stdout.write(self.style.NOTICE(f"→ {description}"))
-            self.stdout.write(self.style.SUCCESS(f"{'─'*60}\n"))
+            self.stdout.write(self.style.NOTICE(f"-> {description}"))
+            self.stdout.write(self.style.SUCCESS(f"{'-'*60}\n"))
 
             try:
                 args_list = []
@@ -60,7 +60,7 @@ class Command(BaseCommand):
                 call_command(cmd, *args_list)
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f"❌ Failed to seed {cmd}: {str(e)}")
+                    self.style.ERROR(f"[FAILED] {cmd}: {str(e)}")
                 )
                 return
 
@@ -68,18 +68,18 @@ class Command(BaseCommand):
             self.style.SUCCESS(f"\n{'='*60}")
         )
         self.stdout.write(
-            self.style.SUCCESS("✅ UNIFIED SEED COMPLETE")
+            self.style.SUCCESS("[OK] UNIFIED SEED COMPLETE")
         )
         self.stdout.write(
             self.style.SUCCESS(f"{'='*60}\n")
         )
         self.stdout.write(
-            self.style.WARNING("📊 Summary:")
+            self.style.WARNING("SUMMARY:")
         )
-        self.stdout.write("  • Hotels: 16 with rooms, amenities, rules")
-        self.stdout.write("  • Packages: 5 with itineraries & departures")
-        self.stdout.write("  • Buses: 2 operators, 3 buses, 3 routes with schedules")
-        self.stdout.write("  • Wallets: testuser with ₹5000 balance + ₹1000 cashback")
+        self.stdout.write("  * Hotels: 16 with rooms, amenities, rules")
+        self.stdout.write("  * Packages: 5 with itineraries & departures")
+        self.stdout.write("  * Buses: 2 operators, 3 buses, 3 routes with schedules")
+        self.stdout.write("  * Wallets: testuser with 5000 balance + 1000 cashback")
         self.stdout.write(
-            self.style.SUCCESS("\n✓ Data is identical on local and server\n")
+            self.style.SUCCESS("\n[SUCCESS] Data is identical on local and server\n")
         )
