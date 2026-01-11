@@ -1,6 +1,7 @@
 """
 Validate seed data consistency across environments
 """
+import sys
 from django.core.management.base import BaseCommand
 from django.db.models import Count
 
@@ -31,7 +32,7 @@ class Command(BaseCommand):
         expected = {
             'Hotels': 16,
             'Packages': 5,
-            'Buses': 3,
+            'Buses': 2,  # 2 buses total (Swift Travels + Metro Lines)
             'Bus Operators': 2,
             'Wallets': 1,  # testuser
         }
@@ -94,11 +95,10 @@ class Command(BaseCommand):
         if all_pass:
             self.stdout.write(self.style.SUCCESS("[OK] SEED PARITY VERIFIED!"))
             self.stdout.write(self.style.SUCCESS("All data matches expected counts."))
-            exit_code = 0
+            self.stdout.write("="*60 + "\n")
+            sys.exit(0)
         else:
             self.stdout.write(self.style.ERROR("[FAIL] SEED PARITY MISMATCH!"))
             self.stdout.write(self.style.ERROR("Check seed_all output and re-run if needed."))
-            exit_code = 1
-        self.stdout.write("="*60 + "\n")
-        
-        return exit_code
+            self.stdout.write("="*60 + "\n")
+            sys.exit(1)

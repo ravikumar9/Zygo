@@ -1,0 +1,349 @@
+{% load static %}
+<!-- Bus Seat Layout Component - 2x2 Grid with Deck Separation -->
+<style>
+    /* Seat Layout Styles - Improved 2x2 Grid Layout */
+    .seat-layout {
+        background: #f8f9fa;
+        padding: 2rem;
+        border-radius: 8px;
+        margin: 2rem 0;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    /* Deck Container */
+    .deck-section {
+        margin-bottom: 3rem;
+    }
+
+    .deck-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #004E89;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #FF6B35;
+        display: inline-block;
+    }
+
+    /* Driver/Entrance at top */
+    .driver-section {
+        text-align: center;
+        margin-bottom: 2rem;
+        padding: 0.75rem;
+        background: #e0e0e0;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    /* Seat Grid - 2x2 layout (A-B | aisle | C-D) */
+    .seat-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        max-width: 280px;
+        margin: 0 auto;
+    }
+
+    .seat-row {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+        position: relative;
+    }
+
+    /* Left block (A-B columns) */
+    .seat-block {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    /* Aisle separator */
+    .aisle {
+        width: 20px;
+        height: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        color: #999;
+        font-weight: 600;
+    }
+
+    /* Individual Seat Style */
+    .seat {
+        width: 45px;
+        height: 45px;
+        border: 2px solid #ddd;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 0.75rem;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        position: relative;
+        background: white;
+        color: #333;
+    }
+
+    /* Seat hover state */
+    .seat:hover:not(.booked) {
+        border-color: #FF6B35;
+        background: #fff3e0;
+        transform: scale(1.05);
+        box-shadow: 0 2px 8px rgba(255, 107, 53, 0.2);
+    }
+
+    /* Available seat (general) */
+    .seat.available {
+        background: #e8f5e9;
+        border-color: #4caf50;
+        color: #2e7d32;
+    }
+
+    .seat.available:hover {
+        background: #c8e6c9;
+        border-color: #2e7d32;
+    }
+
+    /* Ladies seat - reserved */
+    .seat.ladies {
+        background: #fce4ec;
+        border-color: #e91e63;
+        color: #880e4f;
+        position: relative;
+    }
+
+    .seat.ladies::before {
+        content: '♀';
+        position: absolute;
+        font-size: 1.2rem;
+        top: -8px;
+        right: -8px;
+        color: #e91e63;
+        font-weight: bold;
+    }
+
+    .seat.ladies:hover {
+        background: #f8bbd0;
+        border-color: #880e4f;
+    }
+
+    /* Booked seat - disabled */
+    .seat.booked {
+        background: #ffebee;
+        border-color: #f44336;
+        color: #c62828;
+        cursor: not-allowed;
+        opacity: 0.6;
+    }
+
+    .seat.booked:hover {
+        background: #ffcdd2;
+        border-color: #c62828;
+        transform: none;
+    }
+
+    /* Reserved by user (selected) */
+    .seat.selected {
+        background: #2196F3;
+        border-color: #1565c0;
+        color: white;
+        box-shadow: 0 0 12px rgba(33, 150, 243, 0.4);
+        font-weight: 700;
+    }
+
+    .seat.selected:hover {
+        background: #1976d2;
+        border-color: #1565c0;
+        transform: scale(1.08);
+    }
+
+    /* Disabled state */
+    .seat:disabled,
+    .seat.booked {
+        cursor: not-allowed;
+    }
+
+    /* Legend */
+    .seat-legend {
+        display: flex;
+        gap: 2rem;
+        margin: 2rem 0;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 1.5rem;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.95rem;
+    }
+
+    .legend-box {
+        width: 35px;
+        height: 35px;
+        border: 2px solid;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .seat {
+            width: 40px;
+            height: 40px;
+            font-size: 0.7rem;
+        }
+
+        .seat-legend {
+            gap: 1.5rem;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .seat-layout {
+            padding: 1.5rem;
+        }
+
+        .driver-section {
+            font-size: 0.8rem;
+        }
+    }
+
+    /* Responsive for small phones */
+    @media (max-width: 480px) {
+        .seat {
+            width: 36px;
+            height: 36px;
+            margin: 0.25rem;
+            font-size: 0.65rem;
+        }
+
+        .seat-row {
+            gap: 0.75rem;
+        }
+
+        .seat-layout {
+            padding: 1rem;
+        }
+
+        .legend-item {
+            font-size: 0.85rem;
+        }
+
+        .legend-box {
+            width: 30px;
+            height: 30px;
+        }
+    }
+</style>
+
+<!-- Seat Selection Component Template -->
+<div class="seat-layout" id="seatLayout">
+    <div class="seat-legend">
+        <div class="legend-item">
+            <div class="legend-box" style="background: #e8f5e9; border-color: #4caf50;">G</div>
+            <span>Available</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background: #fce4ec; border-color: #e91e63;">♀</div>
+            <span>Ladies Only</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background: #ffebee; border-color: #f44336;">✕</div>
+            <span>Booked</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background: #2196F3; border-color: #1565c0;">✓</div>
+            <span>Selected</span>
+        </div>
+    </div>
+
+    <!-- Dynamic Decks - This will be populated by Django template -->
+    {% regroup seats by deck as seats_by_deck %}
+    {% for deck_group in seats_by_deck %}
+    <div class="deck-section">
+        <div class="deck-title">
+            {% if deck_group.grouper > 1 %}Upper Deck{% else %}Lower Deck{% endif %}
+        </div>
+
+        <div class="driver-section">
+            <i class="fas fa-user-tie"></i> DRIVER
+        </div>
+
+        <div class="seat-grid">
+            {% regroup deck_group.list by row as seats_by_row %}
+            {% for row_group in seats_by_row %}
+            <div class="seat-row">
+                <!-- Left Block (A-B columns) -->
+                <div class="seat-block">
+                    {% for seat in row_group.list %}
+                        {% if forloop.counter <= 2 %}
+                        <input 
+                            type="checkbox" 
+                            class="seat-checkbox" 
+                            id="seat-{{ seat.id }}" 
+                            value="{{ seat.id }}" 
+                            data-gender="{{ seat.reserved_for }}" 
+                            data-number="{{ seat.seat_number }}" 
+                            style="display: none;">
+                        <label 
+                            for="seat-{{ seat.id }}" 
+                            class="seat {% if seat.is_booked %}booked{% elif seat.reserved_for == 'ladies' %}ladies{% else %}available{% endif %}" 
+                            title="Seat {{ seat.seat_number }} - {% if seat.reserved_for == 'ladies' %}Ladies Only{% elif seat.is_booked %}Booked{% else %}Available{% endif %}">
+                            {{ seat.seat_number }}
+                        </label>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+
+                <!-- Aisle -->
+                <div class="aisle">AISLE</div>
+
+                <!-- Right Block (C-D columns) -->
+                <div class="seat-block">
+                    {% for seat in row_group.list %}
+                        {% if forloop.counter > 2 %}
+                        <input 
+                            type="checkbox" 
+                            class="seat-checkbox" 
+                            id="seat-{{ seat.id }}" 
+                            value="{{ seat.id }}" 
+                            data-gender="{{ seat.reserved_for }}" 
+                            data-number="{{ seat.seat_number }}" 
+                            style="display: none;">
+                        <label 
+                            for="seat-{{ seat.id }}" 
+                            class="seat {% if seat.is_booked %}booked{% elif seat.reserved_for == 'ladies' %}ladies{% else %}available{% endif %}" 
+                            title="Seat {{ seat.seat_number }} - {% if seat.reserved_for == 'ladies' %}Ladies Only{% elif seat.is_booked %}Booked{% else %}Available{% endif %}">
+                            {{ seat.seat_number }}
+                        </label>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <p class="text-muted small mt-3" style="text-align: center;">
+        <i class="fas fa-info-circle"></i> 
+        <strong>Seat Rules:</strong> 
+        Female passengers can book any available seat. Male passengers can only book general (green) seats.
+    </p>
+</div>
