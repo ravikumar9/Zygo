@@ -1,0 +1,540 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Verify Email & Mobile - Register{% endblock %}
+
+{% block content %}
+<style>
+    .otp-verification-container {
+        max-width: 500px;
+        margin: 40px auto;
+        padding: 30px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .header h1 {
+        font-size: 24px;
+        margin-bottom: 10px;
+        color: #333;
+    }
+
+    .header p {
+        color: #666;
+        font-size: 14px;
+    }
+
+    .verification-status {
+        display: flex;
+        gap: 20px;
+        margin: 30px 0;
+    }
+
+    .status-card {
+        flex: 1;
+        padding: 15px;
+        border-radius: 8px;
+        border: 2px solid #e0e0e0;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+
+    .status-card.verified {
+        border-color: #10b981;
+        background: #f0fdf4;
+    }
+
+    .status-card.pending {
+        border-color: #f59e0b;
+        background: #fffbf0;
+    }
+
+    .status-icon {
+        font-size: 28px;
+        margin-bottom: 8px;
+    }
+
+    .status-label {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 5px;
+    }
+
+    .status-card.verified .status-label {
+        color: #10b981;
+    }
+
+    .status-card.pending .status-label {
+        color: #f59e0b;
+    }
+
+    .status-value {
+        font-size: 12px;
+        color: #666;
+    }
+
+    .otp-input-group {
+        margin: 25px 0;
+        padding: 20px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        background: #f9f9f9;
+    }
+
+    .otp-input-group.verified {
+        background: #f0fdf4;
+        border-color: #10b981;
+    }
+
+    .otp-input-group h3 {
+        font-size: 16px;
+        margin-bottom: 15px;
+        color: #333;
+    }
+
+    .otp-input-group.verified h3 {
+        color: #10b981;
+    }
+
+    .otp-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .otp-input {
+        flex: 1;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 16px;
+        text-align: center;
+        letter-spacing: 2px;
+    }
+
+    .otp-input:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .otp-button {
+        padding: 10px 20px;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.3s ease;
+    }
+
+    .otp-button:hover:not(:disabled) {
+        background: #2563eb;
+    }
+
+    .otp-button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+
+    .otp-button.secondary {
+        background: #6b7280;
+    }
+
+    .otp-button.secondary:hover:not(:disabled) {
+        background: #4b5563;
+    }
+
+    .resend-text {
+        font-size: 12px;
+        color: #666;
+        margin-top: 10px;
+    }
+
+    .error-message {
+        background: #fee;
+        color: #c00;
+        padding: 12px;
+        border-radius: 6px;
+        margin: 10px 0;
+        font-size: 14px;
+        display: none;
+    }
+
+    .error-message.show {
+        display: block;
+    }
+
+    .success-message {
+        background: #efe;
+        color: #060;
+        padding: 12px;
+        border-radius: 6px;
+        margin: 10px 0;
+        font-size: 14px;
+        display: none;
+    }
+
+    .success-message.show {
+        display: block;
+    }
+
+    .complete-button {
+        width: 100%;
+        padding: 14px;
+        background: #10b981;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 20px;
+        transition: background 0.3s ease;
+    }
+
+    .complete-button:hover:not(:disabled) {
+        background: #059669;
+    }
+
+    .complete-button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+
+    .info-box {
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        padding: 15px;
+        border-radius: 4px;
+        margin: 20px 0;
+        font-size: 14px;
+        color: #1565c0;
+    }
+
+    .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+
+<div class="otp-verification-container">
+    <div class="header">
+        <h1>🔐 Verify Your Account</h1>
+        <p>Complete registration by verifying your email and mobile number</p>
+    </div>
+
+    <div class="info-box">
+        <strong>ℹ️ Required:</strong> Both email and mobile verification are required to activate your account
+    </div>
+
+    <!-- Status Cards -->
+    <div class="verification-status">
+        <div class="status-card {% if email_verified %}verified{% else %}pending{% endif %}" id="email-status">
+            <div class="status-icon">{% if email_verified %}✓{% else %}📧{% endif %}</div>
+            <div class="status-label">Email</div>
+            <div class="status-value">{{ email }}</div>
+            <div class="status-value" style="margin-top: 5px;">
+                {% if email_verified %}<span style="color: #10b981; font-weight: 600;">Verified ✓</span>{% else %}<span style="color: #f59e0b;">Pending</span>{% endif %}
+            </div>
+        </div>
+
+        <div class="status-card {% if mobile_verified %}verified{% else %}pending{% endif %}" id="mobile-status">
+            <div class="status-icon">{% if mobile_verified %}✓{% else %}📱{% endif %}</div>
+            <div class="status-label">Mobile</div>
+            <div class="status-value">{{ phone }}</div>
+            <div class="status-value" style="margin-top: 5px;">
+                {% if mobile_verified %}<span style="color: #10b981; font-weight: 600;">Verified ✓</span>{% else %}<span style="color: #f59e0b;">Pending</span>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Email OTP Section -->
+    <div class="otp-input-group {% if email_verified %}verified{% endif %}" id="email-otp-section">
+        <h3>{{ email|truncatewords:1 }} - Email OTP</h3>
+        
+        {% if not email_verified %}
+        <div class="otp-controls">
+            <input type="text" class="otp-input" id="email-otp-input" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="off">
+            <button class="otp-button" id="verify-email-btn" onclick="verifyEmailOTP()">Verify</button>
+        </div>
+        <div class="resend-text">
+            Don't see the code? <button class="otp-button secondary" id="resend-email-btn" onclick="resendEmailOTP()">Resend</button>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 20px; color: #10b981;">
+            <div style="font-size: 32px;">✓</div>
+            <div style="font-weight: 600; margin-top: 10px;">Email Verified</div>
+        </div>
+        {% endif %}
+
+        <div class="error-message" id="email-error"></div>
+        <div class="success-message" id="email-success"></div>
+    </div>
+
+    <!-- Mobile OTP Section -->
+    <div class="otp-input-group {% if mobile_verified %}verified{% endif %}" id="mobile-otp-section">
+        <h3>{{ phone|truncatewords:1 }} - Mobile OTP</h3>
+        
+        {% if not mobile_verified %}
+        <div class="otp-controls">
+            <input type="text" class="otp-input" id="mobile-otp-input" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="off">
+            <button class="otp-button" id="verify-mobile-btn" onclick="verifyMobileOTP()">Verify</button>
+        </div>
+        <div class="resend-text">
+            Don't see the code? <button class="otp-button secondary" id="resend-mobile-btn" onclick="resendMobileOTP()">Resend</button>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 20px; color: #10b981;">
+            <div style="font-size: 32px;">✓</div>
+            <div style="font-weight: 600; margin-top: 10px;">Mobile Verified</div>
+        </div>
+        {% endif %}
+
+        <div class="error-message" id="mobile-error"></div>
+        <div class="success-message" id="mobile-success"></div>
+    </div>
+
+    <!-- Complete Registration Button -->
+    {% if both_verified %}
+    <button class="complete-button" id="complete-btn" onclick="completeRegistration()">
+        ✓ Complete Registration & Login
+    </button>
+    {% else %}
+    <button class="complete-button" disabled style="background: #ccc; cursor: not-allowed;">
+        Verify both email and mobile to continue
+    </button>
+    {% endif %}
+</div>
+
+<script>
+    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value || '{{ csrf_token }}';
+
+    async function sendOTP(endpoint, buttonId) {
+        const btn = document.getElementById(buttonId);
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Sending...';
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=${endpoint.includes('email') ? 'send_email_otp' : 'send_mobile_otp'}`
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const type = endpoint.includes('email') ? 'Email' : 'Mobile';
+                showSuccess(`${type} OTP sent! Check your ${endpoint.includes('email') ? 'email' : 'phone'}.`, endpoint.includes('email') ? 'email' : 'mobile');
+            } else {
+                showError(data.message || 'Failed to send OTP', endpoint.includes('email') ? 'email' : 'mobile');
+            }
+        } catch (error) {
+            showError('Error sending OTP: ' + error.message, endpoint.includes('email') ? 'email' : 'mobile');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = endpoint.includes('email') ? 'Resend Email' : 'Resend Mobile';
+        }
+    }
+
+    async function verifyOTP(inputId, action, type) {
+        const otpInput = document.getElementById(inputId);
+        const otpCode = otpInput.value.trim();
+
+        if (!otpCode || otpCode.length !== 6) {
+            showError('Please enter a valid 6-digit OTP', type);
+            return;
+        }
+
+        const btn = document.getElementById(`verify-${type}-btn`);
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Verifying...';
+
+        try {
+            const response = await fetch('{% url "users:verify-registration-otp" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `action=${action}&otp_code=${otpCode}`
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showSuccess(`✓ ${type.charAt(0).toUpperCase() + type.slice(1)} verified successfully!`, type);
+                
+                // Update status card
+                const statusCard = document.getElementById(`${type}-status`);
+                statusCard.classList.add('verified');
+                statusCard.innerHTML = `
+                    <div class="status-icon">✓</div>
+                    <div class="status-label">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
+                    <div class="status-value">${type === 'email' ? '{{ email }}' : '{{ phone }}'}</div>
+                    <div class="status-value" style="margin-top: 5px;">
+                        <span style="color: #10b981; font-weight: 600;">Verified ✓</span>
+                    </div>
+                `;
+
+                // Hide OTP section
+                const otpSection = document.getElementById(`${type}-otp-section`);
+                otpSection.innerHTML = `
+                    <h3>${type.charAt(0).toUpperCase() + type.slice(1)} OTP</h3>
+                    <div style="text-align: center; padding: 20px; color: #10b981;">
+                        <div style="font-size: 32px;">✓</div>
+                        <div style="font-weight: 600; margin-top: 10px;">Verified</div>
+                    </div>
+                `;
+
+                // Check if both are verified
+                setTimeout(() => {
+                    checkBothVerified();
+                }, 500);
+            } else {
+                showError(data.message || 'Invalid OTP', type);
+                otpInput.value = '';
+            }
+        } catch (error) {
+            showError('Error verifying OTP: ' + error.message, type);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `Verify`;
+        }
+    }
+
+    function resendEmailOTP() {
+        sendOTP('{% url "users:verify-registration-otp" %}?action=send_email_otp', 'resend-email-btn');
+    }
+
+    function resendMobileOTP() {
+        sendOTP('{% url "users:verify-registration-otp" %}?action=send_mobile_otp', 'resend-mobile-btn');
+    }
+
+    function verifyEmailOTP() {
+        verifyOTP('email-otp-input', 'verify_email_otp', 'email');
+    }
+
+    function verifyMobileOTP() {
+        verifyOTP('mobile-otp-input', 'verify_mobile_otp', 'mobile');
+    }
+
+    function checkBothVerified() {
+        const emailSection = document.getElementById('email-otp-section');
+        const mobileSection = document.getElementById('mobile-otp-section');
+
+        const emailVerified = emailSection.classList.contains('verified') || emailSection.innerHTML.includes('Verified');
+        const mobileVerified = mobileSection.classList.contains('verified') || mobileSection.innerHTML.includes('Verified');
+
+        const completeBtn = document.getElementById('complete-btn');
+        if (emailVerified && mobileVerified) {
+            // Enable complete button
+            if (!completeBtn) {
+                const container = document.querySelector('.otp-verification-container');
+                const btn = document.createElement('button');
+                btn.id = 'complete-btn';
+                btn.className = 'complete-button';
+                btn.textContent = '✓ Complete Registration & Login';
+                btn.onclick = completeRegistration;
+                container.appendChild(btn);
+            } else {
+                completeBtn.disabled = false;
+                completeBtn.style.background = '#10b981';
+                completeBtn.style.cursor = 'pointer';
+            }
+        }
+    }
+
+    async function completeRegistration() {
+        const btn = document.getElementById('complete-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Activating account...';
+
+        try {
+            const response = await fetch('{% url "users:verify-registration-otp" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=complete_registration'
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showSuccess('✓ Registration complete! Redirecting to login...', 'complete');
+                setTimeout(() => {
+                    window.location.href = '{% url "users:login" %}';
+                }, 2000);
+            } else {
+                showError(data.message || 'Failed to complete registration', 'complete');
+                btn.disabled = false;
+                btn.innerHTML = '✓ Complete Registration & Login';
+            }
+        } catch (error) {
+            showError('Error: ' + error.message, 'complete');
+            btn.disabled = false;
+            btn.innerHTML = '✓ Complete Registration & Login';
+        }
+    }
+
+    function showError(message, type) {
+        const errorDiv = document.getElementById(`${type}-error`);
+        if (errorDiv) {
+            errorDiv.textContent = '❌ ' + message;
+            errorDiv.classList.add('show');
+            setTimeout(() => {
+                errorDiv.classList.remove('show');
+            }, 5000);
+        }
+    }
+
+    function showSuccess(message, type) {
+        const successDiv = document.getElementById(`${type}-success`);
+        if (successDiv) {
+            successDiv.textContent = message;
+            successDiv.classList.add('show');
+            setTimeout(() => {
+                successDiv.classList.remove('show');
+            }, 5000);
+        }
+    }
+
+    // Auto-focus on page load
+    window.addEventListener('load', function() {
+        {% if not email_verified %}
+        document.getElementById('email-otp-input').focus();
+        // Auto-send email OTP
+        sendOTP('{% url "users:verify-registration-otp" %}?action=send_email_otp', 'resend-email-btn');
+        {% elif not mobile_verified %}
+        document.getElementById('mobile-otp-input').focus();
+        // Auto-send mobile OTP
+        sendOTP('{% url "users:verify-registration-otp" %}?action=send_mobile_otp', 'resend-mobile-btn');
+        {% endif %}
+    });
+</script>
+{% endblock %}

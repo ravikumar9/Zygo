@@ -186,6 +186,10 @@ def bus_detail(request, bus_id):
         seat.is_booked = seat.id in booked_seat_ids
         seat.can_book = not seat.is_booked
     
+    # Check if bus has multiple decks
+    decks = set(seats.values_list('deck', flat=True))
+    has_multiple_decks = len(decks) > 1
+    
     # Get passenger gender if user is authenticated for ladies seat filtering
     passenger_gender = None
     if request.user.is_authenticated:
@@ -206,6 +210,7 @@ def bus_detail(request, bus_id):
         'booked_seat_ids': list(booked_seat_ids),
         'passenger_gender': passenger_gender,
         'seat_types': SeatLayout.RESERVED_FOR_CHOICES,
+        'has_multiple_decks': has_multiple_decks,
     }
     return render(request, 'buses/bus_detail.html', context)
 

@@ -1,15 +1,172 @@
 """
-Notification services for sending emails, WhatsApp, and SMS
+Notification services for sending emails, WhatsApp, and SMS.
+
+Phase 1 goal: reliable email/SMS infrastructure with env-driven safety.
 """
 import logging
-from django.core.mail import send_mail
+from typing import Any, Dict
+
+import requests
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
-from django.contrib.auth.models import User
+
 from .models import Notification, NotificationTemplate, NotificationPreference
 
+User = get_user_model()
+
 logger = logging.getLogger(__name__)
+
+
+class NotificationService:
+    """Central notification primitives for Phase 1 infra.
+
+    send_email(to, subject, template, context)
+    send_sms(phone, template_id, variables)
+    """
+
+    @staticmethod
+    def _resolve_user(user: User | None, fallback_email: str | None = None) -> User:
+        """Ensure a user exists for notification logging without requiring OTP/booking flows."""
+        if user:
+            return user
+
+        # Prefer existing staff/superuser to avoid creating noise
+        existing = (
+            User.objects.filter(is_superuser=True).first()
+            or User.objects.filter(is_staff=True).first()
+        )
+        if existing:
+            return existing
+
+        # Create a system notifier user as last resort
+        email_value = fallback_email or "alerts.goexplorer+system@gmail.com"
+        system_user, _ = User.objects.get_or_create(
+            username="system_notifier",
+            defaults={
+                "email": email_value,
+                "first_name": "System",
+                "last_name": "Notifier",
+                "is_staff": True,
+            },
+        )
+        return system_user
+
+    @staticmethod
+    def send_email(
+        to: str,
+        subject: str,
+        template: str,
+        context: Dict[str, Any] | None = None,
+        *,
+        user: User | None = None,
+        dry_run: bool | None = None,
+        sender: str | None = None,
+    ) -> Notification | None:
+        context = context or {}
+        html_body = render_to_string(template, context)
+        text_body = strip_tags(html_body)
+
+        dry_run = settings.NOTIFICATIONS_EMAIL_DRY_RUN if dry_run is None else dry_run
+        resolved_user = NotificationService._resolve_user(user, fallback_email=to)
+
+        notification = Notification.objects.create(
+            user=resolved_user,
+            notification_type="email",
+            recipient=to,
+            subject=subject,
+            body=html_body,
+            status="pending",
+        )
+
+        if dry_run:
+            notification.mark_sent("dry-run")
+            logger.info("[DRY-RUN] Email queued (not sent) to %s", to)
+            return notification
+
+        try:
+            send_mail(
+                subject=subject,
+                message=text_body,
+                from_email=sender or settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[to],
+                html_message=html_body,
+                fail_silently=False,
+            )
+            notification.mark_sent()
+            logger.info("Email sent to %s", to)
+        except Exception as exc:  # noqa: BLE001
+            notification.mark_failed(str(exc))
+            logger.exception("Email send failed to %s", to)
+        return notification
+
+    @staticmethod
+    def send_sms(
+        phone: str,
+        template_id: str,
+        variables: Dict[str, Any] | None = None,
+        *,
+        user: User | None = None,
+        dry_run: bool | None = None,
+        sender_id: str | None = None,
+    ) -> Notification | None:
+        variables = variables or {}
+        dry_run = settings.NOTIFICATIONS_SMS_DRY_RUN if dry_run is None else dry_run
+        resolved_user = NotificationService._resolve_user(user)
+        sender_value = sender_id or settings.MSG91_SENDER_ID
+
+        notification = Notification.objects.create(
+            user=resolved_user,
+            notification_type="sms",
+            recipient=phone,
+            body=f"template={template_id} vars={variables}",
+            status="pending",
+        )
+
+        if dry_run or not settings.MSG91_AUTHKEY or not template_id:
+            notification.mark_sent("dry-run")
+            logger.info("[DRY-RUN] SMS queued (not sent) to %s", phone)
+            return notification
+
+        payload = {
+            "template_id": template_id,
+            "sender": sender_value,
+            "route": settings.MSG91_ROUTE,
+            "country": settings.MSG91_COUNTRY,
+            "recipients": [
+                {
+                    "mobiles": phone,
+                    **variables,
+                }
+            ],
+        }
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "authkey": settings.MSG91_AUTHKEY,
+        }
+
+        try:
+            response = requests.post(
+                settings.MSG91_BASE_URL,
+                json=payload,
+                headers=headers,
+                timeout=10,
+            )
+            if response.status_code in (200, 201, 202):
+                notification.mark_sent(response.text[:200])
+                logger.info("SMS sent to %s via MSG91", phone)
+            else:
+                error_msg = f"MSG91 {response.status_code}: {response.text[:200]}"
+                notification.mark_failed(error_msg)
+                logger.error("Failed SMS to %s: %s", phone, error_msg)
+        except Exception as exc:  # noqa: BLE001
+            notification.mark_failed(str(exc))
+            logger.exception("Exception while sending SMS to %s", phone)
+
+        return notification
 
 
 class EmailService:
@@ -186,37 +343,27 @@ class SMSService:
     @staticmethod
     def send_sms(user, phone_number, message):
         """
-        Send SMS notification
-        
-        In production, integrate with:
-        - Twilio SMS API
-        - AWS SNS
-        - Exotel
-        - MSG91
+        Send SMS notification.
+
+        Uses MSG91 templated flow when configured, falls back to dry-run logging otherwise.
         """
         try:
             if not phone_number:
                 logger.warning(f"User {user.id} has no phone number")
                 return None
-            
-            # Log notification (actual sending would use SMS API)
-            notification = Notification.objects.create(
+
+            template_id = getattr(settings, "MSG91_DEFAULT_TEMPLATE_ID", "")
+            variables = {"message": message} if message else {}
+
+            # Use the central service for real delivery/dry-run handling
+            return NotificationService.send_sms(
+                phone=phone_number,
+                template_id=template_id,
+                variables=variables,
                 user=user,
-                notification_type='sms',
-                recipient=phone_number,
-                body=message,
-                status='pending'
             )
-            
-            # TODO: Integrate with actual SMS API
-            # For demo, mark as sent
-            notification.status = 'sent'
-            notification.save()
-            
-            logger.info(f"SMS queued for {phone_number}")
-            return notification
-            
-        except Exception as e:
+
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Failed to send SMS to {phone_number}: {str(e)}")
             notification = Notification.objects.create(
                 user=user,

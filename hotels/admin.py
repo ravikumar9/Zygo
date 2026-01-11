@@ -1,12 +1,13 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import Hotel, HotelImage, RoomType, RoomAvailability, ChannelManagerRoomMapping
+from core.admin_mixins import PrimaryImageValidationMixin
 
 
 class HotelImageInline(admin.TabularInline):
     model = HotelImage
     extra = 1
-    fields = ['image', 'alt_text', 'display_order']
+    fields = ['image', 'caption', 'alt_text', 'display_order', 'is_primary']
 
 
 class RoomTypeInline(admin.TabularInline):
@@ -16,7 +17,7 @@ class RoomTypeInline(admin.TabularInline):
 
 
 @admin.register(Hotel)
-class HotelAdmin(admin.ModelAdmin):
+class HotelAdmin(PrimaryImageValidationMixin, admin.ModelAdmin):
     list_display = ['name', 'city', 'property_type_tag', 'star_rating', 'review_rating', 'status_indicator', 'is_active']
     list_filter = ['is_active', 'property_type', 'star_rating', 'city', 'has_wifi', 'has_pool', 'has_gym']
     search_fields = ['name', 'city__name', 'address']

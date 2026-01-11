@@ -1,12 +1,13 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import Package, PackageImage, PackageItinerary, PackageInclusion, PackageDeparture
+from core.admin_mixins import PrimaryImageValidationMixin
 
 
 class PackageImageInline(admin.TabularInline):
     model = PackageImage
     extra = 1
-    fields = ['image', 'alt_text', 'display_order']
+    fields = ['image', 'caption', 'alt_text', 'display_order', 'is_primary']
 
 
 class PackageItineraryInline(admin.TabularInline):
@@ -19,7 +20,7 @@ class PackageItineraryInline(admin.TabularInline):
 class PackageInclusionInline(admin.TabularInline):
     model = PackageInclusion
     extra = 1
-    fields = ['service_name', 'is_included']
+    fields = ['description', 'is_included']
 
 
 class PackageDepartureInline(admin.TabularInline):
@@ -30,7 +31,7 @@ class PackageDepartureInline(admin.TabularInline):
 
 
 @admin.register(Package)
-class PackageAdmin(admin.ModelAdmin):
+class PackageAdmin(PrimaryImageValidationMixin, admin.ModelAdmin):
     list_display = ['name', 'package_type', 'duration_display', 'starting_price', 'is_active', 'status_indicator', 'image_preview']
     list_filter = ['package_type', 'is_featured', 'is_active', 'duration_days']
     search_fields = ['name', 'description']

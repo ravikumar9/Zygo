@@ -435,9 +435,11 @@
                     {% regroup seats by deck as seats_by_deck %}
                     {% for deck_group in seats_by_deck %}
                     <div class="deck-section">
+                        {% if has_multiple_decks %}
                         <div class="deck-title">
                             {% if deck_group.grouper > 1 %}Upper Deck{% else %}Lower Deck{% endif %}
                         </div>
+                        {% endif %}
 
                         <div class="driver-section">
                             <i class="fas fa-user-tie"></i> DRIVER

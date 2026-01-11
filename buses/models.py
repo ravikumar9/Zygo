@@ -117,6 +117,58 @@ class Bus(TimeStampedModel):
         if self.has_gps_tracking: amenities.append('GPS Tracking')
         if self.has_cctv: amenities.append('CCTV')
         return amenities
+    
+    def get_primary_image(self):
+        """Get primary image or fallback to first image"""
+        primary = self.images.filter(is_primary=True).first()
+        if primary:
+            return primary.image
+        first_image = self.images.first()
+        if first_image:
+            return first_image.image
+        return None
+    
+    def _image_exists(self, image):
+        """Check if image file exists"""
+        if not image:
+            return False
+        try:
+            return image.storage.exists(image.name)
+        except Exception:
+            return False
+    
+    @property
+    def primary_image_url(self):
+        """Get primary image URL"""
+        image = self.get_primary_image()
+        if self._image_exists(image):
+            try:
+                return image.url
+            except Exception:
+                return ''
+        return ''
+    
+    @property
+    def display_image_url(self):
+        """Get display image URL with fallback"""
+        from django.templatetags.static import static
+        return self.primary_image_url or static('images/bus_placeholder.svg')
+
+
+class BusImage(models.Model):
+    """Gallery images for buses (Phase 3: Multi-image support)"""
+    bus = models.ForeignKey(Bus, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField(upload_to='buses/gallery/')
+    caption = models.CharField(max_length=200, blank=True)
+    alt_text = models.CharField(max_length=200, blank=True, help_text="Alternative text for accessibility")
+    display_order = models.IntegerField(default=0, help_text="Display order (lower numbers first)")
+    is_primary = models.BooleanField(default=False)
+    
+    class Meta:
+        ordering = ['display_order', 'id']
+    
+    def __str__(self):
+        return f"{self.bus.bus_name} - Image"
 
 
 class BusRoute(TimeStampedModel):

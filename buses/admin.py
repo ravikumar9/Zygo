@@ -2,7 +2,15 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.safestring import mark_safe
-from .models import BusOperator, Bus, BusRoute, BusStop, BusSchedule, SeatLayout, BoardingPoint, DroppingPoint
+from .models import BusOperator, Bus, BusImage, BusRoute, BusStop, BusSchedule, SeatLayout, BoardingPoint, DroppingPoint
+from core.admin_mixins import PrimaryImageValidationMixin
+
+
+class BusImageInline(admin.TabularInline):
+    """Gallery images for buses (Phase 3)"""
+    model = BusImage
+    extra = 1
+    fields = ['image', 'caption', 'alt_text', 'display_order', 'is_primary']
 
 
 def verify_operator(modeladmin, request, queryset):
@@ -98,7 +106,7 @@ class BusOperatorAdmin(admin.ModelAdmin):
 
 
 @admin.register(Bus)
-class BusAdmin(admin.ModelAdmin):
+class BusAdmin(PrimaryImageValidationMixin, admin.ModelAdmin):
     list_display = ['bus_number', 'bus_name', 'operator', 'bus_type', 'bus_age_display', 'total_seats', 'average_rating', 'is_active']
     list_filter = ['bus_type', 'is_active', 'operator', 'manufacturing_year']
     search_fields = ['bus_number', 'bus_name', 'operator__name', 'registration_number']
@@ -106,6 +114,7 @@ class BusAdmin(admin.ModelAdmin):
     list_select_related = ['operator']
     readonly_fields = ['created_at', 'updated_at', 'get_amenities_display']
     actions = ['enable_wifi', 'enable_ac', 'disable_ac', 'mark_as_active', 'mark_as_inactive']
+    inlines = [BusImageInline]  # Phase 3: Multi-image support
     
     fieldsets = (
         ('Basic Information', {

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{ subject|default:"GoExplorer Notification" }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f7f9fb; color: #222; padding: 16px; }
+        .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+        .title { font-size: 18px; margin-bottom: 8px; }
+        .meta { color: #6b7280; font-size: 12px; margin-bottom: 12px; }
+        .section { margin-bottom: 12px; }
+        .label { font-weight: bold; }
+        ul { margin: 8px 0 0 16px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="title">Hi {{ name }},</div>
+        <div class="section">
+            {{ message }}
+        </div>
+        {% if extras %}
+        <div class="section">
+            <div class="label">Details:</div>
+            <ul>
+                {% for key, value in extras.items %}
+                    <li><span class="label">{{ key }}:</span> {{ value }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        <div class="meta">Sent at {{ timestamp }}</div>
+    </div>
+</body>
+</html>

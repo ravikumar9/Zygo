@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "property_owners",
     "dashboard",
     "audit_logs",
+    "reviews",  # Phase 3: Reviews moderation
 ]
 
 # --------------------------------------------------
@@ -150,12 +151,38 @@ MEDIA_ROOT = BASE_DIR / "media"
 SERVE_MEDIA_FILES = config("SERVE_MEDIA_FILES", default=True, cast=bool)
 
 # --------------------------------------------------
-# Email (DEV only)
+# Email / Notifications (env-driven; safe defaults)
 # --------------------------------------------------
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_SMTP_ENABLED = config("EMAIL_SMTP_ENABLED", default=False, cast=bool)
+
+if EMAIL_SMTP_ENABLED:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
+    EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+    EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="alerts.goexplorer@gmail.com")
+    EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+    EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+else:
+    EMAIL_BACKEND = config(
+        "EMAIL_BACKEND",
+        default="django.core.mail.backends.console.EmailBackend",
+    )
+
 DEFAULT_FROM_EMAIL = config(
-    "DEFAULT_FROM_EMAIL", default="noreply@goexplorer-dev.cloud"
+    "DEFAULT_FROM_EMAIL", default="alerts.goexplorer@gmail.com"
 )
+
+# Notification safety toggles
+NOTIFICATIONS_EMAIL_DRY_RUN = config("NOTIFICATIONS_EMAIL_DRY_RUN", default=DEBUG, cast=bool)
+NOTIFICATIONS_SMS_DRY_RUN = config("NOTIFICATIONS_SMS_DRY_RUN", default=DEBUG, cast=bool)
+
+# MSG91 (templated SMS)
+MSG91_AUTHKEY = config("MSG91_AUTHKEY", default="")
+MSG91_SENDER_ID = config("MSG91_SENDER_ID", default="GOEXPR")
+MSG91_ROUTE = config("MSG91_ROUTE", default="4")
+MSG91_COUNTRY = config("MSG91_COUNTRY", default="91")
+MSG91_BASE_URL = config("MSG91_BASE_URL", default="https://api.msg91.com/api/v5/flow/")
+MSG91_DEFAULT_TEMPLATE_ID = config("MSG91_DEFAULT_TEMPLATE_ID", default="")
 
 # --------------------------------------------------
 # Payments (TEST KEYS ONLY)

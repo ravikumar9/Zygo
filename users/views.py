@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect
+from django.http import JsonResponse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
@@ -57,15 +58,24 @@ class UserLoginForm(forms.Form):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def register(request):
-    """User registration view"""
+    """
+    Phase 3.1: User registration with mandatory dual OTP verification
+    
+    Registration requires:
+    1. Email + Phone + Password submission
+    2. Email OTP verification
+    3. Mobile OTP verification
+    4. Only then account becomes ACTIVE
+    """
     if request.user.is_authenticated:
         return redirect('core:home')
     
+    # Step 1: Initial form submission (email, phone, password)
     if request.method == 'POST':
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
+            # Create inactive user (pending verification)
             with transaction.atomic():
-                # Create user with email as username
                 user = User.objects.create_user(
                     username=form.cleaned_data['email'],
                     email=form.cleaned_data['email'],
@@ -74,15 +84,157 @@ def register(request):
                     last_name=form.cleaned_data['last_name'],
                     phone=form.cleaned_data.get('phone', '')
                 )
+                user.is_active = True  # Will verify via OTP
+                user.save()
+                
                 # Create user profile
                 UserProfile.objects.create(user=user)
             
-            messages.success(request, 'Registration successful! Please log in.')
-            return redirect('users:login')
+            # Redirect to OTP verification page
+            # Do NOT auto-login - user must verify first
+            request.session['pending_user_id'] = user.id
+            request.session['pending_email'] = user.email
+            request.session['pending_phone'] = user.phone
+            
+            return redirect('users:verify-registration-otp')
     else:
         form = UserRegistrationForm()
     
     return render(request, 'users/register.html', {'form': form})
+
+
+@csrf_protect
+@require_http_methods(["GET", "POST"])
+def verify_registration_otp(request):
+    """
+    Phase 3.1: Verify Email + Mobile OTP for new user registration
+    
+    User must verify BOTH email and mobile OTP before account activation
+    """
+    pending_user_id = request.session.get('pending_user_id')
+    
+    if not pending_user_id:
+        if request.method == 'POST':
+            return JsonResponse({
+                'success': False,
+                'message': 'Session expired. Please register again.'
+            }, status=400)
+        messages.error(request, 'Session expired. Please register again.')
+        return redirect('users:register')
+    
+    try:
+        user = User.objects.get(id=pending_user_id)
+    except User.DoesNotExist:
+        if request.method == 'POST':
+            return JsonResponse({
+                'success': False,
+                'message': 'User not found. Please register again.'
+            }, status=400)
+        messages.error(request, 'User not found. Please register again.')
+        return redirect('users:register')
+    
+    from .otp_service import OTPService
+    
+    # Get verification status
+    email_verified = request.session.get('email_verified', False)
+    mobile_verified = request.session.get('mobile_verified', False)
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        # SEND Email OTP
+        if action == 'send_email_otp':
+            if email_verified:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Email already verified ✓'
+                }, status=400)
+            
+            result = OTPService.send_email_otp(user)
+            return JsonResponse(result)
+        
+        # SEND Mobile OTP
+        elif action == 'send_mobile_otp':
+            if mobile_verified:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Mobile already verified ✓'
+                }, status=400)
+            
+            result = OTPService.send_mobile_otp(user)
+            return JsonResponse(result)
+        
+        # VERIFY Email OTP
+        elif action == 'verify_email_otp':
+            otp_code = request.POST.get('otp_code')
+            
+            if not otp_code:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Enter OTP code'
+                }, status=400)
+            
+            result = OTPService.verify_email_otp(user, otp_code)
+            
+            if result['success']:
+                request.session['email_verified'] = True
+                email_verified = True
+            
+            return JsonResponse(result)
+        
+        # VERIFY Mobile OTP
+        elif action == 'verify_mobile_otp':
+            otp_code = request.POST.get('otp_code')
+            
+            if not otp_code:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Enter OTP code'
+                }, status=400)
+            
+            result = OTPService.verify_mobile_otp(user, otp_code)
+            
+            if result['success']:
+                request.session['mobile_verified'] = True
+                mobile_verified = True
+            
+            return JsonResponse(result)
+        
+        # COMPLETE Registration (both verified)
+        elif action == 'complete_registration':
+            if not email_verified or not mobile_verified:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Both email and mobile must be verified'
+                }, status=400)
+            
+            # Mark account as fully verified
+            user.email_verified = True
+            user.phone_verified = True
+            user.save(update_fields=['email_verified', 'phone_verified'])
+            
+            # Clear session
+            del request.session['pending_user_id']
+            del request.session['pending_email']
+            del request.session['pending_phone']
+            del request.session['email_verified']
+            del request.session['mobile_verified']
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Registration complete! Your account is now active. Please log in.'
+            })
+    
+    # GET: Show verification form
+    context = {
+        'email': user.email,
+        'phone': user.phone,
+        'email_verified': email_verified,
+        'mobile_verified': mobile_verified,
+        'both_verified': email_verified and mobile_verified,
+    }
+    
+    return render(request, 'users/verify_registration_otp.html', context)
 
 
 @csrf_protect
