@@ -127,9 +127,7 @@
         <!-- Main Content -->
         <div class="col-lg-8">
             <!-- Hero Image -->
-            {% if package.image %}
-                <img src="{{ package.image.url }}" alt="{{ package.name }}" class="hero-image" loading="lazy" style="aspect-ratio: 16/9; object-fit: cover;">
-            {% endif %}
+            <img src="{{ package.display_image_url }}" alt="{{ package.name }}" class="hero-image" loading="lazy" style="aspect-ratio: 16/9; object-fit: cover;">
 
             <!-- Overview -->
             <div class="info-card">

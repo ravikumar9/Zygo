@@ -247,15 +247,20 @@
         <!-- Payment Methods -->
         <div class="payment-methods">
             <h5>Select Payment Method</h5>
-            <label class="payment-method-option active">
-                <input type="radio" name="payment_method" value="razorpay" checked>
+            {% if wallet_balance and wallet_balance > 0 %}
+            <label class="payment-method-option">
+                <input type="radio" name="payment_method" value="wallet" id="walletRadio">
+                <strong>Wallet Balance: ₹{{ wallet_balance|floatformat:0 }}</strong>
+                {% if available_cashback > 0 %}
+                <p class="small text-success mb-0">+ Cashback: ₹{{ available_cashback|floatformat:0 }} (expiring soon)</p>
+                {% endif %}
+                <p class="small text-muted mb-0">Pay with your wallet balance</p>
+            </label>
+            {% endif %}
+            <label class="payment-method-option {% if not wallet_balance or wallet_balance <= 0 %}active{% endif %}">
+                <input type="radio" name="payment_method" value="razorpay" id="razorpayRadio" {% if not wallet_balance or wallet_balance <= 0 %}checked{% endif %}>
                 <strong>Razorpay (Recommended)</strong>
                 <p class="small text-muted mb-0">Pay via Credit/Debit Card, UPI, Net Banking</p>
-            </label>
-            <label class="payment-method-option">
-                <input type="radio" name="payment_method" value="wallet">
-                <strong>Wallet/Digital Payment</strong>
-                <p class="small text-muted mb-0">Use saved payment methods</p>
             </label>
             <label class="payment-method-option">
                 <input type="radio" name="payment_method" value="netbanking">
@@ -293,14 +298,56 @@ const RAZORPAY_KEY = "{{ razorpay_key }}";
 const ORDER_ID = "{{ order_id }}";
 const BOOKING_ID = "{{ booking.booking_id }}";
 const AMOUNT = parseFloat("{{ total_amount|default:'0' }}") || 0;
+const WALLET_BALANCE = parseFloat("{{ wallet_balance|default:'0' }}") || 0;
+const AVAILABLE_CASHBACK = parseFloat("{{ available_cashback|default:'0' }}") || 0;
 
 function initiatePayment() {
     const paymentMethod = document.querySelector('input[name="payment_method"]:checked').value;
     
     if (paymentMethod === 'razorpay') {
         initiateRazorpayPayment();
+    } else if (paymentMethod === 'wallet') {
+        initiateWalletPayment();
     } else {
         showError('Other payment methods coming soon!');
+    }
+}
+
+function initiateWalletPayment() {
+    const totalAvailable = WALLET_BALANCE + AVAILABLE_CASHBACK;
+    if (totalAvailable < AMOUNT) {
+        showError(`Insufficient wallet balance. Available: ₹${totalAvailable.toFixed(0)}, Required: ₹${AMOUNT.toFixed(0)}`);
+        return;
+    }
+    
+    // Process wallet payment
+    if (confirm(`Pay ₹${AMOUNT.toFixed(0)} from wallet?`)) {
+        fetch('{% url "payments:process-wallet" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                booking_id: BOOKING_ID,
+                amount: AMOUNT
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showSuccess('Payment successful! Redirecting...');
+                setTimeout(() => {
+                    window.location.href = `{% url "bookings:booking-confirm" booking.booking_id %}`;
+                }, 2000);
+            } else {
+                showError(data.message || 'Wallet payment failed');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showError('Wallet payment error. Please try again.');
+        });
     }
 }
 

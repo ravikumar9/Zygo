@@ -64,7 +64,7 @@ class HotelListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'city', 'city_name', 'address', 'star_rating',
             'review_rating', 'review_count', 'image', 'is_featured',
-            'latitude', 'longitude', 'min_price', 'amenities', 'has_wifi',
+            'property_type', 'latitude', 'longitude', 'min_price', 'amenities', 'has_wifi',
             'has_parking', 'has_pool', 'has_gym', 'has_restaurant', 'has_spa'
         ]
     
@@ -96,7 +96,7 @@ class HotelDetailSerializer(serializers.ModelSerializer):
         model = Hotel
         fields = [
             'id', 'name', 'description', 'city', 'city_name', 'address',
-            'latitude', 'longitude', 'star_rating', 'review_rating',
+            'latitude', 'longitude', 'property_type', 'property_rules', 'star_rating', 'review_rating',
             'review_count', 'image', 'images', 'has_wifi', 'has_parking',
             'has_pool', 'has_gym', 'has_restaurant', 'has_spa', 'has_ac',
             'checkin_time', 'checkout_time', 'contact_phone', 'contact_email',
@@ -155,6 +155,7 @@ class HotelSearchFilterSerializer(serializers.Serializer):
     min_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     max_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     star_rating = serializers.IntegerField(required=False, min_value=1, max_value=5)
+    property_type = serializers.ChoiceField(choices=[choice[0] for choice in Hotel.PROPERTY_TYPES], required=False)
     has_wifi = serializers.BooleanField(required=False)
     has_parking = serializers.BooleanField(required=False)
     has_pool = serializers.BooleanField(required=False)

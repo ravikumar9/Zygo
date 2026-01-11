@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
+from django.core.files.storage import default_storage
+from django.templatetags.static import static
 from decimal import Decimal
 from datetime import datetime, date
 from core.models import TimeStampedModel, City
@@ -20,6 +22,14 @@ class Hotel(TimeStampedModel):
         ('external_cm', 'External Channel Manager'),
         ('internal_cm', 'Internal (GoExplorer)'),
     ]
+
+    PROPERTY_TYPES = [
+        ('hotel', 'Hotel'),
+        ('resort', 'Resort'),
+        ('villa', 'Villa'),
+        ('homestay', 'Homestay'),
+        ('lodge', 'Lodge / Residency / Cottage'),
+    ]
     
     name = models.CharField(max_length=200)
     description = models.TextField()
@@ -27,6 +37,14 @@ class Hotel(TimeStampedModel):
     address = models.TextField()
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
+    property_type = models.CharField(
+        max_length=20,
+        choices=PROPERTY_TYPES,
+        default='hotel',
+        help_text="Property category (hotel/resort/villa/homestay/lodge)"
+    )
+    property_rules = models.TextField(blank=True, help_text="House rules, check-in policies, ID requirements")
     
     star_rating = models.IntegerField(choices=STAR_RATINGS, default=3)
     review_rating = models.DecimalField(
@@ -85,22 +103,40 @@ class Hotel(TimeStampedModel):
         return f"{self.name} - {self.city.name}"
 
     # Image helpers
+    def _image_exists(self, image_field):
+        """Return True if the image exists on disk/storage."""
+        try:
+            return bool(image_field and image_field.name and default_storage.exists(image_field.name))
+        except Exception:
+            return False
+
     def get_primary_image(self):
         """Return the primary image file with sensible fallbacks."""
-        if self.image:
+        if self._image_exists(self.image):
             return self.image
 
         primary = self.images.filter(is_primary=True).first()
-        if primary:
+        if primary and self._image_exists(primary.image):
             return primary.image
 
         first = self.images.first()
-        return first.image if first else None
+        if first and self._image_exists(first.image):
+            return first.image
+        return None
 
     @property
     def primary_image_url(self):
         image = self.get_primary_image()
-        return image.url if image else ''
+        if self._image_exists(image):
+            try:
+                return image.url
+            except Exception:
+                return ''
+        return ''
+
+    @property
+    def display_image_url(self):
+        return self.primary_image_url or static('images/hotel_placeholder.svg')
 
 
 class HotelImage(models.Model):

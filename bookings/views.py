@@ -56,6 +56,9 @@ def payment_page(request, booking_id):
     If Razorpay credentials are not configured, fall back to a dummy order id so
     the template renders without breaking local flows.
     """
+    from payments.models import Wallet
+    from decimal import Decimal
+    
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
 
     razorpay_key = settings.RAZORPAY_KEY_ID or 'rzp_test_dummy_key'
@@ -76,6 +79,16 @@ def payment_page(request, booking_id):
             # Keep fallback order_id for non-blocking local runs
             pass
 
+    # Get wallet balance and available cashback
+    wallet_balance = Decimal('0.00')
+    available_cashback = Decimal('0.00')
+    try:
+        wallet = Wallet.objects.get(user=request.user, is_active=True)
+        wallet_balance = wallet.balance
+        available_cashback = wallet.get_available_balance() - wallet_balance
+    except Wallet.DoesNotExist:
+        pass
+
     context = {
         'booking': booking,
         'total_amount': booking.total_amount,
@@ -84,6 +97,8 @@ def payment_page(request, booking_id):
         'discount_amount': 0,
         'razorpay_key': razorpay_key,
         'order_id': order_id,
+        'wallet_balance': wallet_balance,
+        'available_cashback': available_cashback,
     }
     return render(request, 'payments/payment.html', context)
 

@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.http import HttpResponse
+from django.utils import timezone
 import csv
-from .models import Payment, Invoice
+from .models import Payment, Invoice, Wallet, WalletTransaction, CashbackLedger
 
 
 @admin.register(Payment)
@@ -88,3 +89,77 @@ class InvoiceAdmin(admin.ModelAdmin):
             'fields': ('pdf_file',)
         }),
     )
+
+
+@admin.register(Wallet)
+class WalletAdmin(admin.ModelAdmin):
+    list_display = ['user', 'balance', 'currency', 'is_active', 'created_at']
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['user__username', 'user__email']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('User', {
+            'fields': ('user',)
+        }),
+        ('Balance', {
+            'fields': ('balance', 'currency', 'is_active')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+
+@admin.register(WalletTransaction)
+class WalletTransactionAdmin(admin.ModelAdmin):
+    list_display = ['wallet', 'transaction_type', 'amount', 'balance_after', 'created_at']
+    list_filter = ['transaction_type', 'created_at']
+    search_fields = ['wallet__user__username', 'description', 'reference_id']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Transaction', {
+            'fields': ('wallet', 'transaction_type', 'amount', 'balance_after')
+        }),
+        ('Details', {
+            'fields': ('description', 'reference_id')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+
+@admin.register(CashbackLedger)
+class CashbackLedgerAdmin(admin.ModelAdmin):
+    list_display = ['wallet', 'amount', 'earned_on', 'expires_at', 'is_used', 'is_expired']
+    list_filter = ['is_used', 'is_expired', 'earned_on', 'expires_at']
+    search_fields = ['wallet__user__username', 'booking__booking_id', 'description']
+    readonly_fields = ['earned_on', 'created_at', 'updated_at']
+    actions = ['expire_selected_cashback']
+    
+    fieldsets = (
+        ('Cashback', {
+            'fields': ('wallet', 'booking', 'amount')
+        }),
+        ('Validity', {
+            'fields': ('earned_on', 'expires_at', 'is_expired', 'expired_on')
+        }),
+        ('Usage', {
+            'fields': ('is_used', 'used_on', 'used_amount')
+        }),
+        ('Details', {
+            'fields': ('description',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+    
+    def expire_selected_cashback(self, request, queryset):
+        """Manually expire selected cashback entries"""
+        now = timezone.now()
+        count = queryset.filter(is_expired=False, is_used=False).update(is_expired=True, expired_on=now)
+        self.message_user(request, f"{count} cashback entries marked as expired.")
+    expire_selected_cashback.short_description = "Expire selected cashback"

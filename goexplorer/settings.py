@@ -137,6 +137,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+# Enable WhiteNoise finders so dev/staging can serve from STATICFILES_DIRS without collectstatic
+WHITENOISE_USE_FINDERS = True
 # Avoid manifest requirement during DEBUG/tests to prevent Missing manifest errors
 if DEBUG:
     STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
@@ -145,6 +147,7 @@ else:
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+SERVE_MEDIA_FILES = config("SERVE_MEDIA_FILES", default=True, cast=bool)
 
 # --------------------------------------------------
 # Email (DEV only)

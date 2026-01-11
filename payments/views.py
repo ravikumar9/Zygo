@@ -3,9 +3,14 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
 import razorpay
 import hmac
 import hashlib
+import json
+from decimal import Decimal
 
 from hotels.channel_manager_service import finalize_booking_after_payment, release_inventory_on_failure
 
@@ -133,3 +138,98 @@ class RazorpayWebhookView(APIView):
             pass
         
         return Response({'status': 'ok'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def process_wallet_payment(request):
+    """Process payment using wallet balance and cashback"""
+    from bookings.models import Booking
+    from .models import Payment, Wallet, CashbackLedger
+    from django.utils import timezone
+    from django.db import transaction
+    
+    try:
+        data = json.loads(request.body)
+        booking_id = data.get('booking_id')
+        amount = Decimal(str(data.get('amount', 0)))
+        
+        # Validate booking
+        try:
+            booking = Booking.objects.get(booking_id=booking_id, user=request.user)
+        except Booking.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Booking not found'}, status=404)
+        
+        # Get wallet
+        try:
+            wallet = Wallet.objects.get(user=request.user, is_active=True)
+        except Wallet.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Wallet not found'}, status=404)
+        
+        # Check available balance
+        total_available = wallet.get_available_balance()
+        if total_available < amount:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Insufficient balance. Available: ₹{total_available}, Required: ₹{amount}'
+            }, status=400)
+        
+        # Process payment with transaction atomicity
+        with transaction.atomic():
+            # Calculate how much to deduct from wallet balance vs cashback
+            wallet_deduction = min(wallet.balance, amount)
+            cashback_needed = amount - wallet_deduction
+            
+            # Deduct from wallet balance
+            if wallet_deduction > 0:
+                wallet.deduct_balance(wallet_deduction, f"Payment for booking {booking_id}")
+            
+            # Use cashback if needed
+            if cashback_needed > 0:
+                # Get available cashback entries (FIFO - oldest first)
+                cashback_entries = CashbackLedger.objects.filter(
+                    wallet=wallet,
+                    is_used=False,
+                    is_expired=False,
+                    expires_at__gt=timezone.now()
+                ).order_by('expires_at')
+                
+                remaining = cashback_needed
+                for cb_entry in cashback_entries:
+                    if remaining <= 0:
+                        break
+                    use_amount = min(cb_entry.amount, remaining)
+                    cb_entry.mark_as_used(use_amount)
+                    remaining -= use_amount
+            
+            # Create payment record
+            payment = Payment.objects.create(
+                booking=booking,
+                amount=amount,
+                payment_method='wallet',
+                status='success',
+                transaction_date=timezone.now(),
+                transaction_id=f"WALLET-{booking_id}",
+                notes=f"Wallet: ₹{wallet_deduction}, Cashback: ₹{cashback_needed}"
+            )
+            
+            # Update booking
+            booking.paid_amount += amount
+            booking.payment_reference = payment.transaction_id
+            booking.save(update_fields=['paid_amount', 'payment_reference', 'updated_at'])
+            
+            # Finalize booking if fully paid
+            if booking.paid_amount >= booking.total_amount:
+                finalize_booking_after_payment(booking, payment_reference=payment.transaction_id)
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Payment successful',
+                'payment_id': str(payment.id)
+            })
+    
+    except Exception as exc:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(exc)
+        }, status=500)

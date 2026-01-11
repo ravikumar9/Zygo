@@ -46,7 +46,8 @@ class HotelListView(generics.ListAPIView):
     queryset = Hotel.objects.filter(is_active=True).prefetch_related('room_types', 'images')
     serializer_class = HotelListSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['city', 'star_rating', 'is_featured']
+    filterset_fields = ['city', 'star_rating', 'is_featured', 'property_type',
+                        'has_wifi', 'has_parking', 'has_pool', 'has_gym', 'has_restaurant', 'has_spa']
     search_fields = ['name', 'description', 'city__name']
     ordering_fields = ['review_rating', 'name']
     pagination_class = StandardResultsSetPagination
@@ -94,6 +95,11 @@ class HotelSearchView(generics.ListAPIView):
         star_rating = self.request.query_params.get('star_rating')
         if star_rating:
             queryset = queryset.filter(star_rating=int(star_rating))
+
+        # Property type filter
+        property_type = self.request.query_params.get('property_type')
+        if property_type:
+            queryset = queryset.filter(property_type=property_type)
         
         # Amenity filters
         if self.request.query_params.get('has_wifi') == 'true':
@@ -313,8 +319,19 @@ def hotel_list(request):
     price_min = request.GET.get('price_min')
     price_max = request.GET.get('price_max')
     star_rating = request.GET.get('star_rating')
+    property_type = request.GET.get('property_type')
     sort = request.GET.get('sort')
     guests = request.GET.get('guests')
+
+    amenity_flags = {
+        'has_wifi': request.GET.get('has_wifi') in ('true', 'on', '1'),
+        'has_parking': request.GET.get('has_parking') in ('true', 'on', '1'),
+        'has_pool': request.GET.get('has_pool') in ('true', 'on', '1'),
+        'has_gym': request.GET.get('has_gym') in ('true', 'on', '1'),
+        'has_restaurant': request.GET.get('has_restaurant') in ('true', 'on', '1'),
+        'has_spa': request.GET.get('has_spa') in ('true', 'on', '1'),
+        'has_ac': request.GET.get('has_ac') in ('true', 'on', '1'),
+    }
 
     # Basic price range filter
     if price_min:
@@ -325,6 +342,15 @@ def hotel_list(request):
     # Star rating filter
     if star_rating:
         hotels = hotels.filter(star_rating=star_rating)
+
+    # Property type filter
+    if property_type:
+        hotels = hotels.filter(property_type=property_type)
+
+    # Amenity filters
+    for field, enabled in amenity_flags.items():
+        if enabled:
+            hotels = hotels.filter(**{field: True})
 
     # Sorting
     if sort == 'price_asc':
@@ -356,14 +382,17 @@ def hotel_list(request):
     context = {
         'hotels': list(hotels),
         'cities': cities,
+        'property_types': Hotel.PROPERTY_TYPES,
         'selected_city': city_id,
         'selected_checkin': checkin,
         'selected_checkout': checkout,
         'selected_price_min': price_min,
         'selected_price_max': price_max,
         'selected_star_rating': star_rating,
+        'selected_property_type': property_type,
         'selected_sort': sort,
         'selected_guests': guests,
+        'selected_amenities': amenity_flags,
         'availability_errors': availability_errors,
     }
     

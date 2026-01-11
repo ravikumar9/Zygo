@@ -1,42 +1,88 @@
 {% extends "base.html" %}
 {% load static %}
+{% load core_extras %}
 
 {% block title %}Hotels - GoExplorer{% endblock %}
 
 {% block content %}
 <div class="container my-5">
-    <form method="get" class="row g-3 mb-4">
-        <div class="col-md-3">
-            <select name="city_id" class="form-select">
-                <option value="">Select City</option>
-                {% for city in cities %}
-                <option value="{{ city.id }}"
-                        {% if selected_city == city.id|stringformat:'s' %}selected{% endif %}>
-                    {{ city.name }}
-                </option>
-                {% endfor %}
-            </select>
+    <form method="get" class="card shadow-sm border-0 p-3 mb-4">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">City</label>
+                <select name="city_id" class="form-select">
+                    <option value="">Select City</option>
+                    {% for city in cities %}
+                    <option value="{{ city.id }}" {% if selected_city == city.id|stringformat:'s' %}selected{% endif %}>{{ city.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Check-in</label>
+                <input type="date" name="checkin" class="form-control" value="{{ selected_checkin|default:'' }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Check-out</label>
+                <input type="date" name="checkout" class="form-control" value="{{ selected_checkout|default:'' }}">
+            </div>
+            <div class="col-md-1">
+                <label class="form-label">Guests</label>
+                <input type="number" name="guests" class="form-control" min="1" value="{{ selected_guests|default:1 }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Property Type</label>
+                <select name="property_type" class="form-select">
+                    <option value="">Any</option>
+                    {% for code,label in property_types %}
+                    <option value="{{ code }}" {% if selected_property_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Star Rating</label>
+                <select name="star_rating" class="form-select">
+                    <option value="">Any</option>
+                    {% for i in "12345" %}
+                    <option value="{{ forloop.counter }}" {% if selected_star_rating == forloop.counter|stringformat:'s' %}selected{% endif %}>{{ forloop.counter }} Star</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
-
-        <div class="col-md-2">
-            <input type="date" name="checkin" class="form-control"
-                   value="{{ selected_checkin|default:'' }}">
-        </div>
-
-        <div class="col-md-2">
-            <input type="date" name="checkout" class="form-control"
-                   value="{{ selected_checkout|default:'' }}">
-        </div>
-
-        <div class="col-md-2">
-            <input type="number" name="guests" class="form-control"
-                   min="1" value="{{ selected_guests|default:1 }}">
-        </div>
-
-        <div class="col-md-3">
-            <button class="btn btn-primary w-100">
-                Search Hotels
-            </button>
+        <div class="row g-3 mt-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">Min Price</label>
+                <input type="number" name="price_min" class="form-control" min="0" value="{{ selected_price_min|default:'' }}" placeholder="0">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Max Price</label>
+                <input type="number" name="price_max" class="form-control" min="0" value="{{ selected_price_max|default:'' }}" placeholder="15000">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Amenities</label>
+                <div class="d-flex flex-wrap gap-2 small">
+                    <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="has_wifi" value="true" {% if selected_amenities.has_wifi %}checked{% endif %}><span class="form-check-label">Wifi</span></label>
+                    <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="has_parking" value="true" {% if selected_amenities.has_parking %}checked{% endif %}><span class="form-check-label">Parking</span></label>
+                    <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="has_pool" value="true" {% if selected_amenities.has_pool %}checked{% endif %}><span class="form-check-label">Pool</span></label>
+                    <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="has_gym" value="true" {% if selected_amenities.has_gym %}checked{% endif %}><span class="form-check-label">Gym</span></label>
+                    <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="has_restaurant" value="true" {% if selected_amenities.has_restaurant %}checked{% endif %}><span class="form-check-label">Restaurant</span></label>
+                    <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="has_spa" value="true" {% if selected_amenities.has_spa %}checked{% endif %}><span class="form-check-label">Spa</span></label>
+                    <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="has_ac" value="true" {% if selected_amenities.has_ac %}checked{% endif %}><span class="form-check-label">AC</span></label>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Sort</label>
+                <select name="sort" class="form-select">
+                    <option value="">Default</option>
+                    <option value="price_asc" {% if selected_sort == 'price_asc' %}selected{% endif %}>Price: Low to High</option>
+                    <option value="price_desc" {% if selected_sort == 'price_desc' %}selected{% endif %}>Price: High to Low</option>
+                    <option value="rating_desc" {% if selected_sort == 'rating_desc' %}selected{% endif %}>Rating: High to Low</option>
+                    <option value="rating_asc" {% if selected_sort == 'rating_asc' %}selected{% endif %}>Rating: Low to High</option>
+                </select>
+            </div>
+            <div class="col-md-2 text-end">
+                <button class="btn btn-primary w-100" type="submit">Search Hotels</button>
+                <a href="/hotels/" class="small d-inline-block mt-2">Reset filters</a>
+            </div>
         </div>
     </form>
 
@@ -44,16 +90,26 @@
     <div class="row g-4">
         {% for hotel in hotels %}
         <div class="col-md-4">
-            <div class="card h-100">
-                <img src="{{ hotel.primary_image_url|default:'https://via.placeholder.com/400x250' }}"
-                     class="card-img-top" alt="{{ hotel.name }}">
+            <div class="card h-100 shadow-sm">
+                <img src="{{ hotel.display_image_url }}" class="card-img-top" alt="{{ hotel.name }}" style="height:200px;object-fit:cover;">
                 <div class="card-body d-flex flex-column">
-                    <h5>{{ hotel.name }}</h5>
-                    <p class="text-muted">{{ hotel.city.name }}</p>
-                    <a href="{% url 'hotels:hotel_detail' hotel.id %}?{{ request.GET.urlencode }}"
-                       class="btn btn-primary mt-auto">
-                        View & Book
-                    </a>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-primary text-uppercase small">{{ hotel.get_property_type_display }}</span>
+                        <span class="badge bg-warning text-dark small"><i class="fas fa-star me-1"></i>{{ hotel.star_rating }}</span>
+                    </div>
+                    <h5 class="mb-1">{{ hotel.name }}</h5>
+                    <p class="text-muted small mb-2"><i class="fas fa-map-marker-alt me-1"></i>{{ hotel.city.name }}</p>
+                    <p class="small text-muted mb-2">From ₹{{ hotel.min_price|default:0|floatformat:'0' }}/night</p>
+                    <div class="d-flex flex-wrap gap-2 mb-3 small text-muted">
+                        {% if hotel.has_wifi %}<span><i class="fas fa-wifi"></i></span>{% endif %}
+                        {% if hotel.has_parking %}<span><i class="fas fa-square-parking"></i></span>{% endif %}
+                        {% if hotel.has_pool %}<span><i class="fas fa-person-swimming"></i></span>{% endif %}
+                        {% if hotel.has_gym %}<span><i class="fas fa-dumbbell"></i></span>{% endif %}
+                        {% if hotel.has_restaurant %}<span><i class="fas fa-utensils"></i></span>{% endif %}
+                        {% if hotel.has_spa %}<span><i class="fas fa-spa"></i></span>{% endif %}
+                        {% if hotel.has_ac %}<span><i class="fas fa-wind"></i></span>{% endif %}
+                    </div>
+                    <a href="{% url 'hotels:hotel_detail' hotel.id %}?{{ request.GET.urlencode }}" class="btn btn-primary mt-auto">View &amp; Book</a>
                 </div>
             </div>
         </div>
@@ -61,7 +117,7 @@
     </div>
     {% else %}
     <div class="alert alert-info">
-        No hotels found
+        No hotels found for the selected criteria
     </div>
     {% endif %}
 </div>

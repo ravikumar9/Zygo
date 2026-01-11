@@ -1,5 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
+from django.core.files.storage import default_storage
+from django.templatetags.static import static
 from core.models import TimeStampedModel, City
 
 
@@ -55,6 +57,39 @@ class Package(TimeStampedModel):
     
     def __str__(self):
         return f"{self.name} - {self.duration_days}D/{self.duration_nights}N"
+
+    def _image_exists(self, image_field):
+        try:
+            return bool(image_field and image_field.name and default_storage.exists(image_field.name))
+        except Exception:
+            return False
+
+    def get_primary_image(self):
+        if self._image_exists(self.image):
+            return self.image
+
+        primary = self.images.filter(is_primary=True).first()
+        if primary and self._image_exists(primary.image):
+            return primary.image
+
+        first = self.images.first()
+        if first and self._image_exists(first.image):
+            return first.image
+        return None
+
+    @property
+    def primary_image_url(self):
+        image = self.get_primary_image()
+        if self._image_exists(image):
+            try:
+                return image.url
+            except Exception:
+                return ''
+        return ''
+
+    @property
+    def display_image_url(self):
+        return self.primary_image_url or static('images/package_placeholder.svg')
 
 
 class PackageImage(models.Model):

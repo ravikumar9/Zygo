@@ -54,11 +54,54 @@
     <div class="row">
         <div class="col-lg-8">
             <img class="main-image mb-4"
-                 src="{{ hotel.primary_image_url|default:'https://via.placeholder.com/800x400' }}"
+                 src="{{ hotel.display_image_url }}"
                  alt="{{ hotel.name }}">
 
             <h3>About This Hotel</h3>
+            <div class="mb-2">
+                <span class="badge bg-primary me-2"><i class="fas fa-building me-1"></i> {{ hotel.get_property_type_display }}</span>
+                <span class="badge bg-warning text-dark"><i class="fas fa-star me-1"></i> {{ hotel.star_rating }}-Star</span>
+            </div>
             <p>{{ hotel.description }}</p>
+
+            <h5 class="mt-4 mb-3">Amenities</h5>
+            <div class="row g-3">
+                <div class="col-6 col-md-4">
+                    <i class="fas {% if hotel.has_wifi %}fa-check text-success{% else %}fa-times text-danger{% endif %} me-2"></i>
+                    <span {% if not hotel.has_wifi %}class="text-muted"{% endif %}>Wi-Fi</span>
+                </div>
+                <div class="col-6 col-md-4">
+                    <i class="fas {% if hotel.has_parking %}fa-check text-success{% else %}fa-times text-danger{% endif %} me-2"></i>
+                    <span {% if not hotel.has_parking %}class="text-muted"{% endif %}>Parking</span>
+                </div>
+                <div class="col-6 col-md-4">
+                    <i class="fas {% if hotel.has_pool %}fa-check text-success{% else %}fa-times text-danger{% endif %} me-2"></i>
+                    <span {% if not hotel.has_pool %}class="text-muted"{% endif %}>Pool</span>
+                </div>
+                <div class="col-6 col-md-4">
+                    <i class="fas {% if hotel.has_gym %}fa-check text-success{% else %}fa-times text-danger{% endif %} me-2"></i>
+                    <span {% if not hotel.has_gym %}class="text-muted"{% endif %}>Gym</span>
+                </div>
+                <div class="col-6 col-md-4">
+                    <i class="fas {% if hotel.has_restaurant %}fa-check text-success{% else %}fa-times text-danger{% endif %} me-2"></i>
+                    <span {% if not hotel.has_restaurant %}class="text-muted"{% endif %}>Restaurant</span>
+                </div>
+                <div class="col-6 col-md-4">
+                    <i class="fas {% if hotel.has_spa %}fa-check text-success{% else %}fa-times text-danger{% endif %} me-2"></i>
+                    <span {% if not hotel.has_spa %}class="text-muted"{% endif %}>Spa</span>
+                </div>
+                <div class="col-6 col-md-4">
+                    <i class="fas {% if hotel.has_ac %}fa-check text-success{% else %}fa-times text-danger{% endif %} me-2"></i>
+                    <span {% if not hotel.has_ac %}class="text-muted"{% endif %}>AC</span>
+                </div>
+            </div>
+
+            {% if hotel.property_rules %}
+            <h5 class="mt-4 mb-3">Property Rules</h5>
+            <div class="alert alert-warning">
+                <p class="mb-0" style="white-space:pre-line">{{ hotel.property_rules }}</p>
+            </div>
+            {% endif %}
 
             <h4 class="mt-4">Available Room Types</h4>
             {% for room in hotel.room_types.all %}
@@ -158,24 +201,49 @@ document.addEventListener('DOMContentLoaded', () => {
     const baseEl = document.getElementById('basePrice');
     const gstEl = document.getElementById('gstAmount');
     const totalEl = document.getElementById('totalPrice');
-    const GST = {{ hotel.gst_percentage|default:0 }};
+    const GST_PCT = {{ hotel.gst_percentage|default:18 }};
 
     function calc() {
+        // Prevent calculation if required fields are missing
         if (!roomSelect.value || !checkin.value || !checkout.value) {
-            baseEl.textContent = gstEl.textContent = totalEl.textContent = 0;
+            baseEl.textContent = '0';
+            gstEl.textContent = '0';
+            totalEl.textContent = '0';
             return;
         }
-        const price = parseFloat(roomSelect.selectedOptions[0].dataset.price);
-        const nights = (new Date(checkout) - new Date(checkin)) / 86400000;
-        const base = price * nights * parseInt(numRooms.value || 1);
-        const gst = base * GST / 100;
+
+        // Parse values
+        const price = parseFloat(roomSelect.selectedOptions[0]?.dataset.price || '0');
+        const checkinDate = new Date(checkin.value);
+        const checkoutDate = new Date(checkout.value);
+        const nights = Math.floor((checkoutDate - checkinDate) / (1000 * 60 * 60 * 24));
+        const rooms = parseInt(numRooms.value || '1', 10);
+
+        // Validation: checkout must be after checkin
+        if (nights <= 0) {
+            baseEl.textContent = '0';
+            gstEl.textContent = '0';
+            totalEl.textContent = '0';
+            return;
+        }
+
+        // Calculate base, GST, and total
+        const base = price * nights * rooms;
+        const gst = base * (GST_PCT / 100);
+        const total = base + gst;
+
+        // Update display with proper formatting
         baseEl.textContent = base.toFixed(0);
         gstEl.textContent = gst.toFixed(0);
-        totalEl.textContent = (base + gst).toFixed(0);
+        totalEl.textContent = total.toFixed(0);
     }
 
-    [roomSelect, numRooms, checkin, checkout].forEach(e => e.addEventListener('change', calc));
+    // Attach listeners
+    [roomSelect, numRooms, checkin, checkout].forEach(el => {
+        if (el) el.addEventListener('change', calc);
+    });
 
+    // Quick select room buttons
     document.querySelectorAll('.select-room').forEach(btn => {
         btn.onclick = () => {
             roomSelect.value = btn.dataset.id;
