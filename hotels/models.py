@@ -144,7 +144,12 @@ class HotelImage(models.Model):
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='hotels/gallery/')
     caption = models.CharField(max_length=200, blank=True)
+    alt_text = models.CharField(max_length=200, blank=True, help_text="Alternative text for accessibility")
+    display_order = models.IntegerField(default=0, help_text="Display order (lower numbers first)")
     is_primary = models.BooleanField(default=False)
+    
+    class Meta:
+        ordering = ['display_order', 'id']
     
     def __str__(self):
         return f"{self.hotel.name} - Image"

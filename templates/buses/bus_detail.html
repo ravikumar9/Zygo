@@ -144,26 +144,36 @@
         border-color: #2e7d32;
     }
 
+    /* Ladies seat - AVAILABLE but with visual indicator (NOT reserved/blocked) */
     .seat.ladies {
-        background: #fce4ec;
-        border-color: #e91e63;
-        color: #880e4f;
+        background: #e8f5e9;  /* Same green as available - NOT pink! */
+        border-color: #4caf50;
+        color: #2e7d32;
         position: relative;
     }
 
+    /* Lady icon indicator - shows this is a ladies-designated seat */
     .seat.ladies::before {
         content: '♀';
         position: absolute;
-        font-size: 1.2rem;
-        top: -8px;
-        right: -8px;
-        color: #e91e63;
+        font-size: 1rem;
+        top: -6px;
+        right: -6px;
+        color: #e91e63;  /* Pink icon on green background */
         font-weight: bold;
+        background: white;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
     }
 
     .seat.ladies:hover {
-        background: #f8bbd0;
-        border-color: #880e4f;
+        background: #c8e6c9;  /* Same hover as available */
+        border-color: #2e7d32;
     }
 
     .seat.booked {

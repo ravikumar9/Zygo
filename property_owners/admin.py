@@ -79,7 +79,7 @@ class PropertyTypeAdmin(admin.ModelAdmin):
     search_fields = ('name',)
     readonly_fields = ('name',)
     
-    def has_delete_permission(self, request):
+    def has_delete_permission(self, request, obj=None):
         return False
 
 
