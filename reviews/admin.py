@@ -43,6 +43,20 @@ class ReviewAdminMixin:
             'classes': ('collapse',)
         }),
     )
+
+    def save_model(self, request, obj, form, change):
+        """Enforce review eligibility rules before saving."""
+        from django.core.exceptions import ValidationError
+        
+        # ENFORCE OTP VERIFICATION
+        if not obj.user.email_verified_at or not obj.user.phone_verified_at:
+            raise ValidationError(
+                f"User {obj.user.email} has not completed OTP verification. "
+                "Email and mobile verification required before reviewing."
+            )
+        
+        # Call parent save
+        super().save_model(request, obj, form, change)
     
     def user_email(self, obj):
         """Display user email with verified badge."""

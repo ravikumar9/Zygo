@@ -153,7 +153,11 @@ SERVE_MEDIA_FILES = config("SERVE_MEDIA_FILES", default=True, cast=bool)
 # --------------------------------------------------
 # Email / Notifications (env-driven; safe defaults)
 # --------------------------------------------------
-EMAIL_SMTP_ENABLED = config("EMAIL_SMTP_ENABLED", default=False, cast=bool)
+# EMAIL CONFIGURATION
+# --------------------------------------------------
+# CRITICAL: Must use SMTP backend for password reset emails to work
+# Console backend is for development debugging ONLY
+EMAIL_SMTP_ENABLED = config("EMAIL_SMTP_ENABLED", default=True, cast=bool)
 
 if EMAIL_SMTP_ENABLED:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"

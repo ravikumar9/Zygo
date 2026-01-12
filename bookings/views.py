@@ -37,8 +37,15 @@ def booking_confirmation(request, booking_id):
     """Show booking confirmation and proceed to payment.
 
     Accepts only UUID booking_id and ensures the booking belongs to the user.
+    CRITICAL: User must have both email_verified_at and phone_verified_at
     POST from this page redirects to the payment page.
     """
+    # ENFORCE OTP VERIFICATION
+    if not request.user.email_verified_at or not request.user.phone_verified_at:
+        from django.contrib import messages
+        messages.error(request, 'Please verify your email and mobile number before booking. Check your inbox for OTP.')
+        return redirect('users:verify-registration-otp')
+    
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
 
     if request.method == 'POST':
@@ -53,9 +60,16 @@ def booking_confirmation(request, booking_id):
 def payment_page(request, booking_id):
     """Render the payment page with a Razorpay order (test-friendly).
 
+    CRITICAL: User must have both email_verified_at and phone_verified_at
     If Razorpay credentials are not configured, fall back to a dummy order id so
     the template renders without breaking local flows.
     """
+    # ENFORCE OTP VERIFICATION
+    if not request.user.email_verified_at or not request.user.phone_verified_at:
+        from django.contrib import messages
+        messages.error(request, 'Please verify your email and mobile number before booking. Check your inbox for OTP.')
+        return redirect('users:verify-registration-otp')
+    
     from payments.models import Wallet
     from decimal import Decimal
     

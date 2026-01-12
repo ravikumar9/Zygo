@@ -63,7 +63,11 @@ class Review(TimeStampedModel):
     @property
     def is_verified_booking(self):
         """Check if review is linked to a completed, paid booking."""
-        return bool(self.booking and self.booking.status == 'completed' and self.booking.paid_amount > 0)
+        # Handle FK lookup - booking can be None if legacy data
+        try:
+            return bool(self.booking and self.booking.status == 'completed' and self.booking.paid_amount > 0)
+        except:
+            return False
 
     def clean(self):
         """Enforce: reviews only for completed, paid bookings."""
