@@ -1,6 +1,8 @@
 from django.urls import path
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import views as auth_views
+from django.conf import settings
+from .password_reset_forms import SafePasswordResetForm
 from . import views
 from . import otp_views
 
@@ -19,7 +21,9 @@ urlpatterns = [
         template_name='users/password_reset.html',
         email_template_name='users/password_reset_email.html',
         subject_template_name='users/password_reset_subject.txt',
-        success_url='/users/password-reset/done/'
+        success_url='/users/password-reset/done/',
+        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+        form_class=SafePasswordResetForm,  # Use safe form with error handling
     ), name='password_reset'),
     path('password-reset/done/', auth_views.PasswordResetDoneView.as_view(
         template_name='users/password_reset_done.html'

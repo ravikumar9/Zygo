@@ -14,6 +14,7 @@ from notifications.services import NotificationService
 from .models_otp import UserOTP
 
 logger = logging.getLogger(__name__)
+email_logger = logging.getLogger('django.core.mail')  # Django's built-in email logger
 
 
 class OTPService:
@@ -93,15 +94,24 @@ class OTPService:
             'message': f'Your verification code is: {otp_record.otp_code}',
         }
         
-        NotificationService.send_email(
-            to=target_email,
-            subject='GoExplorer - Email Verification Code',
-            template='notifications/email/otp_email.html',
-            context=context,
-            user=user,
-        )
-        
-        logger.info(f"Email OTP sent to {target_email} for user {user.id}")
+        try:
+            NotificationService.send_email(
+                to=target_email,
+                subject='GoExplorer - Email Verification Code',
+                template='notifications/email/otp_email.html',
+                context=context,
+                user=user,
+            )
+            email_logger.info(f"Email OTP sent successfully to {target_email} (user_id={user.id})")
+            logger.info(f"Email OTP sent to {target_email} for user {user.id}")
+        except Exception as e:
+            email_logger.error(f"Failed to send email OTP to {target_email} (user_id={user.id}): {e}", exc_info=True)
+            logger.error(f"Failed to send email OTP to {target_email}: {e}", exc_info=True)
+            # Don't fail silently - let the caller know something went wrong
+            return {
+                'success': False,
+                'message': 'Failed to send OTP. Please try again.'
+            }
         
         return {
             'success': True,
@@ -151,14 +161,21 @@ class OTPService:
         # Send via SMS using NotificationService (MSG91)
         template_id = getattr(settings, 'MSG91_OTP_TEMPLATE_ID', settings.MSG91_DEFAULT_TEMPLATE_ID)
         
-        NotificationService.send_sms(
-            phone=target_phone,
-            template_id=template_id,
-            variables={'otp': otp_record.otp_code},
-            user=user,
-        )
-        
-        logger.info(f"Mobile OTP sent to {target_phone} for user {user.id}")
+        try:
+            NotificationService.send_sms(
+                phone=target_phone,
+                template_id=template_id,
+                variables={'otp': otp_record.otp_code},
+                user=user,
+            )
+            logger.info(f"Mobile OTP sent to {target_phone} for user {user.id}")
+        except Exception as e:
+            logger.error(f"Failed to send mobile OTP to {target_phone}: {e}", exc_info=True)
+            # Don't fail silently - let the caller know something went wrong
+            return {
+                'success': False,
+                'message': 'Failed to send OTP. Please try again.'
+            }
         
         return {
             'success': True,

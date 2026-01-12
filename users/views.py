@@ -15,6 +15,9 @@ from rest_framework.views import APIView
 from .models import User, UserProfile
 from .serializers import UserSerializer
 from django import forms
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class UserRegistrationForm(forms.ModelForm):
@@ -112,6 +115,11 @@ def verify_registration_otp(request):
     User must verify BOTH email and mobile OTP before account activation
     """
     pending_user_id = request.session.get('pending_user_id')
+
+    # If the current user is already fully verified, avoid looping on OTP page
+    if request.user.is_authenticated and request.user.email_verified_at and request.user.phone_verified_at:
+        messages.info(request, 'Your account is already verified.')
+        return redirect('core:home')
     
     if not pending_user_id:
         if request.method == 'POST':
@@ -132,6 +140,23 @@ def verify_registration_otp(request):
             }, status=400)
         messages.error(request, 'User not found. Please register again.')
         return redirect('users:register')
+
+    # Prevent sending users who are already verified back into OTP flows
+    if user.email_verified_at and user.phone_verified_at:
+        request.session.pop('pending_user_id', None)
+        request.session.pop('pending_email', None)
+        request.session.pop('pending_phone', None)
+        request.session.pop('email_verified', None)
+        request.session.pop('mobile_verified', None)
+
+        if request.method == 'POST':
+            return JsonResponse({
+                'success': True,
+                'message': 'Already verified. Please log in.'
+            })
+
+        messages.info(request, 'Your account is already verified. Please log in.')
+        return redirect('users:login')
     
     from .otp_service import OTPService
     

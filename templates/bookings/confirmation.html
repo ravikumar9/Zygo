@@ -36,7 +36,10 @@
                 <div class="card-body">
                     <h5 class="card-title">{{ booking.get_booking_type_display }} Booking</h5>
                     <p class="mb-2"><strong>Booking ID:</strong> <code>{{ booking.booking_id }}</code></p>
-                    <p class="mb-2"><strong>Status:</strong> <span class="badge bg-warning">{{ booking.get_status_display }}</span></p>
+                    <p class="mb-2"><strong>Status:</strong> <span id="booking-status" class="badge {% if booking.status == 'expired' %}bg-danger{% else %}bg-warning{% endif %}">{{ booking.get_status_display }}</span></p>
+                    {% if booking.reservation_seconds_left %}
+                    <p class="mb-2"><strong>Hold Expires In:</strong> <span id="expiry-countdown" data-seconds="{{ booking.reservation_seconds_left }}"></span></p>
+                    {% endif %}
                     <p class="mb-2"><strong>Guest Name:</strong> {{ booking.customer_name|default:"Not specified" }}</p>
                     <p class="mb-2"><strong>Email:</strong> {{ booking.customer_email|default:"Not specified" }}</p>
                     <p class="mb-2"><strong>Phone:</strong> {{ booking.customer_phone|default:"Not specified" }}</p>
@@ -82,12 +85,12 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Total Amount</h5>
-                    <div class="alert alert-info">
+                    <div class="alert alert-info" id="expiry-alert">
                         <p class="mb-0"><strong>₹{{ booking.total_amount|floatformat:"0" }}</strong></p>
                     </div>
                     <form method="post" class="text-center">
                         {% csrf_token %}
-                        <button type="submit" class="btn btn-primary btn-lg w-100">
+                        <button type="submit" class="btn btn-primary btn-lg w-100" id="proceed-payment-btn" {% if booking.status == 'expired' %}disabled{% endif %}>
                             <i class="fas fa-credit-card"></i> Proceed to Payment
                         </button>
                     </form>
@@ -97,4 +100,46 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const countdownEl = document.getElementById('expiry-countdown');
+    if (!countdownEl) return;
+
+    let remaining = parseInt(countdownEl.dataset.seconds || '0', 10);
+    const proceedBtn = document.getElementById('proceed-payment-btn');
+    const statusBadge = document.getElementById('booking-status');
+    const alertBox = document.getElementById('expiry-alert');
+
+    function renderCountdown() {
+        if (remaining <= 0) {
+            countdownEl.textContent = 'Expired';
+            if (statusBadge) {
+                statusBadge.className = 'badge bg-danger';
+                statusBadge.textContent = 'Expired';
+            }
+            if (proceedBtn) {
+                proceedBtn.disabled = true;
+                proceedBtn.textContent = 'Reservation expired';
+            }
+            if (alertBox) {
+                alertBox.classList.remove('alert-info');
+                alertBox.classList.add('alert-danger');
+                alertBox.innerHTML = '<p class="mb-0"><strong>Reservation expired. Please start a new booking.</strong></p>';
+            }
+            clearInterval(timerId);
+            return;
+        }
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+        countdownEl.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        remaining -= 1;
+    }
+
+    const timerId = setInterval(renderCountdown, 1000);
+    renderCountdown();
+})();
+</script>
 {% endblock %}

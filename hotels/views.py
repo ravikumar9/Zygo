@@ -436,6 +436,14 @@ def book_hotel(request, pk):
         if not request.user.is_authenticated:
             return redirect(f'/login/?next={request.path}')
 
+        if not request.user.email_verified_at or not request.user.phone_verified_at:
+            from django.contrib import messages
+            messages.error(request, 'Please verify your email and mobile number before booking. OTP verification is required to hold a room.')
+            request.session['pending_user_id'] = request.user.id
+            request.session['pending_email'] = request.user.email
+            request.session['pending_phone'] = getattr(request.user, 'phone', '')
+            return redirect('users:verify-registration-otp')
+
         room_type_id = request.POST.get('room_type')
         checkin_date = request.POST.get('checkin_date')
         checkout_date = request.POST.get('checkout_date')
@@ -459,7 +467,7 @@ def book_hotel(request, pk):
         except RoomType.DoesNotExist:
             return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': 'Room type not found'})
 
-        hold_minutes = 15
+        hold_minutes = 10
         lock = None
         inventory_channel = hotel.inventory_source
         booking_source = 'external' if hotel.inventory_source == 'external_cm' else 'internal'
@@ -501,11 +509,14 @@ def book_hotel(request, pk):
         total = room_type.base_price * nights * num_rooms
 
         try:
+            reserved_at = timezone.now()
             booking = Booking.objects.create(
                 user=request.user,
                 booking_type='hotel',
                 total_amount=total,
-                status='payment_pending',
+                status='reserved',
+                reserved_at=reserved_at,
+                expires_at=reserved_at + timedelta(minutes=hold_minutes),
                 customer_name=guest_name or request.user.get_full_name() or request.user.username,
                 customer_email=guest_email or request.user.email,
                 customer_phone=guest_phone or getattr(request.user, 'phone', ''),

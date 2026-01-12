@@ -4,6 +4,9 @@
 {% block title %}Verify Email & Mobile - Register{% endblock %}
 
 {% block content %}
+<!-- CSRF Token for JavaScript access (required for fetch) -->
+<meta name="csrf-token" content="{{ csrf_token }}">
+
 <style>
     .otp-verification-container {
         max-width: 500px;
@@ -238,6 +241,7 @@
 </style>
 
 <div class="otp-verification-container">
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
     <div class="header">
         <h1>🔐 Verify Your Account</h1>
         <p>Complete registration by verifying your email and mobile number</p>
@@ -327,10 +331,42 @@
 </div>
 
 <script>
-    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value || '{{ csrf_token }}';
+    // CSRF Token retrieval (multiple fallbacks for robustness)
+    function getCookie(name) {
+        const match = document.cookie.match(new RegExp('(^|; )' + name + '=([^;]+)'));
+        return match ? decodeURIComponent(match[2]) : null;
+    }
+
+    function getCsrfToken() {
+        // Priority 1: meta tag (most reliable)
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag && metaTag.content) {
+            return metaTag.content;
+        }
+        // Priority 2: hidden input in form
+        const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (tokenInput && tokenInput.value) {
+            return tokenInput.value;
+        }
+        // Priority 3: Django CSRF cookie
+        const cookieToken = getCookie('csrftoken');
+        if (cookieToken) {
+            return cookieToken;
+        }
+        // Fallback (shouldn't happen if Django is configured correctly)
+        console.warn('CSRF token not found; fetch requests may fail');
+        return '';
+    }
+
+    const csrftoken = getCsrfToken();
 
     async function sendOTP(endpoint, buttonId) {
         const btn = document.getElementById(buttonId);
+        if (!btn) {
+            console.error(`Button with ID '${buttonId}' not found`);
+            showError('UI error: button not found', 'complete');
+            return;
+        }
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span>Sending...';
 
@@ -362,6 +398,11 @@
 
     async function verifyOTP(inputId, action, type) {
         const otpInput = document.getElementById(inputId);
+        if (!otpInput) {
+            console.error(`OTP input with ID '${inputId}' not found`);
+            showError('UI error: OTP input missing', type);
+            return;
+        }
         const otpCode = otpInput.value.trim();
 
         if (!otpCode || otpCode.length !== 6) {
@@ -503,38 +544,53 @@
     }
 
     function showError(message, type) {
-        const errorDiv = document.getElementById(`${type}-error`);
-        if (errorDiv) {
-            errorDiv.textContent = '❌ ' + message;
-            errorDiv.classList.add('show');
-            setTimeout(() => {
-                errorDiv.classList.remove('show');
-            }, 5000);
+        try {
+            const errorDiv = document.getElementById(`${type}-error`);
+            if (errorDiv) {
+                errorDiv.textContent = '❌ ' + message;
+                errorDiv.classList.add('show');
+                setTimeout(() => {
+                    errorDiv.classList.remove('show');
+                }, 5000);
+            } else {
+                // Fallback: log if div doesn't exist
+                console.error(`Error for ${type}: ${message}`);
+            }
+        } catch (e) {
+            console.error('Error in showError:', e);
         }
     }
 
     function showSuccess(message, type) {
-        const successDiv = document.getElementById(`${type}-success`);
-        if (successDiv) {
-            successDiv.textContent = message;
-            successDiv.classList.add('show');
+        try {
+            const successDiv = document.getElementById(`${type}-success`);
+            if (successDiv) {
+                successDiv.textContent = message;
+                successDiv.classList.add('show');
             setTimeout(() => {
                 successDiv.classList.remove('show');
             }, 5000);
         }
     }
 
-    // Auto-focus on page load
+    // Auto-focus and auto-send OTP on page load
     window.addEventListener('load', function() {
-        {% if not email_verified %}
-        document.getElementById('email-otp-input').focus();
-        // Auto-send email OTP
-        sendOTP('{% url "users:verify-registration-otp" %}?action=send_email_otp', 'resend-email-btn');
-        {% elif not mobile_verified %}
-        document.getElementById('mobile-otp-input').focus();
-        // Auto-send mobile OTP
-        sendOTP('{% url "users:verify-registration-otp" %}?action=send_mobile_otp', 'resend-mobile-btn');
-        {% endif %}
+        try {
+            {% if not email_verified %}
+            const emailInput = document.getElementById('email-otp-input');
+            if (emailInput) emailInput.focus();
+            // Auto-send email OTP
+            sendOTP('{% url "users:verify-registration-otp" %}?action=send_email_otp', 'resend-email-btn');
+            {% elif not mobile_verified %}
+            const mobileInput = document.getElementById('mobile-otp-input');
+            if (mobileInput) mobileInput.focus();
+            // Auto-send mobile OTP
+            sendOTP('{% url "users:verify-registration-otp" %}?action=send_mobile_otp', 'resend-mobile-btn');
+            {% endif %}
+        } catch (e) {
+            console.error('Error during OTP initialization:', e);
+            showError('Failed to initialize OTP page. Please refresh.', 'complete');
+        }
     });
 </script>
 {% endblock %}

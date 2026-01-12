@@ -57,6 +57,20 @@
                  src="{{ hotel.display_image_url }}"
                  alt="{{ hotel.name }}">
 
+            {% if hotel.images.all %}
+            <div class="row g-3 mb-4">
+                {% for image in hotel.images.all %}
+                <div class="col-6 col-md-4">
+                    {% if image.image %}
+                    <img src="{{ image.image.url }}" alt="{{ image.alt_text|default:hotel.name }}" class="img-fluid rounded shadow-sm" onerror="this.src='{% static 'images/hotel_placeholder.svg' %}'">
+                    {% else %}
+                    <img src="{% static 'images/hotel_placeholder.svg' %}" alt="{{ hotel.name }}" class="img-fluid rounded shadow-sm">
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             <h3>About This Hotel</h3>
             <div class="mb-2">
                 <span class="badge bg-primary me-2"><i class="fas fa-building me-1"></i> {{ hotel.get_property_type_display }}</span>
@@ -106,13 +120,20 @@
             <h4 class="mt-4">Available Room Types</h4>
             {% for room in hotel.room_types.all %}
             <div class="room-card">
-                <div class="d-flex justify-content-between">
-                    <div>
-                        <h5>{{ room.name }}</h5>
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-3">
+                        {% if room.image %}
+                        <img src="{{ room.image.url }}" alt="{{ room.name }}" class="img-fluid rounded" onerror="this.src='{% static 'images/hotel_placeholder.svg' %}'">
+                        {% else %}
+                        <img src="{% static 'images/hotel_placeholder.svg' %}" alt="{{ room.name }}" class="img-fluid rounded">
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <h5 class="mb-1">{{ room.name }}</h5>
                         <p class="mb-1">Occupancy: {{ room.max_occupancy }}</p>
                         <p class="mb-0">Beds: {{ room.number_of_beds }}</p>
                     </div>
-                    <div class="text-end">
+                    <div class="col-md-3 text-end">
                         <div class="room-price">₹{{ room.base_price }}/night</div>
                         <button class="btn btn-primary mt-2 select-room"
                                 data-id="{{ room.id }}"
@@ -128,6 +149,12 @@
         <div class="col-lg-4">
             <div class="booking-widget">
                 <h4>Book This Hotel</h4>
+
+                {% if user.is_authenticated and (not user.email_verified_at or not user.phone_verified_at) %}
+                <div class="alert alert-warning">
+                    <strong>Action required:</strong> Verify both email and mobile to place a booking. <a href="{% url 'users:verify-registration-otp' %}">Verify now</a>.
+                </div>
+                {% endif %}
 
                 <form method="post" action="{% url 'hotels:book_hotel' hotel.id %}">
                     {% csrf_token %}
@@ -176,9 +203,15 @@
                     </div>
 
                     {% if user.is_authenticated %}
-                    <button class="btn btn-success w-100">
-                        Proceed to Payment
-                    </button>
+                        {% if user.email_verified_at and user.phone_verified_at %}
+                        <button class="btn btn-success w-100">
+                            Proceed to Payment
+                        </button>
+                        {% else %}
+                        <a href="{% url 'users:verify-registration-otp' %}" class="btn btn-outline-secondary w-100">
+                            Verify OTP to Book
+                        </a>
+                        {% endif %}
                     {% else %}
                     <a href="{% url 'users:login' %}" class="btn btn-primary w-100">
                         Login to Book

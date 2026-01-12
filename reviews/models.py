@@ -11,6 +11,7 @@ Industry-standard review system:
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from core.models import TimeStampedModel
 
 
@@ -71,11 +72,17 @@ class Review(TimeStampedModel):
 
     def clean(self):
         """Enforce: reviews only for completed, paid bookings."""
-        from django.core.exceptions import ValidationError
-        if self.booking and (self.booking.status != 'completed' or self.booking.paid_amount <= 0):
+        if not self.booking:
+            raise ValidationError("A review must be tied to a completed booking.")
+        if self.booking.status != 'completed' or self.booking.paid_amount <= 0:
             raise ValidationError(
                 f"Review cannot be created. Booking must be COMPLETED with payment. Current status: {self.booking.status}"
             )
+
+    def save(self, *args, **kwargs):
+        """Run validation before persisting to enforce eligibility rules."""
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class HotelReview(Review):
@@ -98,6 +105,16 @@ class HotelReview(Review):
     def __str__(self):
         return f"{self.hotel.name} - {self.rating}⭐ by {self.user.email}"
 
+    def clean(self):
+        super().clean()
+        if self.booking:
+            if self.booking.user_id != self.user_id:
+                raise ValidationError("Review user must match the booking user.")
+            if self.booking.booking_type != 'hotel' or not getattr(self.booking, 'hotel_details', None):
+                raise ValidationError("Hotel reviews require a completed hotel booking.")
+            if self.booking.hotel_details.room_type.hotel_id != self.hotel_id:
+                raise ValidationError("Review must reference the same hotel as the booking.")
+
 
 class BusReview(Review):
     """Bus reviews with moderation."""
@@ -119,6 +136,16 @@ class BusReview(Review):
     def __str__(self):
         return f"{self.bus.bus_name} - {self.rating}⭐ by {self.user.email}"
 
+    def clean(self):
+        super().clean()
+        if self.booking:
+            if self.booking.user_id != self.user_id:
+                raise ValidationError("Review user must match the booking user.")
+            if self.booking.booking_type != 'bus' or not getattr(self.booking, 'bus_details', None):
+                raise ValidationError("Bus reviews require a completed bus booking.")
+            if self.booking.bus_details.bus_schedule.route.bus_id != self.bus_id:
+                raise ValidationError("Review must reference the same bus as the booking.")
+
 
 class PackageReview(Review):
     """Package reviews with moderation."""
@@ -139,4 +166,14 @@ class PackageReview(Review):
     
     def __str__(self):
         return f"{self.package.name} - {self.rating}⭐ by {self.user.email}"
+
+    def clean(self):
+        super().clean()
+        if self.booking:
+            if self.booking.user_id != self.user_id:
+                raise ValidationError("Review user must match the booking user.")
+            if self.booking.booking_type != 'package' or not getattr(self.booking, 'package_details', None):
+                raise ValidationError("Package reviews require a completed package booking.")
+            if self.booking.package_details.package_departure.package_id != self.package_id:
+                raise ValidationError("Review must reference the same package as the booking.")
 

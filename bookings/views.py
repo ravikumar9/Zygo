@@ -44,9 +44,20 @@ def booking_confirmation(request, booking_id):
     if not request.user.email_verified_at or not request.user.phone_verified_at:
         from django.contrib import messages
         messages.error(request, 'Please verify your email and mobile number before booking. Check your inbox for OTP.')
+        request.session['pending_user_id'] = request.user.id
+        request.session['pending_email'] = request.user.email
+        request.session['pending_phone'] = getattr(request.user, 'phone', '')
         return redirect('users:verify-registration-otp')
     
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
+
+    if booking.check_reservation_timeout():
+        from django.contrib import messages
+        messages.error(request, 'Reservation hold expired. Please start a new booking.')
+        target_hotel = getattr(getattr(booking, 'hotel_details', None), 'room_type', None)
+        if target_hotel and target_hotel.hotel_id:
+            return redirect('hotels:hotel_detail', pk=target_hotel.hotel_id)
+        return redirect('hotels:hotel_list')
 
     if request.method == 'POST':
         return redirect(reverse('bookings:booking-payment', kwargs={'booking_id': booking.booking_id}))
@@ -68,12 +79,23 @@ def payment_page(request, booking_id):
     if not request.user.email_verified_at or not request.user.phone_verified_at:
         from django.contrib import messages
         messages.error(request, 'Please verify your email and mobile number before booking. Check your inbox for OTP.')
+        request.session['pending_user_id'] = request.user.id
+        request.session['pending_email'] = request.user.email
+        request.session['pending_phone'] = getattr(request.user, 'phone', '')
         return redirect('users:verify-registration-otp')
     
     from payments.models import Wallet
     from decimal import Decimal
     
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
+
+    if booking.check_reservation_timeout():
+        from django.contrib import messages
+        messages.error(request, 'Reservation hold expired. Please start a new booking.')
+        target_hotel = getattr(getattr(booking, 'hotel_details', None), 'room_type', None)
+        if target_hotel and target_hotel.hotel_id:
+            return redirect('hotels:hotel_detail', pk=target_hotel.hotel_id)
+        return redirect('hotels:hotel_list')
 
     razorpay_key = settings.RAZORPAY_KEY_ID or 'rzp_test_dummy_key'
     order_id = f"order_{uuid.uuid4().hex[:20]}"

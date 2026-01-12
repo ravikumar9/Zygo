@@ -151,34 +151,36 @@ MEDIA_ROOT = BASE_DIR / "media"
 SERVE_MEDIA_FILES = config("SERVE_MEDIA_FILES", default=True, cast=bool)
 
 # --------------------------------------------------
-# Email / Notifications (env-driven; safe defaults)
+# Email / Notifications (CRITICAL - No Fallbacks)
 # --------------------------------------------------
-# EMAIL CONFIGURATION
+# ENFORCED: SendGrid SMTP only (no Gmail, no console)
+# Password reset, OTP, and all transactional emails MUST be delivered
+# Any misconfiguration will fail loudly at startup
 # --------------------------------------------------
-# CRITICAL: Must use SMTP backend for password reset emails to work
-# Console backend is for development debugging ONLY
-EMAIL_SMTP_ENABLED = config("EMAIL_SMTP_ENABLED", default=True, cast=bool)
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
-if EMAIL_SMTP_ENABLED:
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
-    EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
-    EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="alerts.goexplorer@gmail.com")
-    EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-    EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
-else:
-    EMAIL_BACKEND = config(
-        "EMAIL_BACKEND",
-        default="django.core.mail.backends.console.EmailBackend",
+# SendGrid SMTP (production email service)
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.sendgrid.net")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="apikey")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+
+# Validate that SendGrid API key is configured (fail fast in production)
+if not DEBUG and not config("EMAIL_HOST_PASSWORD", default=""):
+    import warnings
+    warnings.warn(
+        "CRITICAL: SendGrid API key (EMAIL_HOST_PASSWORD) is not configured. "
+        "Email sending will fail. Set SENDGRID_API_KEY environment variable.",
+        RuntimeWarning
     )
 
 DEFAULT_FROM_EMAIL = config(
-    "DEFAULT_FROM_EMAIL", default="alerts.goexplorer@gmail.com"
+    "DEFAULT_FROM_EMAIL", default="noreply@goexplorer.in"
 )
 
-# Notification safety toggles
-NOTIFICATIONS_EMAIL_DRY_RUN = config("NOTIFICATIONS_EMAIL_DRY_RUN", default=DEBUG, cast=bool)
-NOTIFICATIONS_SMS_DRY_RUN = config("NOTIFICATIONS_SMS_DRY_RUN", default=DEBUG, cast=bool)
+# Email delivery logging (always enabled for troubleshooting)
+EMAIL_LOG_LEVEL = "INFO"  # Log all email send attempts and results
 
 # MSG91 (templated SMS)
 MSG91_AUTHKEY = config("MSG91_AUTHKEY", default="")
@@ -196,6 +198,68 @@ RAZORPAY_KEY_SECRET = config("RAZORPAY_KEY_SECRET", default="")
 
 STRIPE_PUBLIC_KEY = config("STRIPE_PUBLIC_KEY", default="")
 STRIPE_SECRET_KEY = config("STRIPE_SECRET_KEY", default="")
+
+# --------------------------------------------------
+# Logging (email and authentication debugging)
+# --------------------------------------------------
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {asctime} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR / "logs" / "django.log",
+            "formatter": "verbose",
+        },
+        "email_file": {
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR / "logs" / "email.log",
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file"],
+            "level": config("DJANGO_LOG_LEVEL", default="INFO"),
+            "propagate": False,
+        },
+        "django.core.mail": {
+            "handlers": ["console", "email_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "users": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "notifications": {
+            "handlers": ["console", "email_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
+# Ensure logs directory exists
+import os as _os
+_log_dir = BASE_DIR / "logs"
+if not _log_dir.exists():
+    _log_dir.mkdir(parents=True, exist_ok=True)
 
 # --------------------------------------------------
 # CORS (DEV)

@@ -7,6 +7,7 @@ from buses.models import BusSchedule, SeatLayout, BusRoute
 from packages.models import PackageDeparture
 import uuid
 import json
+from datetime import timedelta
 
 
 class Booking(TimeStampedModel):
@@ -123,18 +124,60 @@ class Booking(TimeStampedModel):
         self.save(update_fields=['status', 'completed_at'])
 
     def check_reservation_timeout(self):
-        """Check if 10-minute reservation timeout has expired. If so, mark as FAILED."""
-        if self.status != 'reserved':
+        """Check if 10-minute reservation timeout has expired. Marks booking expired and releases locks."""
+        if self.status not in ['reserved', 'payment_pending']:
             return False
-        if not self.reserved_at:
+        deadline = self.reservation_deadline
+        if not deadline:
             return False
-        now = timezone.now()
-        timeout_minutes = 10
-        if (now - self.reserved_at).total_seconds() > timeout_minutes * 60:
-            self.status = 'failed'
-            self.save(update_fields=['status'])
+        if timezone.now() >= deadline:
+            self.status = 'expired'
+            self.expires_at = deadline
+            self.save(update_fields=['status', 'expires_at'])
+            self.release_inventory_lock()
             return True
         return False
+
+    @property
+    def reservation_deadline(self):
+        """Return when the reservation expires."""
+        if self.expires_at:
+            return self.expires_at
+        if self.reserved_at:
+            return self.reserved_at + timedelta(minutes=10)
+        return None
+
+    @property
+    def reservation_seconds_left(self):
+        """Seconds remaining before the reservation expires (0 if expired)."""
+        deadline = self.reservation_deadline
+        if not deadline:
+            return None
+        remaining = int((deadline - timezone.now()).total_seconds())
+        return remaining if remaining > 0 else 0
+
+    def release_inventory_lock(self):
+        """Release any held inventory lock when a reservation expires."""
+        lock = getattr(self, 'inventory_lock', None)
+        if not lock:
+            return
+
+        try:
+            if lock.source == 'internal_cm':
+                from hotels.channel_manager_service import InternalInventoryService
+                InternalInventoryService(lock.hotel).release_lock(lock)
+            elif lock.source == 'external_cm':
+                from hotels.channel_manager_service import ExternalChannelManagerClient, InventoryLockError
+                try:
+                    ExternalChannelManagerClient(provider=lock.provider).release_lock(lock.lock_id or lock.reference_id)
+                except InventoryLockError:
+                    # Ignore failures; status will still be marked expired
+                    pass
+            lock.status = 'expired'
+            lock.save(update_fields=['status', 'updated_at'])
+        except Exception:
+            # Defensive: never break booking save flows if lock release fails
+            pass
 
 
 class HotelBooking(TimeStampedModel):
