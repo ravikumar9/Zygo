@@ -44,8 +44,8 @@ class Review(TimeStampedModel):
     # Soft delete
     is_hidden = models.BooleanField(default=False, help_text="Hide without deleting")
     
-    # Booking verification (optional but recommended)
-    booking_id = models.CharField(max_length=100, blank=True, help_text="Link to booking for verification")
+    # Booking verification (REQUIRED for trust)
+    booking = models.ForeignKey('bookings.Booking', on_delete=models.SET_NULL, null=True, blank=True, help_text="Link to booking for verification")
     
     # Helpful votes
     helpful_count = models.IntegerField(default=0)
@@ -62,8 +62,16 @@ class Review(TimeStampedModel):
     
     @property
     def is_verified_booking(self):
-        """Check if review is linked to a booking."""
-        return bool(self.booking_id)
+        """Check if review is linked to a completed, paid booking."""
+        return bool(self.booking and self.booking.status == 'completed' and self.booking.paid_amount > 0)
+
+    def clean(self):
+        """Enforce: reviews only for completed, paid bookings."""
+        from django.core.exceptions import ValidationError
+        if self.booking and (self.booking.status != 'completed' or self.booking.paid_amount <= 0):
+            raise ValidationError(
+                f"Review cannot be created. Booking must be COMPLETED with payment. Current status: {self.booking.status}"
+            )
 
 
 class HotelReview(Review):

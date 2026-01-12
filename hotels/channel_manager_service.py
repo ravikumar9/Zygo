@@ -276,13 +276,16 @@ def get_hotel_availability_snapshot(hotel: Hotel, check_in, check_out, num_rooms
 
 def finalize_booking_after_payment(booking, payment_reference: Optional[str] = None):
     """Finalize inventory after successful payment."""
+    from django.utils import timezone
+    
     lock = getattr(booking, "inventory_lock", None)
     if payment_reference:
         booking.payment_reference = payment_reference
 
     if not lock:
         booking.status = "confirmed"
-        booking.save(update_fields=["status", "payment_reference", "updated_at"])
+        booking.confirmed_at = timezone.now()  # Mark when booking was confirmed
+        booking.save(update_fields=["status", "payment_reference", "confirmed_at", "updated_at"])
         return booking
 
     if lock.source == "external_cm":
@@ -297,7 +300,8 @@ def finalize_booking_after_payment(booking, payment_reference: Optional[str] = N
         booking.inventory_channel = "internal_cm"
 
     booking.status = "confirmed"
-    booking.save(update_fields=["status", "cm_booking_id", "inventory_channel", "payment_reference", "updated_at"])
+    booking.confirmed_at = timezone.now()  # Mark when booking was confirmed
+    booking.save(update_fields=["status", "cm_booking_id", "inventory_channel", "payment_reference", "confirmed_at", "updated_at"])
     return booking
 
 

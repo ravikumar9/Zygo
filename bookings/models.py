@@ -112,6 +112,30 @@ class Booking(TimeStampedModel):
         self.deleted_reason = reason
         self.save()
 
+    def is_eligible_for_review(self):
+        """Check if user can write review for this booking (must be COMPLETED with payment)."""
+        return self.status == 'completed' and self.paid_amount > 0
+
+    def mark_completed(self):
+        """Mark booking as completed (allows reviews)."""
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        self.save(update_fields=['status', 'completed_at'])
+
+    def check_reservation_timeout(self):
+        """Check if 10-minute reservation timeout has expired. If so, mark as FAILED."""
+        if self.status != 'reserved':
+            return False
+        if not self.reserved_at:
+            return False
+        now = timezone.now()
+        timeout_minutes = 10
+        if (now - self.reserved_at).total_seconds() > timeout_minutes * 60:
+            self.status = 'failed'
+            self.save(update_fields=['status'])
+            return True
+        return False
+
 
 class HotelBooking(TimeStampedModel):
     """Hotel booking details"""
