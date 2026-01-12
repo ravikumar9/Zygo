@@ -40,7 +40,7 @@ class Command(BaseCommand):
             HotelReview.objects.all().delete()
             BusReview.objects.all().delete()
             PackageReview.objects.all().delete()
-            self.stdout.write(self.style.SUCCESS('✓ Cleared'))
+            self.stdout.write(self.style.SUCCESS('[OK] Cleared'))
 
         self.stdout.write('Seeding Phase 3: Multi-image & Reviews...')
 
@@ -104,7 +104,7 @@ class Command(BaseCommand):
             user.save()
             users.append(user)
         
-        self.stdout.write(self.style.SUCCESS(f'    ✓ Created {len(users)} users'))
+        self.stdout.write(self.style.SUCCESS(f'    [OK] Created {len(users)} users'))
         return users
 
     def seed_hotel_images_and_reviews(self, users, admin_user):
@@ -127,18 +127,38 @@ class Command(BaseCommand):
         image_count = 0
         review_count = 0
         
+        # Import image creation tools
+        from django.core.files.base import ContentFile
+        from PIL import Image as PILImage
+        from io import BytesIO
+        
         for hotel in hotels:
             # Create 5-8 images
             num_images = random.randint(5, 8)
             selected_captions = random.sample(hotel_image_captions, num_images)
             
             for i, (caption, alt_text) in enumerate(selected_captions):
-                HotelImage.objects.create(
+                # Create actual image file
+                img = PILImage.new('RGB', (400, 300), color=(73, 109, 137))
+                img_bytes = BytesIO()
+                img.save(img_bytes, format='PNG')
+                img_bytes.seek(0)
+                
+                filename = f"hotel_{hotel.id}_{'primary' if i == 0 else 'gallery'}_{i}.png"
+                
+                hotel_image = HotelImage.objects.create(
                     hotel=hotel,
                     caption=caption,
                     alt_text=alt_text,
                     display_order=i,
                     is_primary=(i == 0)  # First image is primary
+                )
+                
+                # Save image file
+                hotel_image.image.save(
+                    filename,
+                    ContentFile(img_bytes.getvalue()),
+                    save=True
                 )
                 image_count += 1
             
@@ -155,7 +175,7 @@ class Command(BaseCommand):
                     rating=rating,
                     title=self.get_review_title(rating),
                     comment=self.get_review_comment(rating, 'hotel'),
-                    booking_id=f"BOOK-{random.randint(10000, 99999)}" if random.random() > 0.3 else '',  # 70% verified
+                    booking=None,  # No booking object for seed data
                     helpful_count=random.randint(0, 25)
                 )
                 
@@ -168,7 +188,7 @@ class Command(BaseCommand):
                 
                 review_count += 1
         
-        self.stdout.write(self.style.SUCCESS(f'    ✓ {image_count} hotel images, {review_count} reviews'))
+        self.stdout.write(self.style.SUCCESS(f'    [OK] {image_count} hotel images, {review_count} reviews'))
 
     def seed_bus_images_and_reviews(self, users, admin_user):
         """Seed 3-5 images per bus + reviews"""
@@ -214,7 +234,7 @@ class Command(BaseCommand):
                     rating=rating,
                     title=self.get_review_title(rating),
                     comment=self.get_review_comment(rating, 'bus'),
-                    booking_id=f"BUS-{random.randint(10000, 99999)}" if random.random() > 0.4 else '',
+                    booking=None,  # No booking object for seed data
                     helpful_count=random.randint(0, 15)
                 )
                 
@@ -226,7 +246,7 @@ class Command(BaseCommand):
                 
                 review_count += 1
         
-        self.stdout.write(self.style.SUCCESS(f'    ✓ {image_count} bus images, {review_count} reviews'))
+        self.stdout.write(self.style.SUCCESS(f'    [OK] {image_count} bus images, {review_count} reviews'))
 
     def seed_package_images_and_reviews(self, users, admin_user):
         """Seed 4-6 images per package + reviews"""
@@ -273,7 +293,7 @@ class Command(BaseCommand):
                     rating=rating,
                     title=self.get_review_title(rating),
                     comment=self.get_review_comment(rating, 'package'),
-                    booking_id=f"PKG-{random.randint(10000, 99999)}" if random.random() > 0.25 else '',
+                    booking=None,  # No booking object for seed data
                     helpful_count=random.randint(0, 30)
                 )
                 
@@ -285,7 +305,7 @@ class Command(BaseCommand):
                 
                 review_count += 1
         
-        self.stdout.write(self.style.SUCCESS(f'    ✓ {image_count} package images, {review_count} reviews'))
+        self.stdout.write(self.style.SUCCESS(f'    [OK] {image_count} package images, {review_count} reviews'))
 
     def get_review_title(self, rating):
         """Generate realistic review title based on rating"""
