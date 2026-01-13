@@ -98,6 +98,10 @@ def register(request):
             request.session['pending_user_id'] = user.id
             request.session['pending_email'] = user.email
             request.session['pending_phone'] = user.phone
+            # Clear any leftover verification state from previous registration attempts
+            request.session.pop('email_verified', None)
+            request.session.pop('mobile_verified', None)
+            request.session.save()  # Explicitly save to ensure cleanup persists
             
             return redirect('users:verify-registration-otp')
     else:
