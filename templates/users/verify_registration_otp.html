@@ -567,9 +567,12 @@
             if (successDiv) {
                 successDiv.textContent = message;
                 successDiv.classList.add('show');
-            setTimeout(() => {
-                successDiv.classList.remove('show');
-            }, 5000);
+                setTimeout(() => {
+                    successDiv.classList.remove('show');
+                }, 5000);
+            }
+        } catch (e) {
+            console.error('Error in showSuccess:', e);
         }
     }
 

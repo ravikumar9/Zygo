@@ -3,6 +3,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import views as auth_views
 from django.conf import settings
 from .password_reset_forms import SafePasswordResetForm
+from .password_set_forms import SafeSetPasswordForm
 from . import views
 from . import otp_views
 
@@ -30,6 +31,7 @@ urlpatterns = [
     ), name='password_reset_done'),
     path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(
         template_name='users/password_reset_confirm.html',
+        form_class=SafeSetPasswordForm,
         success_url='/users/reset/done/'
     ), name='password_reset_confirm'),
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(

@@ -176,8 +176,20 @@ if not DEBUG and not config("EMAIL_HOST_PASSWORD", default=""):
     )
 
 DEFAULT_FROM_EMAIL = config(
-    "DEFAULT_FROM_EMAIL", default="noreply@goexplorer.in"
+    "DEFAULT_FROM_EMAIL", default="alerts.goexplorer@gmail.com"
 )
+
+# Enforce verified sender identity (SendGrid single sender)
+if DEFAULT_FROM_EMAIL.lower() != "alerts.goexplorer@gmail.com":
+    import warnings
+    warnings.warn(
+        "DEFAULT_FROM_EMAIL must be alerts.goexplorer@gmail.com (verified sender)",
+        RuntimeWarning,
+    )
+
+# Notification delivery flags (must be False in production)
+NOTIFICATIONS_EMAIL_DRY_RUN = config("NOTIFICATIONS_EMAIL_DRY_RUN", default=False, cast=bool)
+NOTIFICATIONS_SMS_DRY_RUN = config("NOTIFICATIONS_SMS_DRY_RUN", default=False, cast=bool)
 
 # Email delivery logging (always enabled for troubleshooting)
 EMAIL_LOG_LEVEL = "INFO"  # Log all email send attempts and results
@@ -188,7 +200,16 @@ MSG91_SENDER_ID = config("MSG91_SENDER_ID", default="GOEXPR")
 MSG91_ROUTE = config("MSG91_ROUTE", default="4")
 MSG91_COUNTRY = config("MSG91_COUNTRY", default="91")
 MSG91_BASE_URL = config("MSG91_BASE_URL", default="https://api.msg91.com/api/v5/flow/")
+MSG91_OTP_TEMPLATE_ID = config("MSG91_OTP_TEMPLATE_ID", default="")
 MSG91_DEFAULT_TEMPLATE_ID = config("MSG91_DEFAULT_TEMPLATE_ID", default="")
+
+# Fail-fast when MSG91 credentials/templates are missing in non-debug environments
+if not DEBUG and (not MSG91_AUTHKEY or not MSG91_OTP_TEMPLATE_ID):
+    import warnings
+    warnings.warn(
+        "CRITICAL: MSG91 OTP template/auth key missing. Set MSG91_AUTHKEY and MSG91_OTP_TEMPLATE_ID.",
+        RuntimeWarning,
+    )
 
 # --------------------------------------------------
 # Payments (TEST KEYS ONLY)

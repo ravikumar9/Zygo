@@ -95,13 +95,37 @@ class OTPService:
         }
         
         try:
-            NotificationService.send_email(
+            if not getattr(settings, 'EMAIL_HOST_PASSWORD', None):
+                email_logger.error(
+                    "SendGrid API key missing; cannot send email OTP to %s (user_id=%s)",
+                    target_email,
+                    user.id,
+                )
+                return {
+                    'success': False,
+                    'message': 'Email service misconfigured. Please contact support.'
+                }
+
+            notification = NotificationService.send_email(
                 to=target_email,
                 subject='GoExplorer - Email Verification Code',
                 template='notifications/email/otp_email.html',
                 context=context,
                 user=user,
             )
+            is_dry_run = getattr(notification, 'provider_reference', '') == 'dry-run'
+            if not notification or notification.status != 'sent' or is_dry_run:
+                # Consider dry-run or failed deliveries as hard failures for identity flows
+                error_msg = getattr(notification, 'error_message', '') if notification else ''
+                email_logger.error(
+                    f"Email OTP not sent (status={getattr(notification, 'status', 'unknown')}) to {target_email}"
+                    f" user_id={user.id} error={error_msg}"
+                )
+                return {
+                    'success': False,
+                    'message': 'Failed to send OTP email. Please retry or contact support.'
+                }
+
             email_logger.info(f"Email OTP sent successfully to {target_email} (user_id={user.id})")
             logger.info(f"Email OTP sent to {target_email} for user {user.id}")
         except Exception as e:
@@ -160,14 +184,37 @@ class OTPService:
         
         # Send via SMS using NotificationService (MSG91)
         template_id = getattr(settings, 'MSG91_OTP_TEMPLATE_ID', settings.MSG91_DEFAULT_TEMPLATE_ID)
+
+        if not getattr(settings, 'MSG91_AUTHKEY', None) or not template_id:
+            logger.error(
+                "MSG91 credentials/template missing; cannot send mobile OTP to %s (user_id=%s)",
+                target_phone,
+                user.id,
+            )
+            return {
+                'success': False,
+                'message': 'SMS service not configured. Please contact support for verification.'
+            }
         
         try:
-            NotificationService.send_sms(
+            notification = NotificationService.send_sms(
                 phone=target_phone,
                 template_id=template_id,
                 variables={'otp': otp_record.otp_code},
                 user=user,
             )
+            is_dry_run = getattr(notification, 'provider_reference', '') == 'dry-run'
+            if not notification or notification.status != 'sent' or is_dry_run:
+                error_msg = getattr(notification, 'error_message', '') if notification else ''
+                logger.error(
+                    f"Mobile OTP not sent (status={getattr(notification, 'status', 'unknown')}) to {target_phone}"
+                    f" user_id={user.id} error={error_msg}"
+                )
+                return {
+                    'success': False,
+                    'message': 'Failed to send OTP SMS. Please retry.'
+                }
+
             logger.info(f"Mobile OTP sent to {target_phone} for user {user.id}")
         except Exception as e:
             logger.error(f"Failed to send mobile OTP to {target_phone}: {e}", exc_info=True)

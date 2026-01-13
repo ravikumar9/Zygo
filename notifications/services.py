@@ -125,9 +125,15 @@ class NotificationService:
             status="pending",
         )
 
-        if dry_run or not settings.MSG91_AUTHKEY or not template_id:
+        if dry_run:
             notification.mark_sent("dry-run")
             logger.info("[DRY-RUN] SMS queued (not sent) to %s", phone)
+            return notification
+
+        if not settings.MSG91_AUTHKEY or not template_id:
+            error_msg = "MSG91 credentials/template missing"
+            notification.mark_failed(error_msg)
+            logger.error("SMS send aborted for %s: %s", phone, error_msg)
             return notification
 
         payload = {

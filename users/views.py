@@ -234,9 +234,15 @@ def verify_registration_otp(request):
                 }, status=400)
             
             # Mark account as fully verified
+            from django.utils import timezone
+
             user.email_verified = True
             user.phone_verified = True
-            user.save(update_fields=['email_verified', 'phone_verified'])
+            if not user.email_verified_at:
+                user.email_verified_at = timezone.now()
+            if not user.phone_verified_at:
+                user.phone_verified_at = timezone.now()
+            user.save(update_fields=['email_verified', 'phone_verified', 'email_verified_at', 'phone_verified_at'])
             
             # Clear session
             del request.session['pending_user_id']
@@ -278,12 +284,29 @@ def login_view(request):
     if request.method == 'POST':
         form = UserLoginForm(request.POST)
         if form.is_valid():
+            entered_email = form.cleaned_data['email']
+            # Resolve username from email to handle legacy usernames
+            user_lookup = User.objects.filter(email__iexact=entered_email).first()
+            auth_username = user_lookup.username if user_lookup else entered_email
+
             user = authenticate(
                 request,
-                username=form.cleaned_data['email'],
+                username=auth_username,
                 password=form.cleaned_data['password']
             )
             if user is not None:
+                # Normalize legacy verification timestamps to prevent false negatives
+                from django.utils import timezone
+                fields_to_update = []
+                if user.email_verified and not user.email_verified_at:
+                    user.email_verified_at = timezone.now()
+                    fields_to_update.append('email_verified_at')
+                if user.phone_verified and not user.phone_verified_at:
+                    user.phone_verified_at = timezone.now()
+                    fields_to_update.append('phone_verified_at')
+                if fields_to_update:
+                    user.save(update_fields=fields_to_update)
+
                 # CRITICAL: Enforce dual OTP verification before allowing login
                 if not user.email_verified_at or not user.phone_verified_at:
                     messages.error(
