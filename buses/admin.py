@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from .models import BusOperator, Bus, BusImage, BusRoute, BusStop, BusSchedule, SeatLayout, BoardingPoint, DroppingPoint
 from core.admin_mixins import PrimaryImageValidationMixin
+from core.admin_utils import safe_admin_display, safe_format_percentage, SoftDeleteAdminMixin, soft_delete_selected, restore_selected
 
 
 class BusImageInline(admin.TabularInline):
@@ -43,13 +44,13 @@ suspend_operator.short_description = "⏸️ Suspend selected operators"
 
 
 @admin.register(BusOperator)
-class BusOperatorAdmin(admin.ModelAdmin):
-    list_display = ['name', 'get_status_badge', 'contact_phone', 'contact_email', 'rating', 'total_buses', 'is_active']
-    list_filter = ['verification_status', 'is_active', 'rating']
+class BusOperatorAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
+    list_display = ['name', 'get_status_badge', 'contact_phone', 'contact_email', 'rating', 'total_buses', 'deletion_status', 'is_active']
+    list_filter = ['is_deleted', 'verification_status', 'is_active', 'rating']
     search_fields = ['name', 'contact_phone', 'contact_email', 'gst_number', 'pan_number']
     list_editable = ['is_active']
-    readonly_fields = ['verified_at', 'verified_by', 'created_at', 'updated_at']
-    actions = [verify_operator, reject_operator, suspend_operator]
+    readonly_fields = ['verified_at', 'verified_by', 'created_at', 'updated_at', 'deleted_at', 'deleted_by']
+    actions = [verify_operator, reject_operator, suspend_operator, soft_delete_selected, restore_selected]
     
     fieldsets = (
         ('Business Information', {
@@ -264,9 +265,11 @@ class BusScheduleAdmin(admin.ModelAdmin):
         }),
     )
     
+    @safe_admin_display(default='N/A')
     def occupancy_display(self, obj):
-        """Display occupancy percentage with color"""
-        pct = obj.occupancy_percentage
+        """Display occupancy percentage with color (crash-proof)"""
+        pct = float(obj.occupancy_percentage)
+        
         if pct < 50:
             color = '#28a745'  # Green
         elif pct < 80:
@@ -275,9 +278,9 @@ class BusScheduleAdmin(admin.ModelAdmin):
             color = '#dc3545'  # Red
         
         return format_html(
-            '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 3px;">{:.1f}%</span>',
+            '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 3px;">{}</span>',
             color,
-            pct
+            safe_format_percentage(pct)
         )
     occupancy_display.short_description = 'Occupancy'
 

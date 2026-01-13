@@ -6,10 +6,11 @@ from django.templatetags.static import static
 from decimal import Decimal
 from datetime import datetime, date
 from core.models import TimeStampedModel, City
+from core.soft_delete import SoftDeleteMixin, SoftDeleteManager, AllObjectsManager
 
 
-class Hotel(TimeStampedModel):
-    """Hotel model"""
+class Hotel(SoftDeleteMixin, TimeStampedModel):
+    """Hotel model with soft delete support"""
     STAR_RATINGS = [
         (1, '1 Star'),
         (2, '2 Star'),
@@ -95,6 +96,10 @@ class Hotel(TimeStampedModel):
     
     contact_phone = models.CharField(max_length=20)
     contact_email = models.EmailField()
+    
+    # Managers (soft delete support)
+    objects = SoftDeleteManager()  # Default: excludes deleted
+    all_objects = AllObjectsManager()  # Includes deleted
     
     class Meta:
         ordering = ['-is_featured', '-review_rating', 'name']

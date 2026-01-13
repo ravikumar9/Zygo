@@ -2,11 +2,12 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
 from core.models import TimeStampedModel, City
+from core.soft_delete import SoftDeleteMixin, SoftDeleteManager, AllObjectsManager
 from datetime import date
 
 
-class BusOperator(TimeStampedModel):
-    """Bus operator/company"""
+class BusOperator(SoftDeleteMixin, TimeStampedModel):
+    """Bus operator/company with soft delete support"""
     VERIFICATION_STATUS = [
         ('pending', 'Pending Verification'),
         ('verified', 'Verified'),
@@ -38,6 +39,10 @@ class BusOperator(TimeStampedModel):
     total_bookings = models.IntegerField(default=0)
     
     is_active = models.BooleanField(default=True)
+    
+    # Managers (soft delete support)
+    objects = SoftDeleteManager()  # Default: excludes deleted
+    all_objects = AllObjectsManager()  # Includes deleted
     
     class Meta:
         ordering = ['-rating', 'name']

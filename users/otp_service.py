@@ -2,6 +2,8 @@
 OTP service for sending and verifying email and mobile OTPs.
 Phase 2: Security - User Identity Verification
 
+Supports both pre-user phone-based OTP (registration) and user-linked OTP (password reset).
+
 Uses NotificationService from Phase 1 for delivery.
 """
 import logging
@@ -14,27 +16,35 @@ from notifications.services import NotificationService
 from .models_otp import UserOTP
 
 logger = logging.getLogger(__name__)
-email_logger = logging.getLogger('django.core.mail')  # Django's built-in email logger
+email_logger = logging.getLogger('django.core.mail')
 
 
 class OTPService:
-    """Service for OTP generation, sending, and verification."""
+    """Service for OTP generation, sending, and verification.
+    
+    Supports two OTP flows:
+    1. Pre-registration: phone-based OTP (no user required)
+    2. Post-registration: user-linked OTP (user required for email, optional for SMS)
+    """
     
     RESEND_COOLDOWN_SECONDS = 30
     OTP_EXPIRY_MINUTES = 5
     MAX_ATTEMPTS = 3
     
     @classmethod
-    def can_resend(cls, user, otp_type):
+    def can_resend(cls, contact, otp_type, purpose='registration'):
         """Check if user can request a new OTP (cooldown check).
+        
+        For pre-registration flow: uses contact (phone) as lookup.
         
         Returns:
             tuple: (can_resend: bool, wait_seconds: int)
         """
         last_otp = UserOTP.objects.filter(
-            user=user,
+            contact=contact,
             otp_type=otp_type,
-            is_verified=False  # Only check pending OTPs for cooldown
+            purpose=purpose,
+            is_verified=False
         ).order_by('-created_at').first()
         
         if not last_otp:
@@ -50,10 +60,10 @@ class OTPService:
     @classmethod
     @transaction.atomic
     def send_email_otp(cls, user, email=None):
-        """Send OTP to user's email.
+        """Send OTP to user's email (requires User instance).
         
         Args:
-            user: User instance
+            user: User instance (required)
             email: Optional email override (defaults to user.email)
             
         Returns:
@@ -64,7 +74,7 @@ class OTPService:
             return {'success': False, 'message': 'No email address provided'}
         
         # Check resend cooldown
-        can_resend, wait_seconds = cls.can_resend(user, 'email')
+        can_resend, wait_seconds = cls.can_resend(target_email, 'email', 'registration')
         if not can_resend:
             return {
                 'success': False,
@@ -80,9 +90,10 @@ class OTPService:
         
         # Create new OTP
         otp_record = UserOTP.create_otp(
-            user=user,
             otp_type='email',
             contact=target_email,
+            purpose='registration',
+            user=user,
             expiry_minutes=cls.OTP_EXPIRY_MINUTES
         )
         
@@ -115,7 +126,6 @@ class OTPService:
             )
             is_dry_run = getattr(notification, 'provider_reference', '') == 'dry-run'
             if not notification or notification.status != 'sent' or is_dry_run:
-                # Consider dry-run or failed deliveries as hard failures for identity flows
                 error_msg = getattr(notification, 'error_message', '') if notification else ''
                 email_logger.error(
                     f"Email OTP not sent (status={getattr(notification, 'status', 'unknown')}) to {target_email}"
@@ -131,7 +141,6 @@ class OTPService:
         except Exception as e:
             email_logger.error(f"Failed to send email OTP to {target_email} (user_id={user.id}): {e}", exc_info=True)
             logger.error(f"Failed to send email OTP to {target_email}: {e}", exc_info=True)
-            # Don't fail silently - let the caller know something went wrong
             return {
                 'success': False,
                 'message': 'Failed to send OTP. Please try again.'
@@ -145,40 +154,45 @@ class OTPService:
     
     @classmethod
     @transaction.atomic
-    def send_mobile_otp(cls, user, phone=None):
-        """Send OTP to user's phone via SMS.
+    def send_mobile_otp(cls, phone, purpose='registration', user=None):
+        """Send OTP to phone via SMS.
+        
+        Pre-registration flow: phone + purpose (user=None)
+        Post-registration flow: user instance with user.phone
         
         Args:
-            user: User instance
-            phone: Optional phone override (defaults to user.phone)
+            phone: Phone number to send to
+            purpose: 'registration', 'password_reset', etc.
+            user: Optional User instance (for context/logging)
             
         Returns:
             dict: {'success': bool, 'message': str, 'otp_id': int}
         """
-        target_phone = phone or user.phone
-        if not target_phone:
+        if not phone:
             return {'success': False, 'message': 'No phone number provided'}
         
-        # Check resend cooldown
-        can_resend, wait_seconds = cls.can_resend(user, 'mobile')
+        # Check resend cooldown based on phone (not user)
+        can_resend, wait_seconds = cls.can_resend(phone, 'mobile', purpose)
         if not can_resend:
             return {
                 'success': False,
                 'message': f'Please wait {wait_seconds} seconds before requesting another OTP'
             }
         
-        # Invalidate any previous pending OTPs
+        # Invalidate any previous pending OTPs for this phone/purpose
         UserOTP.objects.filter(
-            user=user,
+            contact=phone,
             otp_type='mobile',
+            purpose=purpose,
             is_verified=False
         ).update(is_verified=True)
         
-        # Create new OTP
+        # Create new OTP (no user required for pre-registration)
         otp_record = UserOTP.create_otp(
-            user=user,
             otp_type='mobile',
-            contact=target_phone,
+            contact=phone,
+            purpose=purpose,
+            user=user,
             expiry_minutes=cls.OTP_EXPIRY_MINUTES
         )
         
@@ -187,9 +201,9 @@ class OTPService:
 
         if not getattr(settings, 'MSG91_AUTHKEY', None) or not template_id:
             logger.error(
-                "MSG91 credentials/template missing; cannot send mobile OTP to %s (user_id=%s)",
-                target_phone,
-                user.id,
+                "MSG91 credentials/template missing; cannot send mobile OTP to %s (purpose=%s)",
+                phone,
+                purpose,
             )
             return {
                 'success': False,
@@ -198,7 +212,7 @@ class OTPService:
         
         try:
             notification = NotificationService.send_sms(
-                phone=target_phone,
+                phone=phone,
                 template_id=template_id,
                 variables={'otp': otp_record.otp_code},
                 user=user,
@@ -207,18 +221,17 @@ class OTPService:
             if not notification or notification.status != 'sent' or is_dry_run:
                 error_msg = getattr(notification, 'error_message', '') if notification else ''
                 logger.error(
-                    f"Mobile OTP not sent (status={getattr(notification, 'status', 'unknown')}) to {target_phone}"
-                    f" user_id={user.id} error={error_msg}"
+                    f"Mobile OTP not sent (status={getattr(notification, 'status', 'unknown')}) to {phone}"
+                    f" purpose={purpose} error={error_msg}"
                 )
                 return {
                     'success': False,
                     'message': 'Failed to send OTP SMS. Please retry.'
                 }
 
-            logger.info(f"Mobile OTP sent to {target_phone} for user {user.id}")
+            logger.info(f"Mobile OTP sent to {phone} (purpose={purpose})")
         except Exception as e:
-            logger.error(f"Failed to send mobile OTP to {target_phone}: {e}", exc_info=True)
-            # Don't fail silently - let the caller know something went wrong
+            logger.error(f"Failed to send mobile OTP to {phone}: {e}", exc_info=True)
             return {
                 'success': False,
                 'message': 'Failed to send OTP. Please try again.'
@@ -226,14 +239,14 @@ class OTPService:
         
         return {
             'success': True,
-            'message': f'OTP sent to {target_phone}',
+            'message': f'OTP sent to {phone}',
             'otp_id': otp_record.id,
         }
     
     @classmethod
     @transaction.atomic
     def verify_email_otp(cls, user, otp_code):
-        """Verify email OTP.
+        """Verify email OTP for a user.
         
         Args:
             user: User instance
@@ -266,8 +279,33 @@ class OTPService:
     
     @classmethod
     @transaction.atomic
+    def verify_mobile_otp_by_contact(cls, phone, otp_code, purpose='registration'):
+        """Verify mobile OTP by phone number (pre-registration flow).
+        
+        Args:
+            phone: Phone number that OTP was sent to
+            otp_code: OTP code entered
+            purpose: 'registration', 'password_reset', etc.
+            
+        Returns:
+            dict: {'success': bool, 'message': str}
+        """
+        # Get latest unverified mobile OTP for this phone
+        otp_record = UserOTP.get_pending_by_contact(phone, 'mobile', purpose)
+        
+        if not otp_record:
+            return {'success': False, 'message': 'No pending OTP found. Please request a new one.'}
+        
+        # Verify OTP
+        success, message = otp_record.verify(otp_code)
+        logger.info(f"Mobile OTP verification for {phone}: {success}")
+        
+        return {'success': success, 'message': message}
+    
+    @classmethod
+    @transaction.atomic
     def verify_mobile_otp(cls, user, otp_code):
-        """Verify mobile OTP.
+        """Verify mobile OTP for a user (post-registration flow).
         
         Args:
             user: User instance

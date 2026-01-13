@@ -3,10 +3,11 @@ from django.core.validators import MinValueValidator
 from django.core.files.storage import default_storage
 from django.templatetags.static import static
 from core.models import TimeStampedModel, City
+from core.soft_delete import SoftDeleteMixin, SoftDeleteManager, AllObjectsManager
 
 
-class Package(TimeStampedModel):
-    """Holiday package model"""
+class Package(SoftDeleteMixin, TimeStampedModel):
+    """Holiday package model with soft delete support"""
     PACKAGE_TYPES = [
         ('adventure', 'Adventure'),
         ('beach', 'Beach'),
@@ -51,6 +52,10 @@ class Package(TimeStampedModel):
     
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     review_count = models.IntegerField(default=0)
+    
+    # Managers (soft delete support)
+    objects = SoftDeleteManager()  # Default: excludes deleted
+    all_objects = AllObjectsManager()  # Includes deleted
     
     class Meta:
         ordering = ['-is_featured', '-rating', 'name']

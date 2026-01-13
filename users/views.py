@@ -178,7 +178,7 @@ def verify_registration_otp(request):
             result = OTPService.send_email_otp(user)
             return JsonResponse(result)
         
-        # SEND Mobile OTP
+        # SEND Mobile OTP (phone-based, no user required)
         elif action == 'send_mobile_otp':
             if mobile_verified:
                 return JsonResponse({
@@ -186,7 +186,8 @@ def verify_registration_otp(request):
                     'message': 'Mobile already verified ✓'
                 }, status=400)
             
-            result = OTPService.send_mobile_otp(user)
+            # Phone-based OTP: no user required yet
+            result = OTPService.send_mobile_otp(user.phone, purpose='registration', user=None)
             return JsonResponse(result)
         
         # VERIFY Email OTP
@@ -207,7 +208,7 @@ def verify_registration_otp(request):
             
             return JsonResponse(result)
         
-        # VERIFY Mobile OTP
+        # VERIFY Mobile OTP (phone-based)
         elif action == 'verify_mobile_otp':
             otp_code = request.POST.get('otp_code')
             
@@ -217,7 +218,8 @@ def verify_registration_otp(request):
                     'message': 'Enter OTP code'
                 }, status=400)
             
-            result = OTPService.verify_mobile_otp(user, otp_code)
+            # Phone-based verification
+            result = OTPService.verify_mobile_otp_by_contact(user.phone, otp_code, purpose='registration')
             
             if result['success']:
                 request.session['mobile_verified'] = True

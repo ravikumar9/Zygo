@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import Package, PackageImage, PackageItinerary, PackageInclusion, PackageDeparture
 from core.admin_mixins import PrimaryImageValidationMixin
+from core.admin_utils import SoftDeleteAdminMixin, soft_delete_selected, restore_selected
 
 
 class PackageImageInline(admin.TabularInline):
@@ -31,15 +32,15 @@ class PackageDepartureInline(admin.TabularInline):
 
 
 @admin.register(Package)
-class PackageAdmin(PrimaryImageValidationMixin, admin.ModelAdmin):
-    list_display = ['name', 'package_type', 'duration_display', 'starting_price', 'is_active', 'status_indicator', 'image_preview']
-    list_filter = ['package_type', 'is_featured', 'is_active', 'duration_days']
+class PackageAdmin(SoftDeleteAdminMixin, PrimaryImageValidationMixin, admin.ModelAdmin):
+    list_display = ['name', 'package_type', 'duration_display', 'starting_price', 'deletion_status', 'is_active', 'status_indicator', 'image_preview']
+    list_filter = ['is_deleted', 'package_type', 'is_featured', 'is_active', 'duration_days']
     search_fields = ['name', 'description']
-    readonly_fields = ['created_at', 'updated_at', 'image_preview']
+    readonly_fields = ['created_at', 'updated_at', 'image_preview', 'deleted_at', 'deleted_by']
     list_editable = ['is_active']
     filter_horizontal = ['destination_cities']
     inlines = [PackageImageInline, PackageItineraryInline, PackageInclusionInline, PackageDepartureInline]
-    actions = ['make_active', 'make_inactive', 'feature_packages']
+    actions = [soft_delete_selected, restore_selected, 'make_active', 'make_inactive', 'feature_packages']
     
     fieldsets = (
         ('Basic Information', {
