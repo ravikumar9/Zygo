@@ -234,7 +234,7 @@
             {% endif %}
             {% if discount_amount %}
                 <div class="price-row text-success">
-                    <span>Discount:</span>
+                    <span>{{ discount_label|default:"Discount" }}:</span>
                     <span>-₹{{ discount_amount }}</span>
                 </div>
             {% endif %}

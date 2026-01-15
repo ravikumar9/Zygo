@@ -55,7 +55,8 @@
         <div class="col-lg-8">
             <img class="main-image mb-4"
                  src="{{ hotel.display_image_url }}"
-                 alt="{{ hotel.name }}">
+                 alt="{{ hotel.name }}"
+                 onerror="this.src='{% static 'images/hotel_placeholder.svg' %}'">
 
             {% if hotel.images.all %}
             <div class="row g-3 mb-4">
@@ -150,9 +151,9 @@
             <div class="booking-widget">
                 <h4>Book This Hotel</h4>
 
-                {% if user.is_authenticated and (not user.email_verified_at or not user.phone_verified_at) %}
+                {% if user.is_authenticated and not user.email_verified_at %}
                 <div class="alert alert-warning">
-                    <strong>Action required:</strong> Verify both email and mobile to place a booking. <a href="{% url 'users:verify-registration-otp' %}">Verify now</a>.
+                    <strong>Action required:</strong> Verify your email to place a booking. <a href="{% url 'users:verify-registration-otp' %}">Verify now</a>.
                 </div>
                 {% endif %}
 
@@ -203,13 +204,13 @@
                     </div>
 
                     {% if user.is_authenticated %}
-                        {% if user.email_verified_at and user.phone_verified_at %}
-                        <button class="btn btn-success w-100">
+                        {% if user.email_verified_at %}
+                        <button type="submit" class="btn btn-success w-100" onclick="return validateHotelBooking(event)">
                             Proceed to Payment
                         </button>
                         {% else %}
                         <a href="{% url 'users:verify-registration-otp' %}" class="btn btn-outline-secondary w-100">
-                            Verify OTP to Book
+                            Verify Email to Book
                         </a>
                         {% endif %}
                     {% else %}
@@ -284,6 +285,37 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelector('.booking-widget').scrollIntoView({behavior:'smooth'});
         };
     });
+
+    // Form validation for hotel booking
+    window.validateHotelBooking = function(event) {
+        event.preventDefault();
+        
+        const checkinVal = document.getElementById('checkin').value;
+        const checkoutVal = document.getElementById('checkout').value;
+        
+        if (!checkinVal || !checkoutVal) {
+            alert('Please select check-in and check-out dates');
+            return false;
+        }
+        
+        const checkinDate = new Date(checkinVal);
+        const checkoutDate = new Date(checkoutVal);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        if (checkinDate < today) {
+            alert('Check-in date cannot be in the past');
+            return false;
+        }
+        
+        if (checkoutDate <= checkinDate) {
+            alert('Check-out date must be after check-in date');
+            return false;
+        }
+        
+        document.querySelector('form').submit();
+        return false;
+    };
 });
 </script>
 {% endblock %}

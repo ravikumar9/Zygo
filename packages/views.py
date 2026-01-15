@@ -1,12 +1,15 @@
 from rest_framework import generics, filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import render, get_object_or_404, redirect
+from decimal import Decimal
+import json
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Q
 from .models import Package, PackageDeparture
+from core.models import CorporateDiscount
 from bookings.models import Booking
 from .serializers import PackageListSerializer, PackageDetailSerializer
 
@@ -93,8 +96,26 @@ def book_package(request, package_id):
                 messages.error(request, 'Not enough spots available')
                 return redirect('packages:package_detail', package_id=package_id)
             
-            # Create booking
-            total_amount = float(package.starting_price) * num_travelers
+            # Create booking with corporate discount (email-verified users only)
+            base_total = Decimal(str(package.starting_price)) * Decimal(str(num_travelers))
+
+            corp_discount_amount = Decimal('0.00')
+            corp_meta = None
+            if request.user.email_verified_at:
+                corp = CorporateDiscount.get_for_email(traveler_email or request.user.email)
+                if corp:
+                    corp_discount_amount = Decimal(str(corp.calculate_discount(base_total, service_type='package')))
+                    if corp_discount_amount > 0:
+                        corp_meta = json.dumps({
+                            'type': 'corp',
+                            'company': corp.company_name,
+                            'domain': corp.email_domain,
+                            'discount_type': corp.discount_type,
+                            'discount_value': float(corp.discount_value),
+                            'discount_amount': float(corp_discount_amount),
+                        })
+
+            total_amount = base_total - corp_discount_amount
             booking = Booking.objects.create(
                 user=request.user,
                 booking_type='package',
@@ -102,6 +123,7 @@ def book_package(request, package_id):
                 customer_name=traveler_name or request.user.get_full_name() or request.user.username,
                 customer_email=traveler_email or request.user.email,
                 customer_phone=traveler_phone or getattr(request.user, 'phone', ''),
+                channel_reference=corp_meta or '',
             )
             
             # Create package booking details

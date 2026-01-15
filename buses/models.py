@@ -349,13 +349,15 @@ class BusSchedule(TimeStampedModel):
         ordering = ['date']
     
     def __str__(self):
-        return f"{self.route} - {self.date} ({self.available_seats} seats left)"
+        available = self.available_seats or 0
+        return f"{self.route} - {self.date} ({available} seats left)"
     
     def book_seats(self, num_seats):
         """Book seats and update availability"""
-        if self.available_seats >= num_seats:
-            self.available_seats -= num_seats
-            self.booked_seats += num_seats
+        available = self.available_seats or 0
+        if available >= num_seats:
+            self.available_seats = (available - num_seats)
+            self.booked_seats = (self.booked_seats or 0) + num_seats
             self.save()
             return True
         return False
@@ -363,9 +365,11 @@ class BusSchedule(TimeStampedModel):
     @property
     def occupancy_percentage(self):
         """Calculate occupancy percentage"""
-        total = self.available_seats + self.booked_seats
+        available = self.available_seats or 0
+        booked = self.booked_seats or 0
+        total = available + booked
         if total > 0:
-            return round((self.booked_seats / total) * 100, 1)
+            return round((booked / total) * 100, 1)
         return 0
     
     @property

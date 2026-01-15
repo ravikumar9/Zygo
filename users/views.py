@@ -40,14 +40,14 @@ class UserRegistrationForm(forms.ModelForm):
         if User.objects.filter(email=cleaned_data.get('email')).exists():
             raise forms.ValidationError("Email already registered")
 
-        # Phone is mandatory: numeric and valid length
+        # Phone is mandatory: exactly 10 digits for Indian numbers
         phone = cleaned_data.get('phone')
         if not phone:
             raise forms.ValidationError("Mobile number is required")
         if not str(phone).isdigit():
             raise forms.ValidationError("Mobile number must be numeric")
-        if len(str(phone)) < 10 or len(str(phone)) > 15:
-            raise forms.ValidationError("Mobile number must be 10-15 digits long")
+        if len(str(phone)) != 10:
+            raise forms.ValidationError("Enter a valid 10-digit Indian mobile number")
         
         return cleaned_data
 
@@ -114,14 +114,14 @@ def register(request):
 @require_http_methods(["GET", "POST"])
 def verify_registration_otp(request):
     """
-    Phase 3.1: Verify Email + Mobile OTP for new user registration
+    Phase 3.1: Verify Email OTP for new user registration (Mobile OTP optional/deferred)
     
-    User must verify BOTH email and mobile OTP before account activation
+    User must verify EMAIL OTP before account activation. Mobile OTP is optional/deferred due to DLT compliance.
     """
     pending_user_id = request.session.get('pending_user_id')
 
-    # If the current user is already fully verified, avoid looping on OTP page
-    if request.user.is_authenticated and request.user.email_verified_at and request.user.phone_verified_at:
+    # If the current user is already fully verified (email only required), avoid looping on OTP page
+    if request.user.is_authenticated and request.user.email_verified_at:
         messages.info(request, 'Your account is already verified.')
         return redirect('core:home')
     
@@ -146,7 +146,7 @@ def verify_registration_otp(request):
         return redirect('users:register')
 
     # Prevent sending users who are already verified back into OTP flows
-    if user.email_verified_at and user.phone_verified_at:
+    if user.email_verified_at:
         request.session.pop('pending_user_id', None)
         request.session.pop('pending_email', None)
         request.session.pop('pending_phone', None)
@@ -231,31 +231,35 @@ def verify_registration_otp(request):
             
             return JsonResponse(result)
         
-        # COMPLETE Registration (both verified)
+        # COMPLETE Registration (email required, mobile optional/deferred)
         elif action == 'complete_registration':
-            if not email_verified or not mobile_verified:
+            # Email verification is mandatory for account activation
+            if not email_verified:
                 return JsonResponse({
                     'success': False,
-                    'message': 'Both email and mobile must be verified'
+                    'message': 'Email verification is required to activate your account'
                 }, status=400)
             
-            # Mark account as fully verified
+            # Mobile verification is optional/deferred due to DLT compliance
             from django.utils import timezone
 
             user.email_verified = True
-            user.phone_verified = True
+            # Only mark phone_verified if mobile OTP was actually verified
+            if mobile_verified:
+                user.phone_verified = True
+                if not user.phone_verified_at:
+                    user.phone_verified_at = timezone.now()
+            
             if not user.email_verified_at:
                 user.email_verified_at = timezone.now()
-            if not user.phone_verified_at:
-                user.phone_verified_at = timezone.now()
             user.save(update_fields=['email_verified', 'phone_verified', 'email_verified_at', 'phone_verified_at'])
             
             # Clear session
-            del request.session['pending_user_id']
-            del request.session['pending_email']
-            del request.session['pending_phone']
-            del request.session['email_verified']
-            del request.session['mobile_verified']
+            request.session.pop('pending_user_id', None)
+            request.session.pop('pending_email', None)
+            request.session.pop('pending_phone', None)
+            request.session.pop('email_verified', None)
+            request.session.pop('mobile_verified', None)
             
             return JsonResponse({
                 'success': True,
@@ -263,12 +267,15 @@ def verify_registration_otp(request):
             })
     
     # GET: Show verification form
+    # Email verification is MANDATORY for account activation
+    # Mobile verification is OPTIONAL/DEFERRED (DLT compliance in progress)
     context = {
         'email': user.email,
         'phone': user.phone,
         'email_verified': email_verified,
         'mobile_verified': mobile_verified,
-        'both_verified': email_verified and mobile_verified,
+        'email_required': True,
+        'mobile_optional': True,
     }
     
     return render(request, 'users/verify_registration_otp.html', context)
@@ -278,10 +285,9 @@ def verify_registration_otp(request):
 @require_http_methods(["GET", "POST"])
 def login_view(request):
     """
-    User login view with mandatory dual OTP verification.
+    User login view with email verification required (mobile optional/deferred).
     
-    CRITICAL: Users cannot login until BOTH email_verified_at AND phone_verified_at are set.
-    This enforces Phase 3.1 mandatory dual OTP requirement.
+    CRITICAL: Users can login after EMAIL verification. Mobile OTP is optional/deferred due to DLT compliance.
     """
     if request.user.is_authenticated:
         return redirect('core:home')
@@ -313,11 +319,11 @@ def login_view(request):
                 if fields_to_update:
                     user.save(update_fields=fields_to_update)
 
-                # CRITICAL: Enforce dual OTP verification before allowing login
-                if not user.email_verified_at or not user.phone_verified_at:
+                # CRITICAL: Enforce EMAIL verification before allowing login (mobile optional/deferred)
+                if not user.email_verified_at:
                     messages.error(
                         request,
-                        'Please verify your email and mobile number before logging in. Check your inbox for OTP.'
+                        'Please verify your email before logging in. Check your inbox for OTP.'
                     )
                     # Store user ID in session and redirect to OTP verification
                     request.session['pending_user_id'] = user.id
@@ -325,14 +331,14 @@ def login_view(request):
                     request.session['pending_phone'] = user.phone
                     return redirect('users:verify-registration-otp')
                 
-                # User is fully verified - allow login
+                # User is email verified - allow login (mobile optional/deferred)
                 login(request, user)
                 # Clean, professional success message (no duplicate on booking pages)
                 messages.success(request, 'Login successful!')
                 
                 # Handle next parameter from GET or POST
                 next_url = request.POST.get('next') or request.GET.get('next')
-                if next_url and next_url.startswith('/'):
+                if next_url and next_url.startswith('/') and not next_url.startswith('/users/register'):
                     return redirect(next_url)
                 return redirect('core:home')
             else:

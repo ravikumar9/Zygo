@@ -7,7 +7,10 @@ from django.views.decorators.http import require_http_methods
 from django.contrib import messages
 from django.urls import reverse
 from datetime import date
+from decimal import Decimal
+import json
 from .models import Bus, BusRoute, BusSchedule, BusOperator
+from core.models import CorporateDiscount
 from bookings.models import Booking
 from .serializers import BusRouteSerializer, BusScheduleSerializer
 from hotels.models import City
@@ -264,7 +267,25 @@ def book_bus(request, bus_id):
             defaults={'available_seats': bus.total_seats, 'fare': route.base_fare}
         )
         
-        total_amount = float(route.base_fare) * len(seat_ids)
+        base_total = Decimal(str(route.base_fare)) * Decimal(str(len(seat_ids)))
+
+        corp_discount_amount = Decimal('0.00')
+        corp_meta = None
+        if request.user.email_verified_at:
+            corp = CorporateDiscount.get_for_email(request.user.email)
+            if corp:
+                corp_discount_amount = Decimal(str(corp.calculate_discount(base_total, service_type='bus')))
+                if corp_discount_amount > 0:
+                    corp_meta = json.dumps({
+                        'type': 'corp',
+                        'company': corp.company_name,
+                        'domain': corp.email_domain,
+                        'discount_type': corp.discount_type,
+                        'discount_value': float(corp.discount_value),
+                        'discount_amount': float(corp_discount_amount),
+                    })
+
+        total_amount = base_total - corp_discount_amount
         booking = Booking.objects.create(
             user=request.user,
             booking_type='bus',
@@ -272,6 +293,7 @@ def book_bus(request, bus_id):
             customer_name=passenger_name or request.user.get_full_name() or request.user.username,
             customer_email=request.user.email,
             customer_phone=getattr(request.user, 'phone', '') or '',
+            channel_reference=corp_meta or '',
         )
         
         # Create bus booking details

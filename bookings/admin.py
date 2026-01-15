@@ -129,7 +129,7 @@ class BookingAdmin(admin.ModelAdmin):
     
     inlines = [BookingAuditLogInline]
     
-    actions = ['soft_delete_action', 'confirm_booking', 'cancel_booking', 'export_as_csv']
+    actions = ['soft_delete_action', 'restore_deleted_bookings', 'confirm_booking', 'cancel_booking', 'export_as_csv']
     list_per_page = 10
 
     class Media:
@@ -264,6 +264,17 @@ class BookingAdmin(admin.ModelAdmin):
             booking.soft_delete(user=request.user, reason='Deleted via admin action')
         self.message_user(request, f"{queryset.count()} booking(s) soft deleted.")
     soft_delete_action.short_description = "Soft delete selected bookings"
+
+    def restore_deleted_bookings(self, request, queryset):
+        """Action to restore soft-deleted bookings"""
+        deleted_count = queryset.filter(is_deleted=True).count()
+        for booking in queryset.filter(is_deleted=True):
+            booking.restore(user=request.user)
+        if deleted_count > 0:
+            self.message_user(request, f"✅ {deleted_count} booking(s) restored successfully.")
+        else:
+            self.message_user(request, "No deleted bookings to restore.", level='warning')
+    restore_deleted_bookings.short_description = "✅ Restore deleted bookings"
 
     def export_as_csv(self, request, queryset):
         """Export selected bookings as CSV"""

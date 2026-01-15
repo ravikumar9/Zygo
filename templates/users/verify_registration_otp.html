@@ -248,7 +248,10 @@
     </div>
 
     <div class="info-box">
-        <strong>ℹ️ Required:</strong> Both email and mobile verification are required to activate your account
+        <strong>ℹ️ Required:</strong> Email verification is required to activate your account.
+        {% if mobile_optional %}
+        <br><strong>📱 Optional:</strong> Mobile verification will be enabled soon (DLT compliance in progress).
+        {% endif %}
     </div>
 
     <!-- Status Cards -->
@@ -263,11 +266,11 @@
         </div>
 
         <div class="status-card {% if mobile_verified %}verified{% else %}pending{% endif %}" id="mobile-status">
-            <div class="status-icon">{% if mobile_verified %}✓{% else %}📱{% endif %}</div>
+            <div class="status-icon">{% if mobile_verified %}✓{% else %}⏳{% endif %}</div>
             <div class="status-label">Mobile</div>
             <div class="status-value">{{ phone }}</div>
             <div class="status-value" style="margin-top: 5px;">
-                {% if mobile_verified %}<span style="color: #10b981; font-weight: 600;">Verified ✓</span>{% else %}<span style="color: #f59e0b;">Pending</span>{% endif %}
+                {% if mobile_optional %}<span style="color: #6b7280;">Coming Soon</span>{% elif mobile_verified %}<span style="color: #10b981; font-weight: 600;">Verified ✓</span>{% else %}<span style="color: #f59e0b;">Pending</span>{% endif %}
             </div>
         </div>
     </div>
@@ -295,11 +298,20 @@
         <div class="success-message" id="email-success"></div>
     </div>
 
-    <!-- Mobile OTP Section -->
+    <!-- Mobile OTP Section (Coming Soon) -->
     <div class="otp-input-group {% if mobile_verified %}verified{% endif %}" id="mobile-otp-section">
         <h3>{{ phone|truncatewords:1 }} - Mobile OTP</h3>
         
-        {% if not mobile_verified %}
+        {% if mobile_optional and not mobile_verified %}
+        <div style="text-align: center; padding: 30px; background: #f3f4f6; border-radius: 8px; color: #6b7280;">
+            <div style="font-size: 28px; margin-bottom: 10px;">⏳</div>
+            <div style="font-weight: 600; margin-bottom: 8px;">Mobile Verification Coming Soon</div>
+            <div style="font-size: 14px; line-height: 1.5;">
+                We're setting up mobile OTP verification to comply with Indian DLT regulations.
+                <br>This feature will be enabled shortly.
+            </div>
+        </div>
+        {% elif not mobile_verified %}
         <div class="otp-controls">
             <input type="text" class="otp-input" id="mobile-otp-input" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="off">
             <button class="otp-button" id="verify-mobile-btn" onclick="verifyMobileOTP()">Verify</button>
@@ -319,13 +331,13 @@
     </div>
 
     <!-- Complete Registration Button -->
-    {% if both_verified %}
+    {% if email_verified %}
     <button class="complete-button" id="complete-btn" onclick="completeRegistration()">
         ✓ Complete Registration & Login
     </button>
     {% else %}
     <button class="complete-button" disabled style="background: #ccc; cursor: not-allowed;">
-        Verify both email and mobile to continue
+        Verify email to continue
     </button>
     {% endif %}
 </div>
@@ -582,8 +594,13 @@
             {% if not email_verified %}
             const emailInput = document.getElementById('email-otp-input');
             if (emailInput) emailInput.focus();
-            // Auto-send email OTP
+            // Auto-send email OTP (email verification is mandatory)
             sendOTP('{% url "users:verify-registration-otp" %}?action=send_email_otp', 'resend-email-btn');
+            {% endif %}
+            
+            // Mobile OTP is deferred (not auto-sent when optional)
+            {% if mobile_optional and not mobile_verified %}
+            console.log('Mobile OTP is optional and coming soon - skipping auto-send');
             {% elif not mobile_verified %}
             const mobileInput = document.getElementById('mobile-otp-input');
             if (mobileInput) mobileInput.focus();

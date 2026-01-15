@@ -7,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Min, Value, FloatField, Q, DecimalField, F
 from django.db.models.functions import Coalesce
 from datetime import date, datetime, timedelta
+import json
 from django.views.decorators.http import require_http_methods
 from django_filters.rest_framework import DjangoFilterBackend
 from decimal import Decimal
@@ -27,7 +28,7 @@ from .serializers import (
     HotelSearchFilterSerializer
 )
 from .pricing_service import PricingCalculator, OccupancyCalculator
-from core.models import City
+from core.models import City, CorporateDiscount
 from bookings.models import Booking, HotelBooking, InventoryLock
 
 
@@ -506,7 +507,26 @@ def book_hotel(request, pk):
             return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': str(exc)})
 
         nights = (checkout - checkin).days
-        total = room_type.base_price * nights * num_rooms
+        base_total = room_type.base_price * Decimal(str(nights)) * Decimal(str(num_rooms))
+
+        # Corporate discount (email-verified users only; mobile optional)
+        corp_discount_amount = Decimal('0.00')
+        corp_meta = None
+        if request.user.email_verified_at:
+            corp = CorporateDiscount.get_for_email(guest_email or request.user.email)
+            if corp:
+                corp_discount_amount = Decimal(str(corp.calculate_discount(base_total, service_type='hotel')))
+                if corp_discount_amount > 0:
+                    corp_meta = json.dumps({
+                        'type': 'corp',
+                        'company': corp.company_name,
+                        'domain': corp.email_domain,
+                        'discount_type': corp.discount_type,
+                        'discount_value': float(corp.discount_value),
+                        'discount_amount': float(corp_discount_amount),
+                    })
+
+        total = base_total - corp_discount_amount
 
         try:
             reserved_at = timezone.now()
@@ -523,6 +543,7 @@ def book_hotel(request, pk):
                 booking_source=booking_source,
                 inventory_channel=inventory_channel,
                 lock_id=(lock.lock_id or lock.reference_id) if lock else '',
+                channel_reference=corp_meta or '',
             )
 
             if lock:

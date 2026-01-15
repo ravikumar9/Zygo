@@ -113,6 +113,19 @@ class Booking(TimeStampedModel):
         self.deleted_reason = reason
         self.save()
 
+    def restore(self, user=None):
+        """Restore soft-deleted booking"""
+        self.is_deleted = False
+        self.deleted_at = None
+        self.deleted_by = None
+        self.deleted_reason = ''
+        # Revert status from 'deleted' to 'confirmed' or 'reserved' based on payment
+        if self.paid_amount > 0:
+            self.status = 'confirmed'
+        else:
+            self.status = 'reserved'
+        self.save()
+
     def is_eligible_for_review(self):
         """Check if user can write review for this booking (must be COMPLETED with payment)."""
         return self.status == 'completed' and self.paid_amount > 0
