@@ -228,8 +228,8 @@
             
             <div class="form-group">
                 <label for="id_phone">Phone Number <span class="required">*</span></label>
-                <input type="tel" id="id_phone" name="phone" required pattern="^[0-9]{10,15}$" placeholder="9876543210" minlength="10" maxlength="15">
-                <small>10-15 digit mobile number (required for OTP verification)</small>
+                <input type="tel" id="id_phone" name="phone" required pattern="^[0-9]{10}$" placeholder="9876543210" minlength="10" maxlength="10">
+                <small>Enter exactly 10 digit Indian mobile number (required for OTP verification)</small>
                 {% if form.phone.errors %}
                 <ul class="error-list">
                     {% for error in form.phone.errors %}
@@ -308,7 +308,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const phoneVal = this.value.replace(/\D/g, '');
         if (this.value.trim() === '') {
             this.classList.remove('is-invalid');
-        } else if (phoneVal.length < 10 || phoneVal.length > 15) {
+        } else if (phoneVal.length !== 10) {
             this.classList.add('is-invalid');
         } else {
             this.classList.remove('is-invalid');
@@ -344,7 +344,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!phoneInput.value.trim()) {
             phoneInput.classList.add('is-invalid');
             isValid = false;
-        } else if (phoneVal.length < 10 || phoneVal.length > 15) {
+        } else if (phoneVal.length !== 10) {
             phoneInput.classList.add('is-invalid');
             isValid = false;
         } else {

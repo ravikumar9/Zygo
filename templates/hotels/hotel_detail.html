@@ -163,12 +163,12 @@
                     <label class="form-label">Check-in</label>
                     <input type="date" name="checkin_date" id="checkin"
                            class="form-control mb-2"
-                           value="{{ prefill_checkin|default:'' }}" required>
+                           value="{{ prefill_checkin|default:'' }}" required id="checkinDateInput">
 
                     <label class="form-label">Check-out</label>
                     <input type="date" name="checkout_date" id="checkout"
                            class="form-control mb-2"
-                           value="{{ prefill_checkout|default:'' }}" required>
+                           value="{{ prefill_checkout|default:'' }}" required id="checkoutDateInput">
 
                     <label class="form-label">Room Type</label>
                     <select name="room_type" id="room_type"
@@ -228,6 +228,23 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    // Set minimum date to today for check-in and check-out
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const minDate = `${year}-${month}-${day}`;
+    
+    const checkinInput = document.getElementById('checkin');
+    const checkoutInput = document.getElementById('checkout');
+    
+    if (checkinInput) {
+        checkinInput.min = minDate;
+    }
+    if (checkoutInput) {
+        checkoutInput.min = minDate;
+    }
+    
     const roomSelect = document.getElementById('room_type');
     const numRooms = document.getElementById('num_rooms');
     const checkin = document.getElementById('checkin');

@@ -291,3 +291,20 @@ def process_wallet_payment(request):
             'status': 'error',
             'message': f'Unexpected error: {str(exc)}'
         }, status=500)
+
+class WalletView(APIView):
+    """View wallet balance and transactions"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from .models import Wallet
+        
+        try:
+            wallet = Wallet.objects.get(user=request.user)
+        except Wallet.DoesNotExist:
+            wallet = Wallet.objects.create(user=request.user, balance=0)
+        
+        return Response({
+            'balance': float(wallet.balance),
+            'currency': 'INR'
+        })
