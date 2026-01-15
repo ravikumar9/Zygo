@@ -274,16 +274,10 @@
                     <li class="mb-3"><i class="fas fa-check-circle text-success me-2" style="font-size: 1.5rem;"></i> <strong>Flexible Policies</strong> - Customized cancellation and modification policies</li>
                 </ul>
                 <div class="d-flex gap-2">
-                    {% if user.is_authenticated %}
-                    <a href="{% url 'bookings:corporate_dashboard' %}" class="btn btn-primary btn-lg">
-                        <i class="fas fa-chart-line me-2"></i>Corporate Dashboard
-                    </a>
-                    {% else %}
                     <a href="{% url 'users:register' %}" class="btn btn-primary btn-lg">
-                        <i class="fas fa-user-plus me-2"></i>Register Corporate Account
+                        <i class="fas fa-user-plus me-2"></i>Register for Corporate Benefits
                     </a>
-                    {% endif %}
-                    <a href="#" class="btn btn-outline-primary btn-lg" onclick="alert('Contact our sales team at corporate@goexplorer.com for more information.');">
+                    <a href="#" class="btn btn-outline-primary btn-lg" onclick="alert('Contact our sales team at corporate@goexplorer.com for enterprise solutions.');">
                         <i class="fas fa-envelope me-2"></i>Contact Sales
                     </a>
                 </div>

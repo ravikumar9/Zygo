@@ -437,9 +437,9 @@ def book_hotel(request, pk):
         if not request.user.is_authenticated:
             return redirect(f'/login/?next={request.path}')
 
-        if not request.user.email_verified_at or not request.user.phone_verified_at:
+        if not request.user.email_verified_at:
             from django.contrib import messages
-            messages.error(request, 'Please verify your email and mobile number before booking. OTP verification is required to hold a room.')
+            messages.error(request, 'Please verify your email before booking.')
             request.session['pending_user_id'] = request.user.id
             request.session['pending_email'] = request.user.email
             request.session['pending_phone'] = getattr(request.user, 'phone', '')

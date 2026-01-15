@@ -141,7 +141,13 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
 
     @property
     def display_image_url(self):
-        return self.primary_image_url or static('images/hotel_placeholder.svg')
+        """Return primary image URL or fallback placeholder"""
+        image_url = self.primary_image_url
+        # If we have a valid image URL, return it; otherwise return static fallback path
+        if image_url:
+            return image_url
+        # Return path that will be resolved by static() in template
+        return '/static/images/hotel_placeholder.svg'
 
 
 class HotelImage(models.Model):
