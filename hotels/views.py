@@ -384,6 +384,7 @@ def hotel_list(request):
         'hotels': list(hotels),
         'cities': cities,
         'property_types': Hotel.PROPERTY_TYPES,
+        'today': date.today().strftime('%Y-%m-%d'),
         'selected_city': city_id,
         'selected_checkin': checkin,
         'selected_checkout': checkout,

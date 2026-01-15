@@ -44,12 +44,18 @@ user1, created = User.objects.get_or_create(
         'last_name': 'EmailOnly'
     }
 )
+user1.email = 'qa_email_verified@example.com'
 if created:
     user1.set_password('TestPassword123!')
-    user1.save()
+user1.email_verified = True
+user1.email_verified_at = user1.email_verified_at or timezone.now()
+user1.phone_verified = False
+if created:
+    user1.save(update_fields=['password', 'email', 'email_verified', 'email_verified_at', 'phone_verified'])
+else:
+    user1.save(update_fields=['email', 'email_verified', 'email_verified_at', 'phone_verified'])
 profile1, _ = UserProfile.objects.get_or_create(user=user1)
 profile1.phone = '9876543210'
-profile1.email_verified_at = timezone.now()
 profile1.save()
 print(f"  ✓ qa_email_verified (email-verified only)")
 
@@ -62,13 +68,19 @@ user2, created = User.objects.get_or_create(
         'last_name': 'BothVerified'
     }
 )
+user2.email = 'qa_both_verified@example.com'
 if created:
     user2.set_password('TestPassword123!')
-    user2.save()
+user2.email_verified = True
+user2.email_verified_at = user2.email_verified_at or timezone.now()
+user2.phone_verified = True
+user2.phone_verified_at = user2.phone_verified_at or timezone.now()
+if created:
+    user2.save(update_fields=['password', 'email', 'email_verified', 'email_verified_at', 'phone_verified', 'phone_verified_at'])
+else:
+    user2.save(update_fields=['email', 'email_verified', 'email_verified_at', 'phone_verified', 'phone_verified_at'])
 profile2, _ = UserProfile.objects.get_or_create(user=user2)
 profile2.phone = '9876543211'
-profile2.email_verified_at = timezone.now()
-profile2.phone_verified_at = timezone.now()
 profile2.save()
 print(f"  ✓ qa_both_verified (email + mobile verified)")
 

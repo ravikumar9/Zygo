@@ -19,11 +19,11 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label">Check-in</label>
-                <input type="date" name="checkin" class="form-control" value="{{ selected_checkin|default:'' }}">
+                <input type="date" name="checkin" class="form-control" value="{{ selected_checkin|default:'' }}" min="{{ today }}">
             </div>
             <div class="col-md-2">
                 <label class="form-label">Check-out</label>
-                <input type="date" name="checkout" class="form-control" value="{{ selected_checkout|default:'' }}">
+                <input type="date" name="checkout" class="form-control" value="{{ selected_checkout|default:'' }}" min="{{ today }}">
             </div>
             <div class="col-md-1">
                 <label class="form-label">Guests</label>

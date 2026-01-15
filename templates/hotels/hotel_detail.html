@@ -160,15 +160,15 @@
                 <form method="post" action="{% url 'hotels:book_hotel' hotel.id %}">
                     {% csrf_token %}
 
-                    <label class="form-label">Check-in</label>
-                    <input type="date" name="checkin_date" id="checkin"
-                           class="form-control mb-2"
-                           value="{{ prefill_checkin|default:'' }}" required id="checkinDateInput">
+                          <label class="form-label">Check-in</label>
+                          <input type="date" name="checkin_date" id="checkin"
+                              class="form-control mb-2"
+                              value="{{ prefill_checkin|default:'' }}" min="{{ prefill_checkin|default:'' }}" required id="checkinDateInput">
 
-                    <label class="form-label">Check-out</label>
-                    <input type="date" name="checkout_date" id="checkout"
-                           class="form-control mb-2"
-                           value="{{ prefill_checkout|default:'' }}" required id="checkoutDateInput">
+                          <label class="form-label">Check-out</label>
+                          <input type="date" name="checkout_date" id="checkout"
+                              class="form-control mb-2"
+                              value="{{ prefill_checkout|default:'' }}" min="{{ prefill_checkin|default:'' }}" required id="checkoutDateInput">
 
                     <label class="form-label">Room Type</label>
                     <select name="room_type" id="room_type"
