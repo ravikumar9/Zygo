@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}My Wallet - GoExplorer{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <!-- Wallet Header -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4">
+                    <h2 class="card-title mb-4">
+                        <i class="fas fa-wallet me-2"></i> My Wallet
+                    </h2>
+                    
+                    <!-- Balance Display -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="bg-light p-4 rounded">
+                                <small class="text-muted d-block mb-2">Available Balance</small>
+                                <h3 class="text-success mb-0">
+                                    <i class="fas fa-rupee-sign"></i>{{ balance|floatformat:0 }}
+                                </h3>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="bg-light p-4 rounded">
+                                <small class="text-muted d-block mb-2">Total Cashback Earned</small>
+                                <h3 class="text-info mb-0">
+                                    <i class="fas fa-rupee-sign"></i>{{ total_cashback|floatformat:0 }}
+                                </h3>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="#" class="btn btn-primary" disabled title="Add money feature coming soon">
+                            <i class="fas fa-plus me-2"></i>Add Money
+                        </a>
+                        <a href="{% url 'bookings:list' %}" class="btn btn-outline-primary">
+                            <i class="fas fa-history me-2"></i>My Bookings
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transaction History -->
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exchange-alt me-2"></i>Transaction History
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if transactions %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in transactions %}
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">
+                                            {{ transaction.created_at|date:"d M Y, g:i A" }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        Payment for Booking #{{ transaction.booking.booking_id }}
+                                    </td>
+                                    <td>
+                                        <strong class="text-success">
+                                            <i class="fas fa-rupee-sign"></i>{{ transaction.amount|floatformat:0 }}
+                                        </strong>
+                                    </td>
+                                    <td>
+                                        {% if transaction.status == 'success' %}
+                                            <span class="badge bg-success">Completed</span>
+                                        {% elif transaction.status == 'pending' %}
+                                            <span class="badge bg-warning">Pending</span>
+                                        {% elif transaction.status == 'failed' %}
+                                            <span class="badge bg-danger">Failed</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ transaction.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">
+                        <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 1rem; display: block;"></i>
+                        <p>No transactions yet</p>
+                        <small>Your payment history will appear here</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Info Section -->
+            <div class="alert alert-info mt-4 mb-0">
+                <strong><i class="fas fa-info-circle me-2"></i>How Wallet Works:</strong>
+                <ul class="mb-0 mt-2">
+                    <li>Earn cashback on hotel and bus bookings</li>
+                    <li>Cashback is credited after booking completion</li>
+                    <li>Use wallet balance for future bookings</li>
+                    <li>Wallet balance never expires</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

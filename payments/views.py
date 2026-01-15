@@ -6,6 +6,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from django.views.generic import TemplateView
 import razorpay
 import hmac
 import hashlib
@@ -292,19 +295,29 @@ def process_wallet_payment(request):
             'message': f'Unexpected error: {str(exc)}'
         }, status=500)
 
-class WalletView(APIView):
-    """View wallet balance and transactions"""
-    permission_classes = [IsAuthenticated]
+
+class WalletView(TemplateView):
+    """Wallet page - shows balance and transaction history"""
+    template_name = 'payments/wallet.html'
     
-    def get(self, request):
-        from .models import Wallet
+    def get(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('users:login')
         
-        try:
-            wallet = Wallet.objects.get(user=request.user)
-        except Wallet.DoesNotExist:
-            wallet = Wallet.objects.create(user=request.user, balance=0)
+        from .models import Wallet, Payment
+        from bookings.models import Booking
         
-        return Response({
+        # Get or create wallet
+        wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': 0})
+        
+        # Get recent transactions (payments)
+        transactions = Payment.objects.filter(booking__user=request.user).order_by('-created_at')[:10]
+        
+        context = {
+            'wallet': wallet,
+            'transactions': transactions,
             'balance': float(wallet.balance),
-            'currency': 'INR'
-        })
+            'total_cashback': float(wallet.balance),
+        }
+        
+        return render(request, self.template_name, context)
