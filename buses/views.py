@@ -6,7 +6,8 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.contrib import messages
 from django.urls import reverse
-from datetime import date
+from datetime import date, timedelta
+from django.utils import timezone
 from decimal import Decimal
 import json
 from .models import Bus, BusRoute, BusSchedule, BusOperator
@@ -286,10 +287,14 @@ def book_bus(request, bus_id):
                     })
 
         total_amount = base_total - corp_discount_amount
+        now = timezone.now()
         booking = Booking.objects.create(
             user=request.user,
             booking_type='bus',
             total_amount=total_amount,
+            status='payment_pending',  # Start in payment_pending until gateway confirms
+            reserved_at=now,
+            expires_at=now + timedelta(minutes=10),
             customer_name=passenger_name or request.user.get_full_name() or request.user.username,
             customer_email=request.user.email,
             customer_phone=getattr(request.user, 'phone', '') or '',

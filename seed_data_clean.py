@@ -8,9 +8,11 @@ from users.models import User, UserProfile
 from hotels.models import Hotel, RoomType
 from buses.models import BusOperator, Bus, BusRoute, BusSchedule, BoardingPoint, DroppingPoint
 from packages.models import Package
-from core.models import City, CorporateDiscount
+from core.models import City, CorporateDiscount, CorporateAccount
+from payments.models import Wallet
 from django.utils import timezone
-from datetime import date, timedelta
+from datetime import date, timedelta, time
+from decimal import Decimal
 
 print("\n" + "="*80)
 print("CLEAN TEST DATA SEEDING")
@@ -123,8 +125,24 @@ for hotel_cfg in hotels_config:
             'has_gym': amenities['gym'],
             'has_restaurant': amenities['restaurant'],
             'has_spa': amenities['spa'],
+            'checkin_time': time(14, 0),  # 2:00 PM
+            'checkout_time': time(11, 0),  # 11:00 AM
+            'cancellation_policy': 'Free cancellation up to 24 hours before check-in. 50% refund within 24 hours. No refund after check-in.',
+            'property_rules': 'Valid ID required at check-in\nNo pets allowed\nNo smoking in rooms\nQuiet hours: 10 PM - 7 AM',
         }
     )
+    
+    # Update existing hotels with policy fields if they're missing
+    if not created:
+        updated = False
+        if not hotel.cancellation_policy:
+            hotel.cancellation_policy = 'Free cancellation up to 24 hours before check-in. 50% refund within 24 hours. No refund after check-in.'
+            updated = True
+        if not hotel.property_rules:
+            hotel.property_rules = 'Valid ID required at check-in\nNo pets allowed\nNo smoking in rooms\nQuiet hours: 10 PM - 7 AM'
+            updated = True
+        if updated:
+            hotel.save()
     
     if created:
         print(f"  ✓ {hotel.name} ({hotel.star_rating}★)")
@@ -267,10 +285,11 @@ if created:
     print(f"  ✓ {package.name} (5 days → Bangalore)")
 
 # ============================================================================
-# CORPORATE DISCOUNT
+# CORPORATE DISCOUNT & ACCOUNTS
 # ============================================================================
-print("\n[6] Setting up corporate discount...")
+print("\n[6] Setting up corporate accounts and discounts...")
 
+# Legacy corporate discount (will be replaced by CorporateAccount)
 corp, created = CorporateDiscount.objects.get_or_create(
     company_name='QA Test Corp',
     email_domain='qatest.com',
@@ -281,7 +300,59 @@ corp, created = CorporateDiscount.objects.get_or_create(
     }
 )
 if created:
-    print(f"  ✓ Corporate: {corp.company_name} (@{corp.email_domain}) - 20% off")
+    print(f"  ✓ Legacy Corporate Discount: {corp.company_name} (@{corp.email_domain}) - 20% off")
+
+# New corporate account (approved with auto-generated coupon)
+corp_user, created_corp_user = User.objects.get_or_create(
+    username='corporate_admin',
+    defaults={
+        'email': 'admin@testcorp.com',
+        'first_name': 'Corporate',
+        'last_name': 'Admin'
+    }
+)
+corp_user.email = 'admin@testcorp.com'
+if created_corp_user:
+    corp_user.set_password('TestPassword123!')
+corp_user.email_verified = True
+corp_user.email_verified_at = corp_user.email_verified_at or timezone.now()
+if created_corp_user:
+    corp_user.save(update_fields=['password', 'email', 'email_verified', 'email_verified_at'])
+else:
+    corp_user.save(update_fields=['email', 'email_verified', 'email_verified_at'])
+UserProfile.objects.get_or_create(user=corp_user)
+print(f"  ✓ Corporate admin user: admin@testcorp.com")
+
+corp_account, created_corp = CorporateAccount.objects.get_or_create(
+    company_name='Test Corp Ltd',
+    email_domain='testcorp.com',
+    defaults={
+        'gst_number': 'TESTGST123456',
+        'account_type': 'business',
+        'contact_person_name': 'Corporate Admin',
+        'contact_email': 'admin@testcorp.com',
+        'contact_phone': '9876543210',
+        'admin_user': corp_user,
+        'status': 'approved',  # Pre-approved for testing
+        'is_active': True,
+    }
+)
+if created_corp:
+    # Auto-approve to generate coupon
+    corp_account.approve(admin_user=corp_user)
+    print(f"  ✓ Corporate Account (APPROVED): {corp_account.company_name}")
+    print(f"    - Coupon: {corp_account.corporate_coupon.code if corp_account.corporate_coupon else 'NOT GENERATED'}")
+else:
+    print(f"  ✓ Corporate Account exists: {corp_account.company_name} ({corp_account.get_status_display()})")
+
+# Add wallet balance to test users for booking tests
+print("\n[7] Seeding wallet balances for test users...")
+for user in [user1, user2, corp_user]:
+    wallet, created = Wallet.objects.get_or_create(user=user)
+    if wallet.balance == 0:
+        wallet.balance = Decimal('10000.00')  # ₹10,000 test balance
+        wallet.save(update_fields=['balance', 'updated_at'])
+        print(f"  ✓ {user.username}: ₹{wallet.balance}")
 
 # ============================================================================
 # SUMMARY
@@ -313,5 +384,12 @@ print("  Email: qa_both_verified@example.com")
 print("  Password: TestPassword123!")
 print("  Verified: Email ✓, Mobile ✓")
 
-print("\n✓ Ready for UI testing!")
+print("\nCorporate Admin (Approved corporate account):")
+print("  Email: admin@testcorp.com")
+print("  Password: TestPassword123!")
+print("  Corporate: Test Corp Ltd (@testcorp.com) - APPROVED")
+print("  Coupon: Auto-applied 10% discount (max ₹1,000)")
+
+print("\n✓ All test users have ₹10,000 wallet balance for booking tests!")
+print("✓ Ready for UI testing!")
 print("="*80 + "\n")

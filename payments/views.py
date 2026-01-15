@@ -197,6 +197,7 @@ def process_wallet_payment(request):
                 # Step 1: Deduct from wallet balance
                 wallet_txn = None
                 if wallet_deduction > 0:
+                    previous_balance = wallet.balance
                     wallet.balance -= wallet_deduction
                     wallet.save(update_fields=['balance', 'updated_at'])
                     
@@ -205,9 +206,13 @@ def process_wallet_payment(request):
                         wallet=wallet,
                         transaction_type='debit',
                         amount=wallet_deduction,
+                        balance_before=previous_balance,
                         balance_after=wallet.balance,
+                        reference_id=str(booking.booking_id),
                         description=f"Wallet payment for booking {booking_id}",
-                        booking=booking
+                        booking=booking,
+                        status='success',
+                        payment_gateway='internal',
                     )
                 
                 # Step 2: Use cashback if needed

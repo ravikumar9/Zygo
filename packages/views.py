@@ -3,6 +3,8 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import render, get_object_or_404, redirect
 from decimal import Decimal
 import json
+from datetime import timedelta
+from django.utils import timezone
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.contrib import messages
@@ -116,10 +118,14 @@ def book_package(request, package_id):
                         })
 
             total_amount = base_total - corp_discount_amount
+            now = timezone.now()
             booking = Booking.objects.create(
                 user=request.user,
                 booking_type='package',
                 total_amount=total_amount,
+                status='payment_pending',  # start in payment_pending until payment succeeds
+                reserved_at=now,
+                expires_at=now + timedelta(minutes=10),
                 customer_name=traveler_name or request.user.get_full_name() or request.user.username,
                 customer_email=traveler_email or request.user.email,
                 customer_phone=traveler_phone or getattr(request.user, 'phone', ''),

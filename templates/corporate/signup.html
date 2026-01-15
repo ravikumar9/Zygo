@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Corporate Signup - GoExplorer{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0"><i class="fas fa-building"></i> Corporate Account Signup</h3>
+                </div>
+                <div class="card-body">
+                    <p class="lead">Sign up your organization to get exclusive corporate benefits:</p>
+                    <ul class="mb-4">
+                        <li><strong>10% Automatic Discount</strong> on all bookings (max ₹1,000)</li>
+                        <li><strong>Wallet Top-up</strong> for employees</li>
+                        <li><strong>Centralized Billing</strong> and reporting</li>
+                        <li><strong>Priority Support</strong></li>
+                    </ul>
+
+                    {% if messages %}
+                        {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <h5 class="mt-4 mb-3">Organization Details</h5>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Company Name *</label>
+                            <input type="text" name="company_name" class="form-control" 
+                                   value="{{ form_data.company_name|default:'' }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Official Email Domain *</label>
+                            <input type="text" name="email_domain" class="form-control" 
+                                   value="{{ form_data.email_domain|default:user_domain }}" 
+                                   placeholder="company.com" required>
+                            <small class="text-muted">All users with this domain will be auto-linked to your corporate account</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">GST Number</label>
+                            <input type="text" name="gst_number" class="form-control" 
+                                   value="{{ form_data.gst_number|default:'' }}" 
+                                   placeholder="Optional now, required for approval">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Account Type *</label>
+                            <select name="account_type" class="form-select" required>
+                                <option value="business" {% if form_data.account_type == 'business' %}selected{% endif %}>Business</option>
+                                <option value="enterprise" {% if form_data.account_type == 'enterprise' %}selected{% endif %}>Enterprise</option>
+                                <option value="startup" {% if form_data.account_type == 'startup' %}selected{% endif %}>Startup</option>
+                                <option value="government" {% if form_data.account_type == 'government' %}selected{% endif %}>Government</option>
+                            </select>
+                        </div>
+
+                        <h5 class="mt-4 mb-3">Contact Person (Primary Administrator)</h5>
+
+                        <div class="mb-3">
+                            <label class="form-label">Contact Person Name *</label>
+                            <input type="text" name="contact_person_name" class="form-control" 
+                                   value="{{ form_data.contact_person_name|default:user_name }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Contact Email *</label>
+                            <input type="email" name="contact_email" class="form-control" 
+                                   value="{{ form_data.contact_email|default:user_email }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Contact Phone *</label>
+                            <input type="tel" name="contact_phone" class="form-control" 
+                                   value="{{ form_data.contact_phone|default:'' }}" required>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-paper-plane"></i> Submit Application
+                            </button>
+                            <a href="{% url 'core:home' %}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

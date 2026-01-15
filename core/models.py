@@ -2,6 +2,9 @@ from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
+from django.conf import settings
+from datetime import timedelta
+from decimal import Decimal
 
 
 class TimeStampedModel(models.Model):
@@ -380,3 +383,170 @@ class CorporateDiscount(TimeStampedModel):
         except cls.DoesNotExist:
             return None
 
+
+class CorporateAccount(TimeStampedModel):
+    """
+    Corporate account for organizations seeking bulk booking discounts.
+    Status flow: pending_verification → approved / rejected
+    Upon approval, a corporate-specific coupon is auto-generated.
+    """
+    STATUS_CHOICES = [
+        ('pending_verification', 'Pending Verification'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    ACCOUNT_TYPE_CHOICES = [
+        ('business', 'Business'),
+        ('enterprise', 'Enterprise'),
+        ('startup', 'Startup'),
+        ('government', 'Government'),
+    ]
+
+    # Organization details
+    company_name = models.CharField(max_length=200, help_text='Official company name')
+    email_domain = models.CharField(
+        max_length=100,
+        unique=True,
+        db_index=True,
+        help_text='Official email domain (e.g., company.com) - users with this domain auto-linked'
+    )
+    gst_number = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text='GST number (optional now, required for approval)'
+    )
+    account_type = models.CharField(
+        max_length=20,
+        choices=ACCOUNT_TYPE_CHOICES,
+        default='business'
+    )
+
+    # Contact person (primary administrator)
+    contact_person_name = models.CharField(max_length=200)
+    contact_email = models.EmailField()
+    contact_phone = models.CharField(max_length=15)
+
+    # Linked admin user (submitting user becomes admin)
+    admin_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='administered_corporate_accounts'
+    )
+
+    # Status and approval
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default='pending_verification',
+        db_index=True
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_corporate_accounts'
+    )
+    rejection_reason = models.TextField(blank=True)
+
+    # Auto-generated corporate coupon (created upon approval)
+    corporate_coupon = models.OneToOneField(
+        'PromoCode',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='linked_corporate_account'
+    )
+
+    # Control
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Corporate Account'
+        verbose_name_plural = 'Corporate Accounts'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['email_domain', 'status']),
+            models.Index(fields=['status', 'is_active']),
+        ]
+
+    def __str__(self):
+        return f"{self.company_name} (@{self.email_domain}) [{self.get_status_display()}]"
+
+    def clean(self):
+        """Validation"""
+        self.email_domain = self.email_domain.lower().strip()
+        if self.status == 'approved' and not self.gst_number:
+            raise ValidationError('GST number is required for approval.')
+
+    def approve(self, admin_user):
+        """
+        Approve corporate account and auto-generate corporate coupon.
+        Coupon defaults: 10% discount, max ₹1,000 cap, applies to hotels + buses.
+        """
+        self.status = 'approved'
+        self.approved_at = timezone.now()
+        self.approved_by = admin_user
+        self.save(update_fields=['status', 'approved_at', 'approved_by', 'updated_at'])
+
+        # Auto-generate corporate-specific coupon if not already exists
+        if not self.corporate_coupon:
+            from core.models import PromoCode
+            coupon_code = f"CORP_{self.email_domain.split('.')[0].upper()}"[:50]
+            
+            # Ensure uniqueness
+            counter = 1
+            original_code = coupon_code
+            while PromoCode.objects.filter(code=coupon_code).exists():
+                coupon_code = f"{original_code}{counter}"
+                counter += 1
+
+            coupon = PromoCode.objects.create(
+                code=coupon_code,
+                description=f"Corporate discount for {self.company_name} ({self.email_domain})",
+                discount_type='percentage',
+                discount_value=Decimal('10.00'),  # 10% discount
+                max_discount_amount=Decimal('1000.00'),  # Max cap ₹1,000
+                min_booking_amount=None,  # No minimum
+                applicable_to='all',  # Hotels + Buses + Packages
+                valid_from=timezone.now(),
+                valid_until=timezone.now() + timedelta(days=365),  # 1 year validity
+                max_total_uses=None,  # Unlimited total uses
+                max_uses_per_user=10,  # 10 uses per user
+                is_active=True,
+            )
+            self.corporate_coupon = coupon
+            self.save(update_fields=['corporate_coupon', 'updated_at'])
+
+    def reject(self, admin_user, reason):
+        """Reject corporate account."""
+        self.status = 'rejected'
+        self.rejected_at = timezone.now()
+        self.approved_by = admin_user  # Reuse approved_by for rejected_by
+        self.rejection_reason = reason
+        self.save(update_fields=['status', 'rejected_at', 'approved_by', 'rejection_reason', 'updated_at'])
+
+    def get_linked_users(self):
+        """Get all users with matching email domain."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        return User.objects.filter(email__iendswith=f'@{self.email_domain}')
+
+    @classmethod
+    def get_for_email(cls, email):
+        """
+        Get approved corporate account for an email address.
+        Returns None if no approved account exists for this domain.
+        """
+        if not email:
+            return None
+        domain = email.lower().split('@')[-1]
+        try:
+            return cls.objects.get(email_domain=domain, status='approved', is_active=True)
+        except cls.DoesNotExist:
+            return None

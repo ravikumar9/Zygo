@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Corporate Dashboard - GoExplorer{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Status Banner -->
+    <div class="card mb-4 
+        {% if corporate_account.status == 'approved' %}border-success
+        {% elif corporate_account.status == 'pending_verification' %}border-warning
+        {% else %}border-danger{% endif %}">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-1">
+                        <i class="fas fa-building"></i> {{ corporate_account.company_name }}
+                    </h4>
+                    <p class="mb-0 text-muted">@{{ corporate_account.email_domain }}</p>
+                </div>
+                <div>
+                    {% if corporate_account.status == 'approved' %}
+                    <span class="badge bg-success fs-5">
+                        <i class="fas fa-check-circle"></i> APPROVED
+                    </span>
+                    {% elif corporate_account.status == 'pending_verification' %}
+                    <span class="badge bg-warning text-dark fs-5">
+                        <i class="fas fa-clock"></i> PENDING VERIFICATION
+                    </span>
+                    {% else %}
+                    <span class="badge bg-danger fs-5">
+                        <i class="fas fa-times-circle"></i> REJECTED
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if corporate_account.status == 'pending_verification' %}
+            <div class="alert alert-warning mt-3 mb-0">
+                <strong>Under Review:</strong> Your corporate account is being verified by our team. You will receive an email notification once approved.
+            </div>
+            {% elif corporate_account.status == 'rejected' %}
+            <div class="alert alert-danger mt-3 mb-0">
+                <strong>Application Rejected:</strong> {{ corporate_account.rejection_reason|default:"Please contact support for details." }}
+            </div>
+            {% elif corporate_account.status == 'approved' and corporate_coupon %}
+            <div class="alert alert-success mt-3 mb-0">
+                <strong>Corporate Benefits Active!</strong> Your corporate discount coupon: 
+                <code class="fs-5">{{ corporate_coupon.code }}</code> 
+                ({{ corporate_coupon.get_discount_display }} - Auto-applied on checkout)
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if corporate_account.status == 'approved' %}
+    <!-- Dashboard Stats -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Wallet Balance</h6>
+                    <h2 class="text-primary mb-0">₹{{ wallet.balance }}</h2>
+                    <a href="/payments/wallet/" class="btn btn-sm btn-outline-primary mt-2">
+                        <i class="fas fa-wallet"></i> View Wallet
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-info">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Total Bookings</h6>
+                    <h2 class="text-info mb-0">{{ total_bookings }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Corporate Bookings</h6>
+                    <h2 class="text-success mb-0">{{ corporate_bookings_count }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-warning">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Total Savings</h6>
+                    <h2 class="text-warning mb-0">₹{{ corporate_savings }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Corporate Discount Info -->
+    {% if corporate_coupon %}
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="fas fa-tags"></i> Active Corporate Discount</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Coupon Code:</strong> <code class="fs-5">{{ corporate_coupon.code }}</code></p>
+                    <p><strong>Discount:</strong> {{ corporate_coupon.get_discount_display }}</p>
+                    <p><strong>Applies To:</strong> {{ corporate_coupon.get_applicable_to_display }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Valid Until:</strong> {{ corporate_coupon.valid_until|date:"d M Y" }}</p>
+                    <p><strong>Max Uses Per User:</strong> {{ corporate_coupon.max_uses_per_user }}</p>
+                    <p><strong>Status:</strong> 
+                        <span class="badge bg-success">Auto-Applied</span>
+                    </p>
+                </div>
+            </div>
+            <div class="alert alert-info mb-0">
+                <i class="fas fa-info-circle"></i> This discount is <strong>automatically applied</strong> when you book hotels, buses, or packages with your corporate email.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Bookings -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-list"></i> Recent Bookings</h5>
+        </div>
+        <div class="card-body">
+            {% if bookings %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Booking ID</th>
+                            <th>Type</th>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Corporate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in bookings %}
+                        <tr>
+                            <td><code>{{ booking.booking_id|slice:":8" }}</code></td>
+                            <td><span class="badge bg-secondary">{{ booking.get_booking_type_display }}</span></td>
+                            <td>{{ booking.created_at|date:"d M Y" }}</td>
+                            <td>₹{{ booking.total_amount }}</td>
+                            <td>
+                                {% if booking.status == 'confirmed' %}
+                                <span class="badge bg-success">Confirmed</span>
+                                {% elif booking.status == 'payment_pending' %}
+                                <span class="badge bg-warning">Payment Pending</span>
+                                {% elif booking.status == 'expired' %}
+                                <span class="badge bg-danger">Expired</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ booking.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if '"type": "corp"' in booking.channel_reference %}
+                                <i class="fas fa-check text-success" title="Corporate discount applied"></i>
+                                {% else %}
+                                <i class="fas fa-minus text-muted"></i>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No bookings yet. Start exploring our services!</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="mt-4 text-center">
+        <a href="/hotels/" class="btn btn-primary me-2"><i class="fas fa-hotel"></i> Book Hotels</a>
+        <a href="/buses/" class="btn btn-primary me-2"><i class="fas fa-bus"></i> Book Buses</a>
+        <a href="/packages/" class="btn btn-primary"><i class="fas fa-suitcase"></i> Explore Packages</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

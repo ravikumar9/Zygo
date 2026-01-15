@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import City, PromoCode, PromoCodeUsage, CorporateDiscount
+from .models import City, PromoCode, PromoCodeUsage, CorporateDiscount, CorporateAccount
 from .admin_utils import safe_admin_display, safe_format_currency
 
 
@@ -283,3 +283,117 @@ class CorporateDiscountAdmin(admin.ModelAdmin):
         self.message_user(request, f"⏸️ {updated} corporate discount(s) deactivated")
     deactivate_discounts.short_description = "⏸️ Deactivate selected discounts"
 
+
+@admin.register(CorporateAccount)
+class CorporateAccountAdmin(admin.ModelAdmin):
+    list_display = [
+        'company_name',
+        'email_domain',
+        'status_badge',
+        'contact_person_name',
+        'contact_email',
+        'gst_number',
+        'coupon_display',
+        'created_at',
+    ]
+    list_filter = ['status', 'is_active', 'account_type', 'created_at']
+    search_fields = ['company_name', 'email_domain', 'contact_person_name', 'contact_email']
+    readonly_fields = ['approved_at', 'rejected_at', 'approved_by', 'created_at', 'updated_at', 'linked_users_count']
+    
+    fieldsets = (
+        ('Organization Details', {
+            'fields': ('company_name', 'email_domain', 'gst_number', 'account_type')
+        }),
+        ('Contact Person', {
+            'fields': ('contact_person_name', 'contact_email', 'contact_phone', 'admin_user')
+        }),
+        ('Status & Approval', {
+            'fields': ('status', 'approved_at', 'rejected_at', 'approved_by', 'rejection_reason')
+        }),
+        ('Corporate Coupon', {
+            'fields': ('corporate_coupon',)
+        }),
+        ('Control', {
+            'fields': ('is_active',)
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at', 'linked_users_count'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    actions = ['approve_accounts', 'reject_accounts']
+    
+    @safe_admin_display()
+    def status_badge(self, obj):
+        """Display status with color coding"""
+        colors = {
+            'pending_verification': ('#ffc107', '🟡 PENDING'),
+            'approved': ('#28a745', '🟢 APPROVED'),
+            'rejected': ('#dc3545', '🔴 REJECTED'),
+        }
+        color, badge_text = colors.get(obj.status, ('#6c757d', obj.get_status_display()))
+        
+        return format_html(
+            '<span style="background: {}; color: white; padding: 3px 8px; border-radius: 3px; font-weight: bold;">{}</span>',
+            color, badge_text
+        )
+    status_badge.short_description = 'Status'
+    
+    @safe_admin_display()
+    def coupon_display(self, obj):
+        """Display linked corporate coupon"""
+        if obj.corporate_coupon:
+            return format_html(
+                '<code style="background: #28a745; color: white; padding: 3px 6px; border-radius: 3px;">{}</code>',
+                obj.corporate_coupon.code
+            )
+        elif obj.status == 'approved':
+            return format_html('<span style="color: #dc3545;">❌ Missing</span>')
+        else:
+            return format_html('<span style="color: #6c757d;">—</span>')
+    coupon_display.short_description = 'Coupon'
+    
+    @safe_admin_display()
+    def linked_users_count(self, obj):
+        """Show number of users linked to this corporate account"""
+        count = obj.get_linked_users().count()
+        return format_html(
+            '<span style="font-weight: bold; color: #0d6efd;">{} users</span>',
+            count
+        )
+    linked_users_count.short_description = 'Linked Users'
+    
+    def approve_accounts(self, request, queryset):
+        """Bulk action: Approve corporate accounts and auto-create coupons"""
+        approved_count = 0
+        for account in queryset.filter(status='pending_verification'):
+            try:
+                account.approve(admin_user=request.user)
+                approved_count += 1
+            except Exception as e:
+                self.message_user(request, f"❌ Failed to approve {account.company_name}: {str(e)}", level='ERROR')
+        
+        if approved_count > 0:
+            self.message_user(request, f"✅ {approved_count} corporate account(s) approved and coupons generated", level='SUCCESS')
+    approve_accounts.short_description = "✅ Approve selected accounts (auto-creates coupons)"
+    
+    def reject_accounts(self, request, queryset):
+        """Bulk action: Reject corporate accounts"""
+        from django.contrib import messages as django_messages
+        
+        # For simplicity, use a default rejection reason for bulk action
+        # In production, you might want a custom admin action with a form
+        reason = "Bulk rejection by admin. Please contact support for details."
+        
+        rejected_count = 0
+        for account in queryset.filter(status='pending_verification'):
+            try:
+                account.reject(admin_user=request.user, reason=reason)
+                rejected_count += 1
+            except Exception as e:
+                self.message_user(request, f"❌ Failed to reject {account.company_name}: {str(e)}", level='ERROR')
+        
+        if rejected_count > 0:
+            self.message_user(request, f"⏸️ {rejected_count} corporate account(s) rejected", level='WARNING')
+    reject_accounts.short_description = "⏸️ Reject selected accounts"

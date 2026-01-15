@@ -535,7 +535,7 @@ def book_hotel(request, pk):
                 user=request.user,
                 booking_type='hotel',
                 total_amount=total,
-                status='reserved',
+                status='payment_pending',  # ← CRITICAL FIX: Start with payment_pending, not reserved
                 reserved_at=reserved_at,
                 expires_at=reserved_at + timedelta(minutes=hold_minutes),
                 customer_name=guest_name or request.user.get_full_name() or request.user.username,

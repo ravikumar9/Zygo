@@ -11,6 +11,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('dashboard/', include('dashboard.urls')),
     path('', include('core.urls')),
+    # Corporate dashboard routes
+    path('corporate/', include('core.urls_corporate')),
     # Web page routes with unique namespaces
     # Web routes (use each app's native namespace)
     path('hotels/', include(('hotels.urls', 'hotels'), namespace='hotels')),

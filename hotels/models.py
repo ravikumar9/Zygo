@@ -84,6 +84,7 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
     
     checkin_time = models.TimeField(default='14:00')
     checkout_time = models.TimeField(default='11:00')
+    cancellation_policy = models.TextField(blank=True, help_text="Cancellation and refund policy")
     
     # GST (Goods and Services Tax)
     gst_percentage = models.DecimalField(

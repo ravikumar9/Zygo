@@ -96,6 +96,7 @@ class Wallet(TimeStampedModel):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wallet')
     
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    cashback_earned = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     currency = models.CharField(max_length=3, default='INR')
     is_active = models.BooleanField(default=True)
     
@@ -107,28 +108,36 @@ class Wallet(TimeStampedModel):
     
     def add_balance(self, amount, description=""):
         """Add balance to wallet"""
+        previous_balance = self.balance
         self.balance += Decimal(str(amount))
         self.save(update_fields=['balance', 'updated_at'])
         WalletTransaction.objects.create(
             wallet=self,
             transaction_type='credit',
             amount=amount,
+            balance_before=previous_balance,
             balance_after=self.balance,
-            description=description
+            description=description,
+            status='success',
+            payment_gateway='internal',
         )
     
     def deduct_balance(self, amount, description=""):
         """Deduct balance from wallet"""
         if self.balance < Decimal(str(amount)):
             raise ValueError("Insufficient wallet balance")
+        previous_balance = self.balance
         self.balance -= Decimal(str(amount))
         self.save(update_fields=['balance', 'updated_at'])
         WalletTransaction.objects.create(
             wallet=self,
             transaction_type='debit',
             amount=amount,
+            balance_before=previous_balance,
             balance_after=self.balance,
-            description=description
+            description=description,
+            status='success',
+            payment_gateway='internal',
         )
     
     def get_available_balance(self):
@@ -144,48 +153,80 @@ class Wallet(TimeStampedModel):
 
 
 class WalletTransaction(TimeStampedModel):
-    """Transaction history for wallet"""
+    """Track all wallet transactions (credits, debits, payments)."""
+
     TRANSACTION_TYPES = [
-        ('credit', 'Credit'),
-        ('debit', 'Debit'),
-        ('refund', 'Refund'),     # ← NEW: Reversal of failed debit
+        ('credit', 'Credit'),      # Money added to wallet
+        ('debit', 'Debit'),        # Money spent from wallet
+        ('cashback', 'Cashback'),  # Reward/cashback credited
+        ('refund', 'Refund'),      # Refund from cancelled booking or failed payment
     ]
-    
+
+    TRANSACTION_STATUS = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('success', 'Success'),
+        ('failed', 'Failed'),
+    ]
+
+    PAYMENT_GATEWAYS = [
+        ('cashfree', 'Cashfree'),
+        ('razorpay', 'Razorpay'),
+        ('upi', 'UPI'),
+        ('netbanking', 'Net Banking'),
+        ('internal', 'Internal'),  # For cashback, refunds, manual adjustments
+    ]
+
     wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='transactions')
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    balance_after = models.DecimalField(max_digits=10, decimal_places=2)
-    description = models.TextField(blank=True)
+    balance_before = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    balance_after = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+
+    payment_gateway = models.CharField(max_length=20, choices=PAYMENT_GATEWAYS, default='internal')
+    status = models.CharField(max_length=20, choices=TRANSACTION_STATUS, default='pending')
+
     reference_id = models.CharField(max_length=200, blank=True)
-    
-    # Link to original transaction (for refunds)
-    parent_transaction = models.ForeignKey(
-        'self', null=True, blank=True, on_delete=models.SET_NULL,
-        related_name='reversals',  # Original debit → Related refunds
-        help_text="Link to original debit transaction if this is a refund"
-    )
-    
+
+    # Gateway tracking
+    gateway_order_id = models.CharField(max_length=200, blank=True)
+    gateway_payment_id = models.CharField(max_length=200, blank=True)
+    gateway_response = models.JSONField(default=dict, blank=True)
+
+    # Reference (if transaction relates to a booking)
     booking = models.ForeignKey(Booking, on_delete=models.SET_NULL, null=True, blank=True, related_name='wallet_transactions')
-    
+
+    description = models.CharField(max_length=500, blank=True)
+    notes = models.TextField(blank=True)
+
     class Meta:
         ordering = ['-created_at']
-    
+        indexes = [
+            models.Index(fields=['wallet', '-created_at']),
+            models.Index(fields=['status']),
+            models.Index(fields=['gateway_order_id']),
+        ]
+
     def __str__(self):
-        return f"{self.wallet.user.username} - {self.transaction_type} - ₹{self.amount}"
-    
+        return f"{self.transaction_type} - ₹{self.amount} - {self.status}"
+
     def create_refund(self, reason="Payment failed"):
-        """Create reverse transaction for failed payment"""
+        """Create reverse transaction for failed payment and restore balance."""
         refund_txn = WalletTransaction.objects.create(
             wallet=self.wallet,
             transaction_type='refund',
             amount=self.amount,
+            balance_before=self.wallet.balance,
             balance_after=self.wallet.balance + self.amount,
             description=f"Refund: {reason}",
-            reference_id=self.reference_id,
-            parent_transaction=self,
-            booking=self.booking
+            gateway_order_id=self.gateway_order_id,
+            gateway_payment_id=self.gateway_payment_id,
+            gateway_response=self.gateway_response,
+            booking=self.booking,
+            status='success',
+            payment_gateway=self.payment_gateway,
         )
-        # Update wallet balance
+        # Update wallet balance to reflect refund
         self.wallet.balance += self.amount
         self.wallet.save(update_fields=['balance', 'updated_at'])
         return refund_txn
@@ -262,3 +303,4 @@ class CashbackLedger(TimeStampedModel):
             description=description
         )
         return cashback
+

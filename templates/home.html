@@ -268,16 +268,22 @@
                     Travel management simplified for your organization. Get exclusive corporate discounts on hotels, buses, and packages.
                 </p>
                 <ul class="list-unstyled mb-4">
-                    <li class="mb-3"><i class="fas fa-check-circle text-success me-2" style="font-size: 1.5rem;"></i> <strong>Automatic Discounts</strong> - Special rates for verified corporate domains</li>
+                    <li class="mb-3"><i class="fas fa-check-circle text-success me-2" style="font-size: 1.5rem;"></i> <strong>Automatic Discounts</strong> - 10% off on all bookings (max ₹1,000)</li>
                     <li class="mb-3"><i class="fas fa-check-circle text-success me-2" style="font-size: 1.5rem;"></i> <strong>Centralized Management</strong> - Track all employee bookings in one place</li>
                     <li class="mb-3"><i class="fas fa-check-circle text-success me-2" style="font-size: 1.5rem;"></i> <strong>Priority Support</strong> - Dedicated support team for your organization</li>
                     <li class="mb-3"><i class="fas fa-check-circle text-success me-2" style="font-size: 1.5rem;"></i> <strong>Flexible Policies</strong> - Customized cancellation and modification policies</li>
                 </ul>
                 <div class="d-flex gap-2">
+                    {% if user.is_authenticated %}
+                    <a href="/corporate/signup/" class="btn btn-primary btn-lg">
+                        <i class="fas fa-building me-2"></i>Apply for Corporate Account
+                    </a>
+                    {% else %}
                     <a href="{% url 'users:register' %}" class="btn btn-primary btn-lg">
                         <i class="fas fa-user-plus me-2"></i>Register for Corporate Benefits
                     </a>
-                    <a href="#" class="btn btn-outline-primary btn-lg" onclick="alert('Contact our sales team at corporate@goexplorer.com for enterprise solutions.');">
+                    {% endif %}
+                    <a href="mailto:corporate@goexplorer.com" class="btn btn-outline-primary btn-lg">
                         <i class="fas fa-envelope me-2"></i>Contact Sales
                     </a>
                 </div>

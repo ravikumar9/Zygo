@@ -39,6 +39,25 @@
                 <li class="nav-item"><a class="nav-link" href="/packages/">Packages</a></li>
 
                 {% if user.is_authenticated %}
+                <!-- Corporate Menu Item (conditional based on user's corporate status) -->
+                {% if user.email %}
+                    {% load core_extras %}
+                    {% get_corporate_status user.email as corporate_status %}
+                    {% if corporate_status == 'approved' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/corporate/dashboard/">
+                            <i class="fas fa-building"></i> Corporate
+                        </a>
+                    </li>
+                    {% elif corporate_status == 'pending_verification' %}
+                    <li class="nav-item">
+                        <a class="nav-link text-warning" href="/corporate/dashboard/">
+                            <i class="fas fa-building"></i> Corporate <span class="badge bg-warning">Pending</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                {% endif %}
+                
                 <li class="nav-item"><a class="nav-link" href="/payments/wallet/" title="Wallet"><i class="fas fa-wallet"></i> <span class="d-lg-none">Wallet</span></a></li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
