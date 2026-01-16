@@ -186,18 +186,27 @@
                 </div>
                 {% endif %}
 
-                <form method="post" action="{% url 'hotels:book_hotel' hotel.id %}">
+                <form method="post" action="{% url 'hotels:book_hotel' hotel.id %}" id="bookingForm">
                     {% csrf_token %}
-
-                          <label class="form-label">Check-in</label>
+                    
+                    <!-- Inline validation messages -->
+                    <div id="validationMessages" class="mb-3"></div>
+                    
+                    <div class="form-group mb-3">
+                          <label class="form-label">Check-in <span class="text-danger">*</span></label>
                           <input type="date" name="checkin_date" id="checkin"
                               class="form-control mb-2"
-                              value="{{ prefill_checkin|default:'' }}" min="{{ prefill_checkin|default:'' }}" required id="checkinDateInput">
+                              value="{{ prefill_checkin|default:'' }}" min="{{ prefill_checkin|default:'' }}" required>
+                          <small class="text-muted">Select your arrival date</small>
+                    </div>
 
-                          <label class="form-label">Check-out</label>
+                    <div class="form-group mb-3">
+                          <label class="form-label">Check-out <span class="text-danger">*</span></label>
                           <input type="date" name="checkout_date" id="checkout"
                               class="form-control mb-2"
-                              value="{{ prefill_checkout|default:'' }}" min="{{ prefill_checkin|default:'' }}" required id="checkoutDateInput">
+                              value="{{ prefill_checkout|default:'' }}" min="{{ prefill_checkin|default:'' }}" required>
+                          <small class="text-muted">Select your departure date</small>
+                    </div>
 
                     <label class="form-label">Room Type</label>
                     <select name="room_type" id="room_type"
@@ -234,9 +243,11 @@
 
                     {% if user.is_authenticated %}
                         {% if user.email_verified_at %}
-                        <button type="submit" class="btn btn-success w-100" onclick="return validateHotelBooking(event)">
+                        <button type="submit" class="btn btn-success w-100" id="proceedBtn" 
+                                onclick="return validateHotelBooking(event)" disabled title="Complete all fields to proceed">
                             Proceed to Payment
                         </button>
+                        <small id="buttonHint" class="text-muted d-block mt-2 text-center">Complete all fields above to proceed</small>
                         {% else %}
                         <a href="{% url 'users:verify-registration-otp' %}" class="btn btn-outline-secondary w-100">
                             Verify Email to Book
@@ -278,10 +289,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const numRooms = document.getElementById('num_rooms');
     const checkin = document.getElementById('checkin');
     const checkout = document.getElementById('checkout');
+    const guestName = document.getElementById('guest_name');
+    const guestEmail = document.getElementById('guest_email');
+    const guestPhone = document.getElementById('guest_phone');
     const baseEl = document.getElementById('basePrice');
     const gstEl = document.getElementById('gstAmount');
     const totalEl = document.getElementById('totalPrice');
+    const proceedBtn = document.getElementById('proceedBtn');
+    const buttonHint = document.getElementById('buttonHint');
     const GST_PCT = {{ hotel.gst_percentage|default:18 }};
+
+    // ===== ISSUE #6: Enable button only when ALL required fields are valid =====
+    function validateAllFields() {
+        const isValid = 
+            roomSelect && roomSelect.value && roomSelect.value !== '' &&
+            checkin && checkin.value && checkin.value !== '' &&
+            checkout && checkout.value && checkout.value !== '' &&
+            guestName && guestName.value && guestName.value.trim() !== '' &&
+            guestEmail && guestEmail.value && guestEmail.value.trim() !== '' &&
+            guestPhone && guestPhone.value && guestPhone.value.trim() !== '';
+        
+        // Update button state
+        if (proceedBtn) {
+            proceedBtn.disabled = !isValid;
+            if (isValid) {
+                proceedBtn.title = 'Click to proceed to payment';
+                if (buttonHint) buttonHint.textContent = 'Ready to proceed!';
+            } else {
+                proceedBtn.title = 'Complete all required fields to proceed';
+                if (buttonHint) buttonHint.textContent = 'Complete all fields above to proceed';
+            }
+        }
+    }
 
     function calc() {
         // Prevent calculation if required fields are missing
@@ -289,6 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
             baseEl.textContent = '0';
             gstEl.textContent = '0';
             totalEl.textContent = '0';
+            validateAllFields();
             return;
         }
 
@@ -304,6 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
             baseEl.textContent = '0';
             gstEl.textContent = '0';
             totalEl.textContent = '0';
+            validateAllFields();
             return;
         }
 
@@ -316,11 +357,18 @@ document.addEventListener('DOMContentLoaded', () => {
         baseEl.textContent = base.toFixed(0);
         gstEl.textContent = gst.toFixed(0);
         totalEl.textContent = total.toFixed(0);
+        
+        validateAllFields();
     }
 
-    // Attach listeners
-    [roomSelect, numRooms, checkin, checkout].forEach(el => {
-        if (el) el.addEventListener('change', calc);
+    // Attach listeners for automatic validation
+    const validationFields = [roomSelect, numRooms, checkin, checkout, guestName, guestEmail, guestPhone];
+    validationFields.forEach(el => {
+        if (el) {
+            el.addEventListener('change', () => { calc(); validateAllFields(); });
+            el.addEventListener('keyup', () => { calc(); validateAllFields(); });
+            el.addEventListener('input', () => { calc(); validateAllFields(); });
+        }
     });
 
     // Quick select room buttons
@@ -336,16 +384,35 @@ document.addEventListener('DOMContentLoaded', () => {
     window.validateHotelBooking = function(event) {
         event.preventDefault();
         
-        const checkinVal = document.getElementById('checkin').value;
-        const checkoutVal = document.getElementById('checkout').value;
+        // Re-validate all fields before submission
+        const errors = [];
         
-        if (!checkinVal || !checkoutVal) {
-            alert('Please select check-in and check-out dates');
+        if (!roomSelect || !roomSelect.value) {
+            errors.push('Please select a room type');
+        }
+        if (!checkin || !checkin.value) {
+            errors.push('Please select a check-in date');
+        }
+        if (!checkout || !checkout.value) {
+            errors.push('Please select a check-out date');
+        }
+        if (!guestName || !guestName.value.trim()) {
+            errors.push('Please enter guest name');
+        }
+        if (!guestEmail || !guestEmail.value.trim()) {
+            errors.push('Please enter email address');
+        }
+        if (!guestPhone || !guestPhone.value.trim()) {
+            errors.push('Please enter phone number');
+        }
+        
+        if (errors.length > 0) {
+            alert('Please fix these errors:\n\n' + errors.join('\n'));
             return false;
         }
         
-        const checkinDate = new Date(checkinVal);
-        const checkoutDate = new Date(checkoutVal);
+        const checkinDate = new Date(checkin.value);
+        const checkoutDate = new Date(checkout.value);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
@@ -362,6 +429,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelector('form').submit();
         return false;
     };
+    
+    // Initial validation check
+    validateAllFields();
 });
 </script>
 {% endblock %}

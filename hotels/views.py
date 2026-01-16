@@ -446,15 +446,38 @@ def book_hotel(request, pk):
             request.session['pending_phone'] = getattr(request.user, 'phone', '')
             return redirect('users:verify-registration-otp')
 
-        room_type_id = request.POST.get('room_type')
-        checkin_date = request.POST.get('checkin_date')
-        checkout_date = request.POST.get('checkout_date')
-        num_rooms = int(request.POST.get('num_rooms', 1))
-        guests = int(request.POST.get('num_guests', 1))
-        guest_name = request.POST.get('guest_name')
-        guest_email = request.POST.get('guest_email')
-        guest_phone = request.POST.get('guest_phone')
+        # ISSUE #3: Backend validation for all required fields
+        room_type_id = request.POST.get('room_type', '').strip()
+        checkin_date = request.POST.get('checkin_date', '').strip()
+        checkout_date = request.POST.get('checkout_date', '').strip()
+        num_rooms = request.POST.get('num_rooms', '1').strip()
+        guests = request.POST.get('num_guests', '1').strip()
+        guest_name = request.POST.get('guest_name', '').strip()
+        guest_email = request.POST.get('guest_email', '').strip()
+        guest_phone = request.POST.get('guest_phone', '').strip()
 
+        # Validate all mandatory fields
+        errors = []
+        if not room_type_id:
+            errors.append('Please select a room type')
+        if not checkin_date:
+            errors.append('Please select a check-in date')
+        if not checkout_date:
+            errors.append('Please select a check-out date')
+        if not guest_name:
+            errors.append('Guest name is required')
+        if not guest_email:
+            errors.append('Email address is required')
+        if not guest_phone:
+            errors.append('Phone number is required')
+        
+        if errors:
+            from django.contrib import messages
+            for error in errors:
+                messages.error(request, error)
+            return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'errors': errors})
+
+        # Parse dates
         try:
             checkin = datetime.strptime(checkin_date, '%Y-%m-%d').date()
             checkout = datetime.strptime(checkout_date, '%Y-%m-%d').date()
@@ -464,10 +487,20 @@ def book_hotel(request, pk):
         if checkout <= checkin:
             return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': 'Check-out must be after check-in'})
 
+        # Validate room type exists - with proper error handling
         try:
-            room_type = hotel.room_types.get(id=room_type_id)
-        except RoomType.DoesNotExist:
-            return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': 'Room type not found'})
+            if not room_type_id.isdigit():
+                raise ValueError('Room ID must be numeric')
+            room_type = hotel.room_types.get(id=int(room_type_id))
+        except (RoomType.DoesNotExist, ValueError):
+            return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': 'Selected room type not found'})
+        
+        # Parse numeric fields safely
+        try:
+            num_rooms = int(num_rooms) if num_rooms and num_rooms.isdigit() else 1
+            guests = int(guests) if guests and guests.isdigit() else 1
+        except ValueError:
+            return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': 'Invalid room or guest count'})
 
         hold_minutes = 10
         lock = None
