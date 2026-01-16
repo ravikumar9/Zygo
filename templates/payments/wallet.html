@@ -135,13 +135,13 @@
                 <h5 class="modal-title" id="addMoneyLabel">Add Money to Wallet</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form method="post" action="{% url 'payments:add-money' %}">
+            <form method="post" action="{% url 'payments:add-money' %}" novalidate>
                 {% csrf_token %}
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="amount" class="form-label">Amount (₹)</label>
-                        <input type="number" step="1" min="1" class="form-control" id="amount" name="amount" placeholder="Enter amount" required>
-                        <div class="form-text">Funds are added instantly for this environment.</div>
+                        <input type="number" name="amount" min="1" step="1" inputmode="numeric" pattern="[0-9]*" class="form-control" id="amount" placeholder="Enter amount" required>
+                        <div class="form-text">Payment integration in progress. Currently for testing only.</div>
                     </div>
                     <div class="mb-3">
                         <label for="notes" class="form-label">Notes (optional)</label>

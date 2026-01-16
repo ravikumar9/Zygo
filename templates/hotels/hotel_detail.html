@@ -243,6 +243,7 @@
 
                     {% if user.is_authenticated %}
                         {% if user.email_verified_at %}
+                        <div id="validationErrors" class="alert alert-danger" style="display: none;"></div>
                         <button type="submit" class="btn btn-success w-100" id="proceedBtn" 
                                 onclick="return validateHotelBooking(event)" disabled title="Complete all fields to proceed">
                             Proceed to Payment
@@ -301,13 +302,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ===== ISSUE #6: Enable button only when ALL required fields are valid =====
     function validateAllFields() {
-        const isValid = 
-            roomSelect && roomSelect.value && roomSelect.value !== '' &&
-            checkin && checkin.value && checkin.value !== '' &&
-            checkout && checkout.value && checkout.value !== '' &&
-            guestName && guestName.value && guestName.value.trim() !== '' &&
-            guestEmail && guestEmail.value && guestEmail.value.trim() !== '' &&
-            guestPhone && guestPhone.value && guestPhone.value.trim() !== '';
+        const errors = [];
+        const errorDiv = document.getElementById('validationErrors');
+        
+        if (!roomSelect || !roomSelect.value || roomSelect.value === '') {
+            errors.push('Please select a room type');
+        }
+        if (!checkin || !checkin.value || checkin.value === '') {
+            errors.push('Please select check-in date');
+        }
+        if (!checkout || !checkout.value || checkout.value === '') {
+            errors.push('Please select check-out date');
+        }
+        if (!guestName || !guestName.value || guestName.value.trim() === '') {
+            errors.push('Please enter guest name');
+        }
+        if (!guestEmail || !guestEmail.value || guestEmail.value.trim() === '') {
+            errors.push('Please enter email address');
+        }
+        if (!guestPhone || !guestPhone.value || guestPhone.value.trim() === '') {
+            errors.push('Please enter mobile number');
+        }
+        
+        const isValid = errors.length === 0;
+        
+        // Show/hide error messages
+        if (errorDiv) {
+            if (errors.length > 0) {
+                errorDiv.innerHTML = '<strong>Please complete:</strong><ul class="mb-0">' + 
+                    errors.map(e => '<li>' + e + '</li>').join('') + '</ul>';
+                errorDiv.style.display = 'block';
+            } else {
+                errorDiv.style.display = 'none';
+            }
+        }
         
         // Update button state
         if (proceedBtn) {

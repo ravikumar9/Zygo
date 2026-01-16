@@ -21,10 +21,10 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% else %}
-    <!-- ISSUE #8 FIX: Add back button to restore booking state -->
+    <!-- Back button: Returns to booking form with preserved state -->
     <div class="mb-3">
-        <a href="javascript:history.back()" class="btn btn-outline-secondary" title="Go back and keep your selections">
-            <i class="fas fa-arrow-left"></i> Back
+        <a href="javascript:goBackToBooking()" class="btn btn-outline-secondary" title="Go back and keep your selections">
+            <i class="fas fa-arrow-left"></i> Back to Booking
         </a>
     </div>
 
@@ -111,6 +111,32 @@
 
 {% block extra_js %}
 <script>
+// Back button handler - returns to correct booking type
+function goBackToBooking() {
+    const bookingType = '{{ booking.booking_type }}';
+    
+    // Use session state if available, otherwise use history.back()
+    if (bookingType === 'hotel') {
+        // Try to get hotel ID from booking details
+        {% if booking.hotel_details %}
+        const hotelId = {{ booking.hotel_details.room_type.hotel.id|default:'null' }};
+        if (hotelId) {
+            window.location.href = '/hotels/' + hotelId + '/';
+            return;
+        }
+        {% endif %}
+    } else if (bookingType === 'bus') {
+        window.location.href = '/buses/';
+        return;
+    } else if (bookingType === 'package') {
+        window.location.href = '/packages/';
+        return;
+    }
+    
+    // Fallback to history
+    history.back();
+}
+
 (function() {
     const countdownEl = document.getElementById('expiry-countdown');
     if (!countdownEl) return;

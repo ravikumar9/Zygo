@@ -315,7 +315,7 @@ def process_wallet_payment(request):
 @login_required
 @require_http_methods(["POST"])
 def add_money(request):
-    """Simple wallet top-up flow for DEV/demo."""
+    """Wallet top-up - requires payment gateway integration."""
     amount_raw = request.POST.get('amount', '0').strip()
     notes = request.POST.get('notes', '').strip()
 
@@ -329,10 +329,13 @@ def add_money(request):
         messages.error(request, "Amount must be greater than zero.")
         return redirect('payments:wallet')
 
-    wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': Decimal('0.00')})
-    wallet.add_balance(amount, description=notes or "Wallet top-up")
-
-    messages.success(request, f"₹{amount} added to your wallet. New balance: ₹{wallet.balance}.")
+    # CRITICAL: Do NOT auto-credit wallet without payment confirmation
+    # Wallet should only be credited after successful payment gateway callback
+    messages.warning(
+        request, 
+        f"Payment gateway integration in progress. "
+        f"Wallet top-up of ₹{amount} will be available after Cashfree/UPI integration is complete."
+    )
     return redirect('payments:wallet')
 
 
