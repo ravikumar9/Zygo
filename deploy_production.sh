@@ -51,15 +51,12 @@ echo -e "${GREEN}✓ Project structure valid${NC}"
 echo -e "\n${YELLOW}[GIT] Committing deployment fixes...${NC}"
 
 git add deploy/gunicorn.goexplorer.service deploy/nginx.goexplorer.dev.conf
-git commit -m "Fix: Update Gunicorn systemd service and Nginx config to resolve 502 Bad Gateway
 
-- Ensure Gunicorn creates socket at /run/gunicorn-goexplorer/goexplorer.sock
 - Pre-create socket directory with proper permissions
 - Add upstream block to Nginx for cleaner proxy config
 - Improve timeout and error handling
 - Update service dependencies and restart policy" || echo "No changes to commit"
 
-git push origin main
 
 echo -e "${GREEN}✓ Changes pushed to GitHub${NC}"
 
