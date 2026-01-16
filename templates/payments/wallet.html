@@ -39,7 +39,7 @@
                         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMoneyModal">
                             <i class="fas fa-plus me-2"></i>Add Money
                         </button>
-                        <a href="{% url 'core:home' %}" class="btn btn-outline-primary">
+                        <a href="{% url 'bookings:my_bookings' %}" class="btn btn-outline-primary">
                             <i class="fas fa-history me-2"></i>My Bookings
                         </a>
                     </div>
@@ -140,7 +140,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="amount" class="form-label">Amount (₹)</label>
-                        <input type="number" step="100" min="1" class="form-control" id="amount" name="amount" placeholder="Enter amount" required>
+                        <input type="number" step="1" min="1" class="form-control" id="amount" name="amount" placeholder="Enter amount" required>
                         <div class="form-text">Funds are added instantly for this environment.</div>
                     </div>
                     <div class="mb-3">

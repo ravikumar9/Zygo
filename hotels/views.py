@@ -594,20 +594,21 @@ def book_hotel(request, pk):
                 total_nights=nights,
             )
 
-            # ISSUE #8 FIX: Save booking state to session for back button recovery
+            # Persist booking state before redirect; required keys for front-end recovery
             request.session['last_booking_state'] = {
-                'hotel_id': hotel.id,
-                'room_type_id': room_type.id,
-                'checkin': checkin.isoformat(),
-                'checkout': checkout.isoformat(),
-                'num_rooms': num_rooms,
-                'num_guests': guests,
+                'room_type_id': str(room_type.id),
+                'check_in': checkin.isoformat(),
+                'check_out': checkout.isoformat(),
                 'guest_name': guest_name,
                 'guest_email': guest_email,
                 'guest_phone': guest_phone,
+                'rooms': num_rooms,
+                'hotel_id': hotel.id,
+                'num_guests': guests,
                 'booking_id': str(booking.booking_id),
             }
             request.session.modified = True
+            request.session.save()
 
             # Use the public booking UUID, not the numeric PK, to match URL patterns
             return redirect(f'/bookings/{booking.booking_id}/confirm/')

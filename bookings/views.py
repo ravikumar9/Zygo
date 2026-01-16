@@ -26,6 +26,12 @@ class BookingListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         return Booking.objects.filter(user=self.request.user).order_by('-created_at')
 
+
+@login_required
+def my_bookings(request):
+    """Function wrapper to provide a named view for My Bookings navigation."""
+    return BookingListView.as_view()(request)
+
 class BookingDetailView(LoginRequiredMixin, DetailView):
     model = Booking
     template_name = 'bookings/booking_detail.html'
