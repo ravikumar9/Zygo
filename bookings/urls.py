@@ -8,6 +8,7 @@ urlpatterns = [
     path('<uuid:booking_id>/', BookingDetailView.as_view(), name='booking-detail'),
     path('<uuid:booking_id>/confirm/', views.booking_confirmation, name='booking-confirm'),
     path('<uuid:booking_id>/payment/', views.payment_page, name='booking-payment'),
+    path('<uuid:booking_id>/cancel/', views.cancel_booking, name='cancel-booking'),
     path('api/create-order/', views.create_razorpay_order, name='create-order'),
     path('api/verify-payment/', views.verify_payment, name='verify-payment'),
 ]

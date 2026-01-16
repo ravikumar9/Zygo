@@ -42,6 +42,11 @@ def booking_confirmation(request, booking_id):
     CRITICAL: User must have email_verified_at (mobile optional/deferred).
     POST from this page redirects to the payment page.
     """
+    # Clear any auth/login messages before entering booking flow
+    from django.contrib.messages import get_messages
+    storage = get_messages(request)
+    storage.used = True
+    
     # ENFORCE EMAIL VERIFICATION (mobile optional/deferred)
     if not request.user.email_verified_at:
         from django.contrib import messages
@@ -77,6 +82,11 @@ def payment_page(request, booking_id):
     If Razorpay credentials are not configured, fall back to a dummy order id so
     the template renders without breaking local flows.
     """
+    # Clear any auth/login messages before payment flow
+    from django.contrib.messages import get_messages
+    storage = get_messages(request)
+    storage.used = True
+    
     # ENFORCE EMAIL VERIFICATION (mobile optional/deferred)
     if not request.user.email_verified_at:
         from django.contrib import messages
@@ -158,6 +168,90 @@ def payment_page(request, booking_id):
         'available_cashback': available_cashback,
     }
     return render(request, 'payments/payment.html', context)
+
+
+@login_required
+def cancel_booking(request, booking_id):
+    """Cancel a booking with refund logic.
+    
+    - Validate cancellation rules
+    - Refund to wallet
+    - Release inventory
+    - Log transaction
+    - Send notification
+    """
+    from django.contrib import messages
+    from django.db import transaction
+    from django.utils import timezone
+    from decimal import Decimal
+    from payments.models import Wallet, WalletTransaction
+    from hotels.channel_manager_service import release_inventory_on_failure
+    
+    booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
+    
+    # Only allow cancellation of confirmed or payment_pending bookings
+    if booking.status not in ['confirmed', 'payment_pending']:
+        messages.error(request, f'Cannot cancel booking in {booking.get_status_display()} status')
+        return redirect('bookings:booking-detail', booking_id=booking.booking_id)
+    
+    # Check cancellation rules
+    check_in_date = None
+    if hasattr(booking, 'hotel_booking') and booking.hotel_booking:
+        check_in_date = booking.hotel_booking.check_in
+    
+    hotel = None
+    if check_in_date and hasattr(booking, 'hotel_booking') and booking.hotel_booking:
+        hotel = booking.hotel_booking.room_type.hotel
+    
+    if not hotel or not check_in_date:
+        messages.error(request, 'Unable to determine hotel or check-in date')
+        return redirect('bookings:booking-detail', booking_id=booking.booking_id)
+    
+    can_cancel, reason = hotel.can_cancel_booking(check_in_date)
+    if not can_cancel:
+        messages.error(request, f'Cannot cancel: {reason}')
+        return redirect('bookings:booking-detail', booking_id=booking.booking_id)
+    
+    # Process cancellation atomically
+    try:
+        with transaction.atomic():
+            # Calculate refund
+            refund_amount = Decimal(str(booking.paid_amount)) * Decimal(hotel.refund_percentage) / Decimal('100')
+            
+            # Update booking
+            booking.status = 'cancelled'
+            booking.cancelled_at = timezone.now()
+            booking.save(update_fields=['status', 'cancelled_at', 'updated_at'])
+            
+            # Refund to wallet if amount > 0
+            if refund_amount > 0 and hotel.refund_mode == 'WALLET':
+                wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': Decimal('0.00')})
+                wallet.balance += refund_amount
+                wallet.save(update_fields=['balance', 'updated_at'])
+                
+                # Log transaction
+                WalletTransaction.objects.create(
+                    wallet=wallet,
+                    transaction_type='refund',
+                    amount=refund_amount,
+                    balance_before=wallet.balance - refund_amount,
+                    balance_after=wallet.balance,
+                    description=f'Cancellation refund for booking {booking.booking_id}',
+                    booking=booking,
+                    status='success',
+                    payment_gateway='internal',
+                )
+            
+            # Release inventory
+            if hasattr(booking, 'hotel_booking') and booking.hotel_booking:
+                release_inventory_on_failure(booking)
+        
+        messages.success(request, f'Booking cancelled. Refund of ₹{refund_amount} processed to wallet.')
+        return redirect('bookings:booking-detail', booking_id=booking.booking_id)
+    
+    except Exception as e:
+        messages.error(request, f'Cancellation failed: {str(e)}')
+        return redirect('bookings:booking-detail', booking_id=booking.booking_id)
 
 
 def create_razorpay_order(request):

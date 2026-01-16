@@ -107,7 +107,7 @@ class BookingAdmin(admin.ModelAdmin):
             'fields': ('customer_name', 'customer_email', 'customer_phone', 'special_requests')
         }),
         ('Financial', {
-            'fields': ('total_amount', 'paid_amount')
+            'fields': ('total_amount', 'paid_amount', 'wallet_balance_before', 'wallet_balance_after')
         }),
         ('Cancellation', {
             'fields': ('cancellation_reason', 'cancelled_at', 'refund_amount'),

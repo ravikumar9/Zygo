@@ -5,18 +5,44 @@
 {% block content %}
 <div class="container my-5">
     <h2 class="mb-3">Booking Details</h2>
-    <div class="card mb-4">
+<div class="card mb-4">
         <div class="card-body">
             <p class="mb-2"><strong>Booking ID:</strong> {{ object.booking_id }}</p>
             <p class="mb-2"><strong>Type:</strong> {{ object.get_booking_type_display }}</p>
-            <p class="mb-2"><strong>Status:</strong> {{ object.get_status_display }}</p>
+            <p class="mb-2"><strong>Status:</strong> 
+                {% if object.status == 'confirmed' %}
+                    <span class="badge bg-success">{{ object.get_status_display }}</span>
+                {% elif object.status == 'payment_pending' %}
+                    <span class="badge bg-warning">{{ object.get_status_display }}</span>
+                {% elif object.status == 'cancelled' %}
+                    <span class="badge bg-danger">{{ object.get_status_display }}</span>
+                {% elif object.status == 'completed' %}
+                    <span class="badge bg-info">{{ object.get_status_display }}</span>
+                {% else %}
+                    <span class="badge bg-secondary">{{ object.get_status_display }}</span>
+                {% endif %}
+            </p>
             <p class="mb-2"><strong>Total Amount:</strong> ₹{{ object.total_amount|floatformat:"0" }}</p>
+            <p class="mb-2"><strong>Paid Amount:</strong> ₹{{ object.paid_amount|floatformat:"0" }}</p>
         </div>
     </div>
 
-    <div class="d-flex gap-2">
-        <a href="{% url 'bookings:booking-confirm' object.booking_id %}" class="btn btn-primary">Proceed to Confirm</a>
-        <a href="{% url 'bookings:booking-payment' object.booking_id %}" class="btn btn-outline-secondary">Go to Payment</a>
+    <div class="d-flex gap-2 flex-wrap">
+        {% if object.status == 'payment_pending' %}
+            <a href="{% url 'bookings:booking-payment' object.booking_id %}" class="btn btn-primary">Proceed to Payment</a>
+            <form method="post" action="{% url 'bookings:cancel-booking' object.booking_id %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure? This action cannot be undone.');">Cancel Booking</button>
+            </form>
+        {% elif object.status == 'confirmed' %}
+            <a href="{% url 'core:home' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
+            <form method="post" action="{% url 'bookings:cancel-booking' object.booking_id %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Are you sure? This will cancel and refund.');">Cancel Booking</button>
+            </form>
+        {% else %}
+            <a href="{% url 'core:home' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

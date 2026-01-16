@@ -174,6 +174,37 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
         # Return path that will be resolved by static() in template
         return '/static/images/hotel_placeholder.svg'
 
+    def can_cancel_booking(self, check_in_date):
+        """Check if a booking can be cancelled based on property rules.
+        
+        Args:
+            check_in_date: date object
+            
+        Returns:
+            (bool, str): (can_cancel, reason)
+        """
+        from datetime import datetime, date, timedelta
+        
+        today = date.today() if isinstance(check_in_date, date) and not isinstance(check_in_date, datetime) else datetime.now().date()
+        
+        if self.cancellation_type == 'NO_CANCELLATION':
+            return False, 'This property does not allow cancellations'
+        
+        if self.cancellation_type == 'UNTIL_CHECKIN':
+            if check_in_date > today:
+                return True, f'Allowed until check-in ({check_in_date})'
+            return False, f'Cancellation only allowed before check-in ({check_in_date})'
+        
+        if self.cancellation_type == 'X_DAYS_BEFORE':
+            if not self.cancellation_days:
+                return False, 'Cancellation days not configured'
+            cutoff_date = check_in_date - timedelta(days=self.cancellation_days)
+            if today <= cutoff_date:
+                return True, f'Allowed until {cutoff_date.strftime("%b %d, %Y")}'
+            return False, f'Cancellation only allowed until {cutoff_date.strftime("%b %d, %Y")}'
+        
+        return False, 'Unknown cancellation policy'
+
 
 class HotelImage(models.Model):
     """Additional images for hotels"""

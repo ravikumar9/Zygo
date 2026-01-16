@@ -199,6 +199,7 @@ def process_wallet_payment(request):
                 
                 # Step 1: Deduct from wallet balance
                 wallet_txn = None
+                wallet_balance_before = wallet.balance
                 if wallet_deduction > 0:
                     previous_balance = wallet.balance
                     wallet.balance -= wallet_deduction
@@ -251,14 +252,17 @@ def process_wallet_payment(request):
                     }
                 )
                 
-                # Step 4: Update booking (THIS MUST SUCCEED OR ROLLBACK ENTIRE TX)
+                # Step 4: Update booking with wallet traceability (THIS MUST SUCCEED OR ROLLBACK ENTIRE TX)
                 now = timezone.now()
                 booking.paid_amount += amount
                 booking.payment_reference = payment.transaction_id
                 booking.status = 'confirmed'  # ← CRITICAL: Move from RESERVED to CONFIRMED
                 booking.confirmed_at = now
+                booking.wallet_balance_before = wallet_balance_before
+                booking.wallet_balance_after = wallet.balance
                 booking.save(update_fields=[
-                    'paid_amount', 'payment_reference', 'status', 'confirmed_at', 'updated_at'
+                    'paid_amount', 'payment_reference', 'status', 'confirmed_at', 
+                    'wallet_balance_before', 'wallet_balance_after', 'updated_at'
                 ])
                 
                 # Step 5: Finalize booking (lock inventory)
