@@ -21,9 +21,16 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% else %}
+    <!-- ISSUE #8 FIX: Add back button to restore booking state -->
+    <div class="mb-3">
+        <a href="javascript:history.back()" class="btn btn-outline-secondary" title="Go back and keep your selections">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+
     <div class="alert alert-info alert-dismissible fade show" role="alert">
         <h4 class="alert-heading">
-            <i class="fas fa-info-circle"></i> Booking Reserved
+            <i class="fas fa-info-circle"></i> Booking Review
         </h4>
         <p>Your booking has been reserved. Please complete the payment to confirm your reservation.</p>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>

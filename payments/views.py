@@ -155,6 +155,9 @@ def process_wallet_payment(request):
     Uses atomic transaction to ensure wallet debit and booking confirmation
     either both succeed or both fail. If anything fails, entire transaction
     rolls back and wallet balance is restored.
+    
+    ISSUE #4 FIX: Use request.data instead of request.body to prevent
+    "cannot access body after reading from request's data stream" error
     """
     from bookings.models import Booking
     from .models import Payment, Wallet, WalletTransaction, CashbackLedger
@@ -162,9 +165,10 @@ def process_wallet_payment(request):
     from django.db import transaction
     
     try:
-        data = json.loads(request.body)
-        booking_id = data.get('booking_id')
-        amount = Decimal(str(data.get('amount', 0)))
+        # ISSUE #4 FIX: Use request.data (DRF-parsed) instead of request.body (raw stream)
+        # This prevents "cannot access body after reading from request's data stream" error
+        booking_id = request.data.get('booking_id')
+        amount = Decimal(str(request.data.get('amount', 0)))
         
         # Validate booking
         try:
