@@ -110,6 +110,11 @@
                     <span {% if not hotel.has_ac %}class="text-muted"{% endif %}>AC</span>
                 </div>
             </div>
+            {% if hotel.amenities_rules %}
+            <div class="alert alert-light border mt-3" style="white-space: pre-line;">
+                {{ hotel.amenities_rules }}
+            </div>
+            {% endif %}
 
             <!-- Hotel Policies Section -->
             <div class="card shadow-sm mt-4 mb-4">

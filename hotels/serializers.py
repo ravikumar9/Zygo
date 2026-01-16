@@ -98,7 +98,7 @@ class HotelDetailSerializer(serializers.ModelSerializer):
             'id', 'name', 'description', 'city', 'city_name', 'address',
             'latitude', 'longitude', 'property_type', 'property_rules', 'star_rating', 'review_rating',
             'review_count', 'image', 'images', 'has_wifi', 'has_parking',
-            'has_pool', 'has_gym', 'has_restaurant', 'has_spa', 'has_ac',
+            'has_pool', 'has_gym', 'has_restaurant', 'has_spa', 'has_ac', 'amenities_rules',
             'checkin_time', 'checkout_time', 'contact_phone', 'contact_email',
             'room_types', 'is_featured', 'active_discounts', 'amenities',
             'gst_percentage'

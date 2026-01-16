@@ -144,6 +144,14 @@ class PromoCode(TimeStampedModel):
     
     def clean(self):
         """Validation"""
+        # Default nullable numeric fields to avoid None comparisons in admin/serializers
+        if self.min_booking_amount is None:
+            self.min_booking_amount = Decimal('0')
+        if self.max_total_uses is None:
+            self.max_total_uses = 0
+        if self.max_discount_amount is None:
+            self.max_discount_amount = Decimal('0')
+
         if self.valid_until and self.valid_from and self.valid_until <= self.valid_from:
             raise ValidationError('Valid until date must be after valid from date')
         

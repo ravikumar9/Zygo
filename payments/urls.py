@@ -8,5 +8,6 @@ urlpatterns = [
     path('verify/', views.VerifyPaymentView.as_view(), name='verify'),
     path('razorpay-webhook/', views.RazorpayWebhookView.as_view(), name='razorpay-webhook'),
     path('process-wallet/', views.process_wallet_payment, name='process-wallet'),
+    path('wallet/add-money/', views.add_money, name='add-money'),
     path('wallet/', views.WalletView.as_view(), name='wallet'),
 ]

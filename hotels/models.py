@@ -46,6 +46,7 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
         help_text="Property category (hotel/resort/villa/homestay/lodge)"
     )
     property_rules = models.TextField(blank=True, help_text="House rules, check-in policies, ID requirements")
+    amenities_rules = models.TextField(blank=True, help_text="Amenity details and usage rules shown as a paragraph")
     
     star_rating = models.IntegerField(choices=STAR_RATINGS, default=3)
     review_rating = models.DecimalField(

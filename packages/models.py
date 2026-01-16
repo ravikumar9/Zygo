@@ -21,6 +21,7 @@ class Package(SoftDeleteMixin, TimeStampedModel):
     
     name = models.CharField(max_length=200)
     description = models.TextField()
+    itinerary_text = models.TextField(blank=True, help_text="Single-field itinerary/notes for quick edits")
     package_type = models.CharField(max_length=20, choices=PACKAGE_TYPES)
     
     destination_cities = models.ManyToManyField(City, related_name='packages')

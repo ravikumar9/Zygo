@@ -25,7 +25,7 @@ class PackageListSerializer(serializers.ModelSerializer):
         model = Package
         fields = [
             'id', 'name', 'package_type', 'duration_days', 'duration_nights',
-            'starting_price', 'image', 'is_featured', 'rating', 'review_count'
+            'starting_price', 'image', 'is_featured', 'rating', 'review_count', 'itinerary_text'
         ]
 
 
@@ -44,7 +44,7 @@ class PackageDetailSerializer(serializers.ModelSerializer):
             'includes_transport', 'includes_meals', 'includes_sightseeing',
             'includes_guide', 'breakfast_included', 'lunch_included',
             'dinner_included', 'max_group_size', 'min_group_size',
-            'is_featured', 'rating', 'review_count', 'itinerary', 'departures'
+            'is_featured', 'rating', 'review_count', 'itinerary_text', 'itinerary', 'departures'
         ]
     
     def get_destination_city_names(self, obj):

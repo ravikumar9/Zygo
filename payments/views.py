@@ -5,8 +5,10 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.views.generic import TemplateView
 import razorpay
@@ -16,6 +18,7 @@ import json
 from decimal import Decimal
 
 from hotels.channel_manager_service import finalize_booking_after_payment, release_inventory_on_failure
+from .models import Wallet, WalletTransaction
 
 
 class CreatePaymentOrderView(APIView):
@@ -301,6 +304,30 @@ def process_wallet_payment(request):
         }, status=500)
 
 
+@login_required
+@require_http_methods(["POST"])
+def add_money(request):
+    """Simple wallet top-up flow for DEV/demo."""
+    amount_raw = request.POST.get('amount', '0').strip()
+    notes = request.POST.get('notes', '').strip()
+
+    try:
+        amount = Decimal(amount_raw)
+    except Exception:
+        messages.error(request, "Please enter a valid amount.")
+        return redirect('payments:wallet')
+
+    if amount <= 0:
+        messages.error(request, "Amount must be greater than zero.")
+        return redirect('payments:wallet')
+
+    wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': Decimal('0.00')})
+    wallet.add_balance(amount, description=notes or "Wallet top-up")
+
+    messages.success(request, f"₹{amount} added to your wallet. New balance: ₹{wallet.balance}.")
+    return redirect('payments:wallet')
+
+
 class WalletView(TemplateView):
     """Wallet page - shows balance and transaction history"""
     template_name = 'payments/wallet.html'
@@ -308,21 +335,18 @@ class WalletView(TemplateView):
     def get(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return redirect('users:login')
-        
-        from .models import Wallet, Payment
-        from bookings.models import Booking
-        
+
         # Get or create wallet
-        wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': 0})
-        
-        # Get recent transactions (payments)
-        transactions = Payment.objects.filter(booking__user=request.user).order_by('-created_at')[:10]
-        
+        wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': Decimal('0.00')})
+
+        # Recent wallet transactions
+        transactions = wallet.transactions.select_related('booking').order_by('-created_at')[:20]
+
         context = {
             'wallet': wallet,
             'transactions': transactions,
             'balance': float(wallet.balance),
-            'total_cashback': float(wallet.balance),
+            'total_cashback': float(wallet.cashback_earned),
         }
-        
+
         return render(request, self.template_name, context)

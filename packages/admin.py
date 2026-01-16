@@ -44,7 +44,7 @@ class PackageAdmin(SoftDeleteAdminMixin, PrimaryImageValidationMixin, admin.Mode
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('name', 'description', 'package_type', 'destination_cities')
+            'fields': ('name', 'description', 'itinerary_text', 'package_type', 'destination_cities')
         }),
         ('Duration', {
             'fields': ('duration_days', 'duration_nights')
