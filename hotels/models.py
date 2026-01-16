@@ -87,6 +87,29 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
     checkout_time = models.TimeField(default='11:00')
     cancellation_policy = models.TextField(blank=True, help_text="Cancellation and refund policy")
     
+    # Cancellation Rules
+    CANCELLATION_TYPES = [
+        ('NO_CANCELLATION', 'No Cancellation'),
+        ('UNTIL_CHECKIN', 'Allowed Until Check-in'),
+        ('X_DAYS_BEFORE', 'Allowed X Days Before Check-in'),
+    ]
+    REFUND_MODES = [
+        ('WALLET', 'Wallet'),
+        ('ORIGINAL', 'Original Payment'),
+    ]
+    cancellation_type = models.CharField(
+        max_length=20,
+        choices=CANCELLATION_TYPES,
+        default='UNTIL_CHECKIN'
+    )
+    cancellation_days = models.PositiveIntegerField(null=True, blank=True)
+    refund_percentage = models.PositiveIntegerField(default=100)
+    refund_mode = models.CharField(
+        max_length=20,
+        choices=REFUND_MODES,
+        default='WALLET'
+    )
+    
     # GST (Goods and Services Tax)
     gst_percentage = models.DecimalField(
         max_digits=5, 

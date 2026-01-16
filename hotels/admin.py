@@ -50,9 +50,9 @@ class HotelAdmin(SoftDeleteAdminMixin, PrimaryImageValidationMixin, admin.ModelA
             'fields': ('has_wifi', 'has_parking', 'has_pool', 'has_gym', 'has_restaurant', 'has_spa', 'has_ac')
         }),
         ('Property Rules & Policies', {
-            'fields': ('property_rules', 'amenities_rules'),
+            'fields': ('cancellation_policy', 'property_rules', 'amenities_rules', 'cancellation_type', 'cancellation_days', 'refund_percentage', 'refund_mode'),
             'classes': ('wide',),
-            'description': 'Enter check-in/out times, cancellation rules, payment terms'
+            'description': 'Cancellation rules, check-in policies, payment terms'
         }),
         ('Check-in/Check-out', {
             'fields': ('checkin_time', 'checkout_time')

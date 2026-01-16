@@ -160,6 +160,7 @@ class WalletTransaction(TimeStampedModel):
         ('debit', 'Debit'),        # Money spent from wallet
         ('cashback', 'Cashback'),  # Reward/cashback credited
         ('refund', 'Refund'),      # Refund from cancelled booking or failed payment
+        ('bonus', 'Bonus'),        # UPI top-up bonus credit
     ]
 
     TRANSACTION_STATUS = [

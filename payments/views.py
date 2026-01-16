@@ -336,6 +336,11 @@ class WalletView(TemplateView):
         if not request.user.is_authenticated:
             return redirect('users:login')
 
+        # Clear login/auth messages before displaying wallet page
+        from django.contrib.messages import get_messages
+        storage = get_messages(request)
+        storage.used = True
+
         # Get or create wallet
         wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': Decimal('0.00')})
 

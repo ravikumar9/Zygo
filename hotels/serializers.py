@@ -101,7 +101,7 @@ class HotelDetailSerializer(serializers.ModelSerializer):
             'has_pool', 'has_gym', 'has_restaurant', 'has_spa', 'has_ac', 'amenities_rules',
             'checkin_time', 'checkout_time', 'contact_phone', 'contact_email',
             'room_types', 'is_featured', 'active_discounts', 'amenities',
-            'gst_percentage'
+            'gst_percentage', 'cancellation_type', 'cancellation_days', 'refund_percentage', 'refund_mode'
         ]
     
     def get_active_discounts(self, obj):
