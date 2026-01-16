@@ -10,4 +10,6 @@ urlpatterns = [
     path('process-wallet/', views.process_wallet_payment, name='process-wallet'),
     path('wallet/add-money/', views.add_money, name='add-money'),
     path('wallet/', views.WalletView.as_view(), name='wallet'),
+    path('cashfree-checkout/', views.cashfree_checkout, name='cashfree-checkout'),
+    path('cashfree-success/', views.cashfree_success, name='cashfree-success'),
 ]

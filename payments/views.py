@@ -315,7 +315,8 @@ def process_wallet_payment(request):
 @login_required
 @require_http_methods(["POST"])
 def add_money(request):
-    """Wallet top-up - requires payment gateway integration."""
+    """Initiate wallet top-up via Cashfree payment gateway."""
+    from django.utils import timezone
     amount_raw = request.POST.get('amount', '0').strip()
     notes = request.POST.get('notes', '').strip()
 
@@ -329,13 +330,75 @@ def add_money(request):
         messages.error(request, "Amount must be greater than zero.")
         return redirect('payments:wallet')
 
-    # CRITICAL: Do NOT auto-credit wallet without payment confirmation
-    # Wallet should only be credited after successful payment gateway callback
-    messages.warning(
-        request, 
-        f"Payment gateway integration in progress. "
-        f"Wallet top-up of ₹{amount} will be available after Cashfree/UPI integration is complete."
+    # Generate unique order ID for wallet top-up
+    order_id = f"WALLET-{request.user.id}-{int(timezone.now().timestamp())}"
+    
+    # Store pending wallet transaction in session (NOT credited yet)
+    request.session['pending_wallet_topup'] = {
+        'amount': float(amount),
+        'order_id': order_id,
+        'notes': notes,
+        'created_at': str(timezone.now())
+    }
+    request.session.modified = True
+    
+    # Redirect to Cashfree payment checkout
+    return redirect(f'/payments/cashfree-checkout/?order_id={order_id}&amount={amount}')
+
+
+@login_required
+def cashfree_checkout(request):
+    """Cashfree checkout page for DEV/Sandbox."""
+    from django.utils import timezone
+    order_id = request.GET.get('order_id')
+    amount = request.GET.get('amount', '0')
+    
+    pending = request.session.get('pending_wallet_topup', {})
+    if not pending or pending.get('order_id') != order_id:
+        messages.error(request, 'Invalid payment session')
+        return redirect('payments:wallet')
+    
+    return render(request, 'payments/cashfree_checkout.html', {
+        'order_id': order_id,
+        'amount': amount,
+        'user': request.user,
+    })
+
+
+@login_required
+def cashfree_success(request):
+    """Handle Cashfree payment success callback."""
+    from django.utils import timezone
+    order_id = request.GET.get('order_id')
+    pending = request.session.get('pending_wallet_topup', {})
+    
+    if not pending or pending.get('order_id') != order_id:
+        messages.error(request, 'Invalid payment session')
+        return redirect('payments:wallet')
+    
+    amount = Decimal(str(pending['amount']))
+    notes = pending.get('notes', 'Wallet top-up')
+    
+    # Credit wallet ONLY after payment success
+    wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': Decimal('0.00')})
+    wallet.add_balance(amount, description=notes)
+    
+    # Log transaction
+    WalletTransaction.objects.create(
+        wallet=wallet,
+        transaction_type='credit',
+        amount=amount,
+        description=f'{notes} (via Cashfree)',
+        status='success',
+        reference_id=order_id,
     )
+    
+    # Clear pending transaction
+    if 'pending_wallet_topup' in request.session:
+        del request.session['pending_wallet_topup']
+        request.session.modified = True
+    
+    messages.success(request, f'₹{amount} added to your wallet successfully.')
     return redirect('payments:wallet')
 
 

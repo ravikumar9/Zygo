@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Wallet Top-Up - GoExplorer{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <div class="col-md-6 mx-auto">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-wallet me-2"></i>Wallet Top-Up via Cashfree
+                    </h4>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-info mb-4">
+                        <strong>Payment Link Generated</strong>
+                        <p class="mb-0">You would be redirected to Cashfree UPI payment page in production.</p>
+                    </div>
+                    
+                    <div class="payment-details mb-4">
+                        <h5>Payment Summary</h5>
+                        <div class="row mb-3">
+                            <div class="col-6 text-muted">Order ID:</div>
+                            <div class="col-6"><strong>{{ order_id }}</strong></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6 text-muted">Amount:</div>
+                            <div class="col-6"><strong class="text-success">₹{{ amount }}</strong></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6 text-muted">User:</div>
+                            <div class="col-6"><strong>{{ user.email }}</strong></div>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning mb-4">
+                        <strong><i class="fas fa-info-circle me-2"></i>DEV Mode</strong>
+                        <p class="mb-0">For testing purposes, payment success is simulated. Click "Confirm Payment" to proceed.</p>
+                    </div>
+                    
+                    <!-- Simulate payment success -->
+                    <a href="{% url 'payments:cashfree-success' %}?order_id={{ order_id }}" 
+                       class="btn btn-success btn-lg w-100 mb-2">
+                        <i class="fas fa-check-circle me-2"></i>Confirm Payment
+                    </a>
+                    
+                    <a href="{% url 'payments:wallet' %}" class="btn btn-secondary w-100">
+                        <i class="fas fa-times-circle me-2"></i>Cancel
+                    </a>
+                    
+                    <div class="mt-4 p-3 bg-light rounded">
+                        <strong>Note for QA/Testing:</strong>
+                        <p class="mb-0 small text-muted">
+                            In production, this would integrate with real Cashfree API. 
+                            Clicking "Confirm Payment" simulates successful payment and credits the wallet.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
