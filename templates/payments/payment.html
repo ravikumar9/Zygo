@@ -334,7 +334,15 @@ const WALLET_BALANCE = parseFloat("{{ wallet_balance|default:'0' }}") || 0;
 const AVAILABLE_CASHBACK = parseFloat("{{ available_cashback|default:'0' }}") || 0;
 
 function initiatePayment() {
-    const paymentMethod = document.querySelector('input[name="payment_method"]:checked').value;
+    const selectedRadio = document.querySelector('input[name="payment_method"]:checked');
+    
+    // CRITICAL: Payment method must be selected
+    if (!selectedRadio) {
+        showError('⚠️ Please select a payment method before proceeding');
+        return;
+    }
+    
+    const paymentMethod = selectedRadio.value;
     
     if (paymentMethod === 'razorpay') {
         initiateRazorpayPayment();
@@ -478,10 +486,30 @@ document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
     });
 });
 
-// Attach payment button handler
+// Attach payment button handler with idempotency guard
 document.getElementById('paymentBtn').addEventListener('click', function(e) {
     e.preventDefault();
+    
+    // CRITICAL: Disable button to prevent double submission
+    if (this.disabled) {
+        showError('Payment processing... please wait');
+        return;
+    }
+    
+    this.disabled = true;
+    this.textContent = '⏳ Processing payment...';
+    this.style.opacity = '0.6';
+    this.style.cursor = 'not-allowed';
+    
+    // Call payment handler
     initiatePayment();
+    
+    // Re-enable after timeout (in case of error)
+    setTimeout(() => {
+        this.disabled = false;
+        this.style.opacity = '1';
+        this.style.cursor = 'pointer';
+    }, 5000);
 });
 </script>
 {% endblock %}

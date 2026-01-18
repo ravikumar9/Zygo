@@ -271,7 +271,7 @@ class RoomMealPlan(TimeStampedModel):
     PLAN_TYPES = [
         ('room_only', 'Room Only'),
         ('room_breakfast', 'Room + Breakfast'),
-        ('room_half_board', 'Room + Breakfast + Dinner'),
+        ('room_half_board', 'Room + Breakfast + Lunch/Dinner'),
         ('room_full_board', 'Room + All Meals'),
     ]
     
