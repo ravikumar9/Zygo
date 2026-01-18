@@ -135,23 +135,40 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
     # Image helpers
     def _image_exists(self, image_field):
         """Return True if the image exists on disk/storage."""
+        import sys
         try:
-            return bool(image_field and image_field.name and default_storage.exists(image_field.name))
-        except Exception:
+            if not image_field:
+                return False
+            if not image_field.name:
+                return False
+            exists = default_storage.exists(image_field.name)
+            print(f"    [FILE_CHECK] {image_field.name}: {'EXISTS' if exists else 'MISSING'}", file=sys.stderr)
+            return exists
+        except Exception as e:
+            print(f"    [FILE_CHECK_ERROR] {str(e)}", file=sys.stderr)
             return False
 
     def get_primary_image(self):
         """Return the primary image file with sensible fallbacks."""
+        import sys
+        print(f"\n  [GET_PRIMARY] Hotel {self.id} ({self.name})", file=sys.stderr)
+        print(f"    Images attached: {self.images.count()}", file=sys.stderr)
+        
         if self._image_exists(self.image):
+            print(f"    -> Using direct hotel.image", file=sys.stderr)
             return self.image
 
         primary = self.images.filter(is_primary=True).first()
         if primary and self._image_exists(primary.image):
+            print(f"    -> Using is_primary=True image", file=sys.stderr)
             return primary.image
 
         first = self.images.first()
         if first and self._image_exists(first.image):
+            print(f"    -> Using first() image", file=sys.stderr)
             return first.image
+        
+        print(f"    -> NO IMAGE FOUND, using placeholder", file=sys.stderr)
         return None
 
     @property
@@ -167,11 +184,12 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
     @property
     def display_image_url(self):
         """Return primary image URL or fallback placeholder"""
+        import sys
         image_url = self.primary_image_url
-        # If we have a valid image URL, return it; otherwise return static fallback path
         if image_url:
+            print(f"  [DISPLAY_URL] Hotel {self.id}: {image_url}", file=sys.stderr)
             return image_url
-        # Return path that will be resolved by static() in template
+        print(f"  [DISPLAY_URL] Hotel {self.id}: PLACEHOLDER", file=sys.stderr)
         return '/static/images/hotel_placeholder.svg'
 
     def can_cancel_booking(self, check_in_date):
