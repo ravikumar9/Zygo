@@ -7,12 +7,20 @@ from datetime import date
 
 
 class BusOperator(SoftDeleteMixin, TimeStampedModel):
-    """Bus operator/company with soft delete support"""
+    """Bus operator/company with approval workflow (Session 3)"""
     VERIFICATION_STATUS = [
         ('pending', 'Pending Verification'),
         ('verified', 'Verified'),
         ('rejected', 'Rejected'),
         ('suspended', 'Suspended'),
+    ]
+    
+    # Session 3: Approval Workflow FSM
+    APPROVAL_STATUS = [
+        ('draft', 'Draft (Incomplete)'),
+        ('pending_verification', 'Pending Verification'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
     ]
     
     name = models.CharField(max_length=200)
@@ -22,17 +30,95 @@ class BusOperator(SoftDeleteMixin, TimeStampedModel):
     contact_email = models.EmailField()
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     
-    # Registration & Verification
+    # Registration & Verification (LEGACY - kept for compatibility)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='bus_operator_profile')
     verification_status = models.CharField(max_length=20, choices=VERIFICATION_STATUS, default='pending')
     verified_at = models.DateTimeField(null=True, blank=True)
     verified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_operators')
     
-    # Business Details
+    # Business Details (MANDATORY)
     business_license = models.CharField(max_length=100, blank=True)
     pan_number = models.CharField(max_length=20, blank=True)
     gst_number = models.CharField(max_length=20, blank=True)
     registered_address = models.TextField(blank=True)
+    
+    # Session 3: Operator Identity (MANDATORY FOR SUBMISSION)
+    company_legal_name = models.CharField(max_length=200, blank=True, help_text="Legal company name (e.g., ABC Tours Pvt Ltd)")
+    operator_office_address = models.TextField(blank=True, help_text="Full office address")
+    
+    # Session 3: Bus Fleet Configuration (MANDATORY FOR SUBMISSION)
+    bus_type = models.CharField(
+        max_length=50, 
+        blank=True,
+        choices=[
+            ('ac_seater', 'AC Seater'),
+            ('non_ac_seater', 'Non-AC Seater'),
+            ('sleeper', 'Sleeper'),
+            ('semi_sleeper', 'Semi-Sleeper'),
+        ],
+        help_text="Primary bus type operated"
+    )
+    total_seats_per_bus = models.IntegerField(null=True, blank=True, help_text="Seats per bus")
+    fleet_size = models.IntegerField(null=True, blank=True, help_text="Total number of buses")
+    
+    # Session 3: Route Configuration (MANDATORY FOR SUBMISSION)
+    primary_source_city = models.ForeignKey(
+        City, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='operators_from'
+    )
+    primary_destination_city = models.ForeignKey(
+        City, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='operators_to'
+    )
+    routes_description = models.TextField(blank=True, help_text="Describe your routes, stops, and schedule")
+    
+    # Session 3: Pricing Configuration (MANDATORY FOR SUBMISSION)
+    base_fare_per_seat = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Average base fare per seat"
+    )
+    gst_percentage = models.IntegerField(default=5, help_text="GST percentage")
+    currency = models.CharField(max_length=3, default='INR')
+    
+    # Session 3: Policies (MANDATORY FOR SUBMISSION)
+    cancellation_policy = models.TextField(blank=True, help_text="Detailed cancellation policy")
+    cancellation_cutoff_hours = models.IntegerField(null=True, blank=True, help_text="Hours before departure for cancellation")
+    refund_percentage = models.IntegerField(default=100, help_text="Refund percentage on cancellation")
+    
+    # Session 3: Amenities
+    has_ac = models.BooleanField(default=False)
+    has_wifi = models.BooleanField(default=False)
+    has_charging_point = models.BooleanField(default=False)
+    has_blanket = models.BooleanField(default=False)
+    has_water_bottle = models.BooleanField(default=False)
+    
+    # Session 3: Approval Workflow (CRITICAL)
+    approval_status = models.CharField(
+        max_length=20,
+        choices=APPROVAL_STATUS,
+        default='draft',
+        help_text="Operator approval state"
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True, help_text="When operator submitted for approval")
+    approved_at = models.DateTimeField(null=True, blank=True, help_text="When admin approved")
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_bus_operators'
+    )
+    rejection_reason = models.TextField(blank=True, help_text="Reason for rejection (visible to operator)")
+    admin_notes = models.TextField(blank=True, help_text="Internal admin notes")
     
     # Stats
     total_trips_completed = models.IntegerField(default=0)
@@ -46,9 +132,45 @@ class BusOperator(SoftDeleteMixin, TimeStampedModel):
     
     class Meta:
         ordering = ['-rating', 'name']
+        indexes = [
+            models.Index(fields=['approval_status', 'is_active']),
+            models.Index(fields=['user', 'approval_status']),
+        ]
     
     def __str__(self):
-        return f"{self.name} ({self.get_verification_status_display()})"
+        return f"{self.name} ({self.get_approval_status_display()})"
+    
+    @property
+    def is_approved(self):
+        """Check if operator is approved and visible"""
+        return self.approval_status == 'approved' and self.is_active
+    
+    @property
+    def completion_percentage(self):
+        """Calculate registration completeness"""
+        required_fields = [
+            self.company_legal_name, self.operator_office_address, self.contact_phone, self.contact_email,
+            self.bus_type, self.total_seats_per_bus, self.fleet_size,
+            self.primary_source_city, self.primary_destination_city,
+            self.base_fare_per_seat, self.cancellation_policy, self.refund_percentage
+        ]
+        completed = sum(1 for field in required_fields if field)
+        return int((completed / len(required_fields)) * 100)
+    
+    def has_required_fields(self):
+        """Validate all required fields for submission"""
+        checks = {
+            'identity': bool(self.company_legal_name and self.company_legal_name.strip() and 
+                           self.operator_office_address and self.operator_office_address.strip() and
+                           self.contact_phone and self.contact_email),
+            'bus_details': bool(self.bus_type and self.total_seats_per_bus and self.total_seats_per_bus > 0 and 
+                              self.fleet_size and self.fleet_size > 0),
+            'routes': bool(self.primary_source_city and self.primary_destination_city and 
+                         self.routes_description and self.routes_description.strip()),
+            'pricing': bool(self.base_fare_per_seat and self.base_fare_per_seat > 0),
+            'policies': bool(self.cancellation_policy and self.cancellation_policy.strip()),
+        }
+        return checks, all(checks.values())
 
 
 class Bus(TimeStampedModel):

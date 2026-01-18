@@ -19,7 +19,13 @@ from hotels.models import City
 
 def bus_list(request):
     """Display all buses with search and filter"""
-    buses = Bus.objects.filter(operator__isnull=False).select_related('operator')
+    # Session 3: Only show buses from APPROVED operators (backend enforcement)
+    buses = Bus.objects.filter(
+        operator__isnull=False,
+        operator__approval_status='approved',  # CRITICAL: Backend enforcement
+        operator__is_active=True,
+        is_active=True
+    ).select_related('operator')
     
     # Search by source and destination cities
     # Accept both legacy and current query param keys
@@ -363,8 +369,13 @@ class BusSearchView(generics.ListAPIView):
         destination_city = self.request.query_params.get('destination')
         date = self.request.query_params.get('date')
         
-        # First get matching routes
-        routes = BusRoute.objects.filter(is_active=True)
+        # First get matching routes from APPROVED operators (Session 3: Backend enforcement)
+        routes = BusRoute.objects.filter(
+            is_active=True,
+            bus__operator__approval_status='approved',  # CRITICAL: Only approved operators
+            bus__operator__is_active=True,
+            bus__is_active=True
+        )
         
         if source_city:
             try:

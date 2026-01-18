@@ -43,42 +43,96 @@ def suspend_operator(modeladmin, request, queryset):
 suspend_operator.short_description = "⏸️ Suspend selected operators"
 
 
+# Session 3: Approval workflow actions
+def approve_operator_registration(modeladmin, request, queryset):
+    """Admin action to approve pending operator registrations"""
+    from django.utils import timezone
+    updated = queryset.filter(approval_status='pending_verification').update(
+        approval_status='approved',
+        approved_at=timezone.now(),
+        approved_by=request.user
+    )
+    modeladmin.message_user(request, f"✅ {updated} operator registration(s) approved!")
+
+approve_operator_registration.short_description = "✅ Approve selected operator registrations"
+
+
+def reject_operator_registration(modeladmin, request, queryset):
+    """Admin action to reject pending operator registrations"""
+    queryset.filter(approval_status='pending_verification').update(
+        approval_status='rejected'
+    )
+    modeladmin.message_user(request, f"❌ Operator registration(s) rejected. Contact admin to provide rejection reason.")
+
+reject_operator_registration.short_description = "❌ Reject selected operator registrations"
+
+
 @admin.register(BusOperator)
 class BusOperatorAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
-    list_display = ['name', 'get_status_badge', 'contact_phone', 'contact_email', 'rating', 'total_buses', 'deletion_status', 'is_active']
-    list_filter = ['is_deleted', 'verification_status', 'is_active', 'rating']
-    search_fields = ['name', 'contact_phone', 'contact_email', 'gst_number', 'pan_number']
+    list_display = ['name', 'get_approval_badge', 'get_status_badge', 'contact_phone', 'rating', 'completion_pct', 'is_active']
+    list_filter = ['approval_status', 'verification_status', 'is_active', 'is_deleted']
+    search_fields = ['name', 'company_legal_name', 'contact_phone', 'contact_email', 'gst_number']
     list_editable = ['is_active']
-    readonly_fields = ['verified_at', 'verified_by', 'created_at', 'updated_at', 'deleted_at', 'deleted_by']
-    actions = [verify_operator, reject_operator, suspend_operator, soft_delete_selected, restore_selected]
+    readonly_fields = ['verified_at', 'verified_by', 'submitted_at', 'approved_at', 'approved_by', 'created_at', 'updated_at', 'deleted_at', 'deleted_by', 'get_completion_display']
+    actions = [verify_operator, reject_operator, suspend_operator, approve_operator_registration, reject_operator_registration, soft_delete_selected, restore_selected]
     
     fieldsets = (
-        ('Business Information', {
-            'fields': ('name', 'description', 'logo', 'contact_phone', 'contact_email')
+        ('Operator Identity', {
+            'fields': ('name', 'company_legal_name', 'contact_phone', 'contact_email', 'description')
+        }),
+        ('Legal & Tax', {
+            'fields': ('gst_number', 'pan_number', 'business_license', 'operator_office_address', 'registered_address')
+        }),
+        ('Bus Fleet Configuration', {
+            'fields': ('bus_type', 'total_seats_per_bus', 'fleet_size')
+        }),
+        ('Route Configuration', {
+            'fields': ('primary_source_city', 'primary_destination_city', 'routes_description')
+        }),
+        ('Pricing & Policies', {
+            'fields': ('base_fare_per_seat', 'gst_percentage', 'currency', 'refund_percentage', 'cancellation_policy', 'cancellation_cutoff_hours')
+        }),
+        ('Amenities', {
+            'fields': ('has_ac', 'has_wifi', 'has_charging_point', 'has_blanket', 'has_water_bottle')
+        }),
+        ('Verification Status (Legacy)', {
+            'fields': ('verification_status', 'verified_at', 'verified_by'),
+            'classes': ('collapse',)
+        }),
+        ('Registration & Approval (Session 3)', {
+            'fields': ('approval_status', 'submitted_at', 'approved_at', 'approved_by', 'rejection_reason', 'admin_notes', 'get_completion_display')
         }),
         ('User Account', {
             'fields': ('user',)
         }),
-        ('Legal Details', {
-            'fields': ('business_license', 'pan_number', 'gst_number', 'registered_address')
-        }),
-        ('Verification', {
-            'fields': ('verification_status', 'verified_at', 'verified_by'),
-            'classes': ('collapse',)
-        }),
-        ('Ratings & Stats', {
+        ('Stats', {
             'fields': ('rating', 'total_trips_completed', 'total_bookings'),
             'classes': ('collapse',)
         }),
         ('Status', {
-            'fields': ('is_active',),
-            'classes': ('collapse',)
+            'fields': ('is_active',)
         }),
         ('Meta', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
+    
+    def get_approval_badge(self, obj):
+        """Display approval status as colored badge"""
+        colors = {
+            'draft': '#6c757d',           # Gray
+            'pending_verification': '#FFA500',  # Orange
+            'approved': '#28a745',        # Green
+            'rejected': '#dc3545',        # Red
+        }
+        color = colors.get(obj.approval_status, '#6c757d')
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 3px;">{}</span>',
+            color,
+            obj.get_approval_status_display()
+        )
+    get_approval_badge.short_description = 'Approval Status'
     
     def get_status_badge(self, obj):
         """Display verification status as colored badge"""
@@ -94,16 +148,33 @@ class BusOperatorAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
             color,
             obj.get_verification_status_display()
         )
-    get_status_badge.short_description = 'Status'
+    get_status_badge.short_description = 'Verification'
     
-    def total_buses(self, obj):
-        """Display total buses for operator"""
-        count = obj.buses.count()
+    def completion_pct(self, obj):
+        """Display completion percentage"""
+        pct = obj.completion_percentage
+        if pct >= 100:
+            color = '#28a745'
+        elif pct >= 75:
+            color = '#FFC107'
+        else:
+            color = '#dc3545'
         return format_html(
-            '<span style="background-color: #007bff; color: white; padding: 3px 8px; border-radius: 3px;">{} buses</span>',
-            count
+            '<span style="background-color: {}; color: white; padding: 3px 8px; border-radius: 3px;">{}%</span>',
+            color, pct
         )
-    total_buses.short_description = 'Buses'
+    completion_pct.short_description = 'Completion'
+    
+    def get_completion_display(self, obj):
+        """Display completion checklist"""
+        checks, _ = obj.has_required_fields()
+        html = '<ul style="list-style: none; padding: 0;">'
+        for section, completed in checks.items():
+            status = '✅' if completed else '❌'
+            html += f'<li>{status} {section.replace("_", " ").title()}</li>'
+        html += '</ul>'
+        return mark_safe(html)
+    get_completion_display.short_description = 'Completion Checklist'
 
 
 @admin.register(Bus)
