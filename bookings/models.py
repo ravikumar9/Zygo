@@ -201,7 +201,7 @@ class HotelBooking(TimeStampedModel):
     """Hotel booking details"""
     booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='hotel_details')
     room_type = models.ForeignKey(RoomType, on_delete=models.PROTECT)
-    meal_plan = models.ForeignKey('hotels.RoomMealPlan', on_delete=models.PROTECT, related_name='bookings', null=True, blank=True)
+    meal_plan = models.ForeignKey('hotels.RoomMealPlan', on_delete=models.PROTECT, related_name='bookings')
     
     check_in = models.DateField()
     check_out = models.DateField()
