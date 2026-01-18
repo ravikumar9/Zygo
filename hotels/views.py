@@ -297,11 +297,6 @@ def get_hotel_occupancy(request, hotel_id):
 
 def hotel_list(request):
     """Hotel listing page with search"""
-    import sys
-    print(f"\n\n{'='*60}", file=sys.stderr)
-    print(f"[HOTEL_LIST] Starting hotel_list view", file=sys.stderr)
-    print(f"{'='*60}", file=sys.stderr)
-    
     hotels = (
         Hotel.objects.filter(is_active=True)
         .annotate(min_price=Coalesce(Min('room_types__base_price'), Value(0, output_field=DecimalField())))
@@ -402,12 +397,7 @@ def hotel_list(request):
         'availability_errors': availability_errors,
     }
     
-    # DEBUG: Log final URLs being sent to template
-    import sys
-    print(f"\n[HOTEL_LIST FINAL] Rendering {len(list(hotels))} hotels", file=sys.stderr)
-    for h in list(hotels):
-        print(f"  Hotel {h.id}: display_image_url = {h.display_image_url}", file=sys.stderr)
-    print(f"{'='*60}\n", file=sys.stderr)
+    return render(request, 'hotels/hotel_list.html', context)
     
     return render(request, 'hotels/hotel_list.html', context)
 
@@ -426,7 +416,7 @@ def hotel_detail(request, pk):
         availability_snapshot = get_hotel_availability_snapshot(hotel, default_checkin, default_checkout, int(default_guests or 1))
     except Exception:
         availability_snapshot = None
-
+    
     context = {
         'hotel': hotel,
         'prefill_checkin': default_checkin,
