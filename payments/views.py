@@ -317,6 +317,7 @@ def process_wallet_payment(request):
 def add_money(request):
     """Initiate wallet top-up via Cashfree payment gateway."""
     from django.utils import timezone
+    from django.urls import reverse
     amount_raw = request.POST.get('amount', '0').strip()
     notes = request.POST.get('notes', '').strip()
 
@@ -342,8 +343,9 @@ def add_money(request):
     }
     request.session.modified = True
     
-    # Redirect to Cashfree payment checkout
-    return redirect(f'/payments/cashfree-checkout/?order_id={order_id}&amount={amount}')
+    # Redirect to Cashfree payment checkout using URL reverse
+    checkout_url = reverse('payments:cashfree-checkout') + f'?order_id={order_id}&amount={amount}'
+    return redirect(checkout_url)
 
 
 @login_required

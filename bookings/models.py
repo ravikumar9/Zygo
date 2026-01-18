@@ -246,7 +246,7 @@ class BusBookingSeat(models.Model):
     
     passenger_name = models.CharField(max_length=200)
     passenger_age = models.IntegerField()
-    passenger_gender = models.CharField(max_length=10, choices=[('M', 'Male'), ('F', 'Female'), ('O', 'Other')])
+    passenger_gender = models.CharField(max_length=10, choices=[('M', 'Male'), ('F', 'Female')])
     
     class Meta:
         unique_together = ['bus_booking', 'seat']

@@ -157,8 +157,19 @@
                             {% if hotel.cancellation_policy %}
                             <p class="mb-2"><strong><i class="fas fa-undo me-2 text-warning"></i>Cancellation:</strong></p>
                             <p class="text-muted small">{{ hotel.cancellation_policy }}</p>
-                            {% else %}
-                            <p class="mb-2"><strong><i class="fas fa-undo me-2 text-warning"></i>Cancellation:</strong> Contact property</p>
+                            {% elif hotel.cancellation_type %}
+                            <p class="mb-2"><strong><i class="fas fa-undo me-2 text-warning"></i>Cancellation:</strong></p>
+                            <p class="text-muted small">
+                                {% if hotel.cancellation_type == 'NO_CANCELLATION' %}
+                                    No cancellations allowed
+                                {% elif hotel.cancellation_type == 'UNTIL_CHECKIN' %}
+                                    Free cancellation until check-in
+                                {% elif hotel.cancellation_type == 'X_DAYS_BEFORE' %}
+                                    Free cancellation until {{ hotel.cancellation_days }} days before check-in
+                                {% else %}
+                                    Check property rules
+                                {% endif %}
+                            </p>
                             {% endif %}
                         </div>
                     </div>
@@ -332,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const buttonHint = document.getElementById('buttonHint');
     const GST_PCT = {{ hotel.gst_percentage|default:18 }};
 
-    // ===== ISSUE #6: Enable button only when ALL required fields are valid =====
+    // ===== ISSUE #1 FIX: Enable button only when ALL required fields are valid =====
     function validateAllFields() {
         const errors = [];
         const errorDiv = document.getElementById('validationErrors');
@@ -354,6 +365,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!guestPhone || !guestPhone.value || guestPhone.value.trim() === '') {
             errors.push('Please enter mobile number');
+        }
+        
+        // Validate checkout > checkin
+        if (!errors.some(e => e.includes('check-in')) && !errors.some(e => e.includes('check-out'))) {
+            const checkinDate = new Date(checkin.value);
+            const checkoutDate = new Date(checkout.value);
+            if (checkoutDate <= checkinDate) {
+                errors.push('Check-out must be after check-in');
+            }
         }
         
         const isValid = errors.length === 0;

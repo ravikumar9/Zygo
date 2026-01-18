@@ -111,7 +111,7 @@
 
 {% block extra_js %}
 <script>
-// Back button handler - returns to correct booking type
+// ===== ISSUE #9 FIX: Back button handler - returns to correct booking type AND preserves session state =====
 function goBackToBooking() {
     const bookingType = '{{ booking.booking_type }}';
     

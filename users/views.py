@@ -342,7 +342,12 @@ def login_view(request):
                     return redirect(next_url)
                 return redirect('core:home')
             else:
-                messages.error(request, 'Invalid email or password')
+                # Check if user exists to provide better error message
+                user_exists = User.objects.filter(email__iexact=entered_email).exists()
+                if not user_exists:
+                    messages.error(request, 'Email or mobile number not registered. Please sign up first.')
+                else:
+                    messages.error(request, 'Incorrect password. Please try again.')
                 login_failed = True
     else:
         form = UserLoginForm()
