@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Hotel, HotelImage, RoomType, RoomAvailability, ChannelManagerRoomMapping
+from .models import Hotel, HotelImage, RoomType, RoomMealPlan, RoomAvailability, ChannelManagerRoomMapping
 from core.admin_mixins import PrimaryImageValidationMixin
 from core.admin_utils import SoftDeleteAdminMixin, soft_delete_selected, restore_selected
 
@@ -9,6 +9,13 @@ class HotelImageInline(admin.TabularInline):
     model = HotelImage
     extra = 1
     fields = ['image', 'caption', 'alt_text', 'display_order', 'is_primary']
+
+
+class RoomMealPlanInline(admin.TabularInline):
+    model = RoomMealPlan
+    extra = 0
+    fields = ['plan_type', 'name', 'price_per_night', 'is_active', 'display_order']
+    ordering = ['display_order', 'id']
 
 
 class RoomTypeInline(admin.TabularInline):
@@ -132,11 +139,51 @@ class HotelAdmin(SoftDeleteAdminMixin, PrimaryImageValidationMixin, admin.ModelA
 
 @admin.register(RoomType)
 class RoomTypeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'hotel', 'room_type', 'max_occupancy', 'base_price', 'total_rooms', 'is_available']
+    list_display = ['name', 'hotel', 'room_type', 'max_occupancy', 'base_price', 'total_rooms', 'is_available', 'meal_plan_count']
     list_filter = ['room_type', 'is_available', 'hotel__city']
     search_fields = ['name', 'hotel__name']
     list_select_related = ['hotel', 'hotel__city']
     list_editable = ['is_available']
+    inlines = [RoomMealPlanInline]
+    
+    def meal_plan_count(self, obj):
+        count = obj.meal_plans.filter(is_active=True).count()
+        return format_html(
+            '<span style="background-color: #007bff; color: white; padding: 2px 8px; border-radius: 3px;">{} plans</span>',
+            count
+        )
+    meal_plan_count.short_description = 'Meal Plans'
+
+
+@admin.register(RoomMealPlan)
+class RoomMealPlanAdmin(admin.ModelAdmin):
+    list_display = ['name', 'room_type_display', 'plan_type', 'price_per_night', 'is_active', 'display_order']
+    list_filter = ['is_active', 'plan_type', 'room_type__hotel__city']
+    search_fields = ['name', 'room_type__name', 'room_type__hotel__name']
+    list_select_related = ['room_type', 'room_type__hotel']
+    list_editable = ['is_active', 'display_order']
+    ordering = ['room_type', 'display_order', 'id']
+    
+    fieldsets = (
+        ('Meal Plan Information', {
+            'fields': ('room_type', 'plan_type', 'name', 'description')
+        }),
+        ('Pricing', {
+            'fields': ('price_per_night',),
+            'description': 'Total price per night including room and meals'
+        }),
+        ('Display Settings', {
+            'fields': ('is_active', 'display_order'),
+        }),
+    )
+    
+    def room_type_display(self, obj):
+        return format_html(
+            '<strong>{}</strong> @ <em>{}</em>',
+            obj.room_type.name,
+            obj.room_type.hotel.name
+        )
+    room_type_display.short_description = 'Room Type / Hotel'
 
 
 @admin.register(RoomAvailability)

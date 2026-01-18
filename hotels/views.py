@@ -423,11 +423,13 @@ def hotel_detail(request, pk):
         request.prefill_guest_email = draft.get('guest_email', '')
         request.prefill_guest_phone = draft.get('guest_phone', '')
         request.prefill_num_rooms = draft.get('num_rooms', 1)
+        request.prefill_meal_plan = draft.get('meal_plan_id', '')
     else:
         request.prefill_guest_name = ''
         request.prefill_guest_email = ''
         request.prefill_guest_phone = ''
         request.prefill_num_rooms = 1
+        request.prefill_meal_plan = ''
     
     try:
         availability_snapshot = get_hotel_availability_snapshot(hotel, default_checkin, default_checkout, int(default_guests or 1))
@@ -440,6 +442,7 @@ def hotel_detail(request, pk):
         'prefill_checkout': default_checkout,
         'prefill_guests': default_guests,
         'prefill_room_type': default_room_type,
+        'prefill_meal_plan': getattr(request, 'prefill_meal_plan', ''),
         'prefill_guest_name': getattr(request, 'prefill_guest_name', ''),
         'prefill_guest_email': getattr(request, 'prefill_guest_email', ''),
         'prefill_guest_phone': getattr(request, 'prefill_guest_phone', ''),
@@ -470,6 +473,7 @@ def book_hotel(request, pk):
 
         # ISSUE #3: Backend validation for all required fields
         room_type_id = request.POST.get('room_type', '').strip()
+        meal_plan_id = request.POST.get('meal_plan', '').strip()
         checkin_date = request.POST.get('checkin_date', '').strip()
         checkout_date = request.POST.get('checkout_date', '').strip()
         num_rooms = request.POST.get('num_rooms', '1').strip()
@@ -482,6 +486,7 @@ def book_hotel(request, pk):
         booking_draft = {
             'hotel_id': hotel.id,
             'room_type_id': room_type_id,
+            'meal_plan_id': meal_plan_id,
             'check_in': checkin_date,
             'check_out': checkout_date,
             'num_rooms': num_rooms,
@@ -497,6 +502,8 @@ def book_hotel(request, pk):
         errors = []
         if not room_type_id:
             errors.append('Please select a room type')
+        if not meal_plan_id:
+            errors.append('Please select a meal plan')
         if not checkin_date:
             errors.append('Please select a check-in date')
         if not checkout_date:
@@ -519,6 +526,7 @@ def book_hotel(request, pk):
                 'prefill_checkout': checkout_date,
                 'prefill_guests': guests,
                 'prefill_room_type': room_type_id,
+                'prefill_meal_plan': meal_plan_id,
                 'prefill_guest_name': guest_name,
                 'prefill_guest_email': guest_email,
                 'prefill_guest_phone': guest_phone,
@@ -543,6 +551,15 @@ def book_hotel(request, pk):
             room_type = hotel.room_types.get(id=int(room_type_id))
         except (RoomType.DoesNotExist, ValueError):
             return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': 'Selected room type not found'})
+        
+        # Validate meal plan exists and belongs to selected room type
+        try:
+            if not meal_plan_id or not meal_plan_id.isdigit():
+                raise ValueError('Meal plan ID must be numeric')
+            from hotels.models import RoomMealPlan
+            meal_plan = RoomMealPlan.objects.get(id=int(meal_plan_id), room_type=room_type, is_active=True)
+        except (RoomMealPlan.DoesNotExist, ValueError):
+            return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': 'Selected meal plan not found or invalid'})
         
         # Parse numeric fields safely
         try:
@@ -602,7 +619,8 @@ def book_hotel(request, pk):
             return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': str(exc)})
 
         nights = (checkout - checkin).days
-        base_total = room_type.base_price * Decimal(str(nights)) * Decimal(str(num_rooms))
+        # Calculate price using meal plan pricing (not base price)
+        base_total = meal_plan.calculate_total_price(num_rooms, nights)
 
         # Corporate discount (email-verified users only; mobile optional)
         corp_discount_amount = Decimal('0.00')
@@ -648,6 +666,7 @@ def book_hotel(request, pk):
             HotelBooking.objects.create(
                 booking=booking,
                 room_type=room_type,
+                meal_plan=meal_plan,
                 check_in=checkin,
                 check_out=checkout,
                 number_of_rooms=num_rooms,
@@ -658,6 +677,7 @@ def book_hotel(request, pk):
             # Persist booking state before redirect; required keys for front-end recovery
             request.session['last_booking_state'] = {
                 'room_type_id': str(room_type.id),
+                'meal_plan_id': str(meal_plan.id),
                 'check_in': checkin.isoformat(),
                 'check_out': checkout.isoformat(),
                 'guest_name': guest_name,
@@ -672,6 +692,7 @@ def book_hotel(request, pk):
             request.session['booking_draft'] = {
                 'hotel_id': hotel.id,
                 'room_type_id': str(room_type.id),
+                'meal_plan_id': str(meal_plan.id),
                 'check_in': checkin.isoformat(),
                 'check_out': checkout.isoformat(),
                 'num_rooms': num_rooms,

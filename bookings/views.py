@@ -167,8 +167,16 @@ def payment_page(request, booking_id):
     except Wallet.DoesNotExist:
         pass
 
+    # Include hotel booking details (room type and meal plan)
+    hotel_booking = getattr(booking, 'hotel_details', None)
+    room_type = getattr(hotel_booking, 'room_type', None) if hotel_booking else None
+    meal_plan = getattr(hotel_booking, 'meal_plan', None) if hotel_booking else None
+
     context = {
         'booking': booking,
+        'hotel_booking': hotel_booking,
+        'room_type': room_type,
+        'meal_plan': meal_plan,
         'total_amount': booking.total_amount,
         'base_amount': base_amount,
         'gst_amount': 0,

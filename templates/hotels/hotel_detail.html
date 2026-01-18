@@ -251,16 +251,23 @@
                           <small class="text-muted">Select your departure date</small>
                     </div>
 
-                    <label class="form-label">Room Type</label>
+                    <label class="form-label">Room Type <span class="text-danger">*</span></label>
                     <select name="room_type" id="room_type"
-                            class="form-select mb-2" required>
-                        <option value="">Select</option>
+                            class="form-select mb-3" required>
+                        <option value="">Select room type</option>
                         {% for room in hotel.room_types.all %}
                         <option value="{{ room.id }}" data-price="{{ room.base_price }}" {% if prefill_room_type|stringformat:'s' == room.id|stringformat:'s' %}selected{% endif %}>
-                            {{ room.name }} - ₹{{ room.base_price }}
+                            {{ room.name }} (Max: {{ room.max_occupancy }} guests)
                         </option>
                         {% endfor %}
                     </select>
+
+                    <label class="form-label">Meal Plan <span class="text-danger">*</span></label>
+                    <select name="meal_plan" id="meal_plan"
+                            class="form-select mb-3" required disabled>
+                        <option value="">Select room type first</option>
+                    </select>
+                    <small class="text-muted d-block mb-3">Price includes selected meal plan</small>
 
                     <label class="form-label">Rooms</label>
                     <input type="number" id="num_rooms" name="num_rooms"
@@ -330,6 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     const roomSelect = document.getElementById('room_type');
+    const mealPlanSelect = document.getElementById('meal_plan');
     const numRooms = document.getElementById('num_rooms');
     const checkin = document.getElementById('checkin');
     const checkout = document.getElementById('checkout');
@@ -343,6 +351,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const buttonHint = document.getElementById('buttonHint');
     const GST_PCT = {{ hotel.gst_percentage|default:18 }};
 
+    // Meal plan cache - populated via Django template
+    const mealPlansByRoom = {};
+    {% for room in hotel.room_types.all %}
+        mealPlansByRoom[{{ room.id }}] = [
+            {% for plan in room.meal_plans.all %}
+            {id: {{ plan.id }}, name: "{{ plan.name }}", price: {{ plan.price_per_night }}, type: "{{ plan.plan_type }}"},
+            {% endfor %}
+        ];
+    {% endfor %}
+
+    // Load meal plans when room type is selected
+    function loadMealPlans() {
+        const roomId = roomSelect.value;
+        mealPlanSelect.innerHTML = '';
+        
+        if (!roomId || !mealPlansByRoom[roomId]) {
+            mealPlanSelect.innerHTML = '<option value="">Select room type first</option>';
+            mealPlanSelect.disabled = true;
+            return;
+        }
+        
+        const plans = mealPlansByRoom[roomId];
+        if (plans && plans.length > 0) {
+            mealPlanSelect.innerHTML = '<option value="">Select meal plan</option>' + 
+                plans.map(plan => `<option value="${plan.id}" data-price="${plan.price}">
+                    ${plan.name} - ₹${Math.round(plan.price)}/night
+                </option>`).join('');
+            mealPlanSelect.disabled = false;
+            
+            // Restore previously selected meal plan if exists
+            const prefillMealPlan = "{{ prefill_meal_plan|default:'' }}";
+            if (prefillMealPlan) {
+                mealPlanSelect.value = prefillMealPlan;
+            }
+        } else {
+            mealPlanSelect.innerHTML = '<option value="">No meal plans available</option>';
+            mealPlanSelect.disabled = true;
+        }
+        
+        calc();
+    }
+
     // ===== ISSUE #1 FIX: Enable button only when ALL required fields are valid =====
     function validateAllFields() {
         const errors = [];
@@ -350,6 +400,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (!roomSelect || !roomSelect.value || roomSelect.value === '') {
             errors.push('Please select a room type');
+        }
+        if (!mealPlanSelect || !mealPlanSelect.value || mealPlanSelect.value === '') {
+            errors.push('Please select a meal plan');
         }
         if (!checkin || !checkin.value || checkin.value === '') {
             errors.push('Please select check-in date');
@@ -404,7 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function calc() {
         // Prevent calculation if required fields are missing
-        if (!roomSelect.value || !checkin.value || !checkout.value) {
+        if (!roomSelect.value || !mealPlanSelect.value || !checkin.value || !checkout.value) {
             baseEl.textContent = '0';
             gstEl.textContent = '0';
             totalEl.textContent = '0';
@@ -412,8 +465,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Parse values
-        const price = parseFloat(roomSelect.selectedOptions[0]?.dataset.price || '0');
+        // Parse values - use meal plan price instead of room base price
+        const mealPlanPrice = parseFloat(mealPlanSelect.selectedOptions[0]?.dataset.price || '0');
         const checkinDate = new Date(checkin.value);
         const checkoutDate = new Date(checkout.value);
         const nights = Math.floor((checkoutDate - checkinDate) / (1000 * 60 * 60 * 24));
@@ -428,8 +481,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Calculate base, GST, and total
-        const base = price * nights * rooms;
+        // Calculate base, GST, and total using meal plan price
+        const base = mealPlanPrice * nights * rooms;
         const gst = base * (GST_PCT / 100);
         const total = base + gst;
 
@@ -441,8 +494,8 @@ document.addEventListener('DOMContentLoaded', () => {
         validateAllFields();
     }
 
-    // Attach listeners for automatic validation
-    const validationFields = [roomSelect, numRooms, checkin, checkout, guestName, guestEmail, guestPhone];
+    // Attach listeners for automatic validation and meal plan loading
+    const validationFields = [numRooms, checkin, checkout, guestName, guestEmail, guestPhone, mealPlanSelect];
     validationFields.forEach(el => {
         if (el) {
             el.addEventListener('change', () => { calc(); validateAllFields(); });
@@ -450,6 +503,15 @@ document.addEventListener('DOMContentLoaded', () => {
             el.addEventListener('input', () => { calc(); validateAllFields(); });
         }
     });
+
+    // Room type selection triggers meal plan loading
+    if (roomSelect) {
+        roomSelect.addEventListener('change', () => { 
+            loadMealPlans(); 
+            calc(); 
+            validateAllFields(); 
+        });
+    }
 
     // Quick select room buttons
     document.querySelectorAll('.select-room').forEach(btn => {
@@ -461,6 +523,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ===== CRITICAL FIX: Run validation on initial page load =====
+    loadMealPlans();
     calc();
     validateAllFields();
 
@@ -473,6 +536,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (!roomSelect || !roomSelect.value) {
             errors.push('Please select a room type');
+        }
+        if (!mealPlanSelect || !mealPlanSelect.value) {
+            errors.push('Please select a meal plan');
         }
         if (!checkin || !checkin.value) {
             errors.push('Please select a check-in date');

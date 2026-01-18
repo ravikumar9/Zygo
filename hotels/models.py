@@ -266,6 +266,42 @@ class RoomType(TimeStampedModel):
         return f"{self.hotel.name} - {self.name}"
 
 
+class RoomMealPlan(TimeStampedModel):
+    """Meal plan options for room types"""
+    PLAN_TYPES = [
+        ('room_only', 'Room Only'),
+        ('room_breakfast', 'Room + Breakfast'),
+        ('room_half_board', 'Room + Breakfast + Dinner'),
+        ('room_full_board', 'Room + All Meals'),
+    ]
+    
+    room_type = models.ForeignKey(RoomType, on_delete=models.CASCADE, related_name='meal_plans')
+    plan_type = models.CharField(max_length=20, choices=PLAN_TYPES)
+    name = models.CharField(max_length=100, help_text="Display name for this meal plan")
+    description = models.TextField(blank=True)
+    
+    # Pricing strategy: absolute or delta
+    price_per_night = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        help_text="Total price per night including room and meals (absolute pricing)"
+    )
+    
+    is_active = models.BooleanField(default=True)
+    display_order = models.IntegerField(default=0, help_text="Lower numbers appear first")
+    
+    class Meta:
+        ordering = ['room_type', 'display_order', 'id']
+        unique_together = [['room_type', 'plan_type']]
+    
+    def __str__(self):
+        return f"{self.room_type.name} - {self.get_plan_type_display()}"
+    
+    def calculate_total_price(self, num_rooms, num_nights):
+        """Calculate total price for given rooms and nights"""
+        return self.price_per_night * num_rooms * num_nights
+
+
 class ChannelManagerRoomMapping(TimeStampedModel):
     """Maps internal room types to external channel manager room identifiers."""
 

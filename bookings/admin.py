@@ -22,7 +22,24 @@ class BusBookingSeatInline(admin.TabularInline):
 class HotelBookingInline(admin.StackedInline):
     model = HotelBooking
     extra = 0
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'updated_at', 'get_meal_plan_display')
+    fields = ('room_type', 'meal_plan', 'check_in', 'check_out', 'number_of_rooms', 'number_of_adults', 'number_of_children', 'total_nights', 'get_meal_plan_display')
+    
+    def get_meal_plan_display(self, obj):
+        """Display meal plan details in admin"""
+        if not obj.meal_plan:
+            return format_html('<em style="color: #999;">No meal plan selected</em>')
+        return format_html(
+            '<div style="background: #f0f7ff; padding: 10px; border-radius: 4px; border-left: 4px solid #0066cc;">'
+            '<strong style="color: #0066cc;">🍽️ {}</strong><br>'
+            '<small>{}</small><br>'
+            '<strong>₹{}/night</strong>'
+            '</div>',
+            obj.meal_plan.name,
+            obj.meal_plan.description,
+            obj.meal_plan.price_per_night
+        )
+    get_meal_plan_display.short_description = 'Meal Plan Details'
 
 
 class BusBookingInline(admin.StackedInline):

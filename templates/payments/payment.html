@@ -200,10 +200,42 @@
         <!-- Booking Summary -->
         <div class="booking-details">
             <h5>Booking Summary</h5>
-            {% if hotel %}
+            {% if hotel_booking %}
+                {% if room_type %}
+                    <div class="detail-item">
+                        <strong>Room Type:</strong> {{ room_type.name }}
+                    </div>
+                    <div class="detail-item">
+                        <strong>Check-in:</strong> {{ hotel_booking.check_in|date:"d M Y" }}
+                    </div>
+                    <div class="detail-item">
+                        <strong>Check-out:</strong> {{ hotel_booking.check_out|date:"d M Y" }}
+                    </div>
+                    <div class="detail-item">
+                        <strong>Number of Rooms:</strong> {{ hotel_booking.number_of_rooms }}
+                    </div>
+                    <div class="detail-item">
+                        <strong>Number of Nights:</strong> {{ hotel_booking.total_nights }}
+                    </div>
+                    {% if meal_plan %}
+                        <div class="detail-item" style="border-top: 1px solid #ddd; padding-top: 0.75rem; margin-top: 0.5rem;">
+                            <strong style="color: #667eea;">🍽️ Meal Plan:</strong>
+                            <p class="mb-0"><strong>{{ meal_plan.name }}</strong></p>
+                            <p class="text-muted small mb-0">{{ meal_plan.description }}</p>
+                            <p class="text-muted small">₹{{ meal_plan.price_per_night }}/night</p>
+                        </div>
+                    {% endif %}
+                {% endif %}
+                {% if hotel %}
+                    <div class="detail-item">
+                        <strong>Hotel:</strong> {{ hotel.name }}
+                        <p class="text-muted small">{{ hotel.city.name }}</p>
+                    </div>
+                {% endif %}
+            {% elif booking.booking_type == 'hotel' %}
+                <!-- Fallback for older bookings without hotel_booking relation -->
                 <div class="detail-item">
-                    <strong>{{ hotel.name }}</strong>
-                    <p class="text-muted small">{{ hotel.city.name }}</p>
+                    <strong>Type:</strong> Hotel Booking
                 </div>
             {% endif %}
             {% if bus %}
@@ -212,11 +244,11 @@
                     <p class="text-muted small">{{ bus.operator.name }}</p>
                 </div>
             {% endif %}
-            <div class="detail-item">
+            <div class="detail-item" style="border-top: 1px solid #ddd; padding-top: 0.75rem; margin-top: 0.5rem;">
                 <strong>Booking ID:</strong> {{ booking.booking_id }}
             </div>
             <div class="detail-item">
-                <strong>Booking Date:</strong> {{ booking.created_at|date:"d M Y" }}
+                <strong>Booking Date:</strong> {{ booking.created_at|date:"d M Y, H:i" }}
             </div>
         </div>
 

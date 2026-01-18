@@ -60,6 +60,14 @@
                     <p class="mb-2"><strong>Check-out:</strong> {{ booking.hotel_details.check_out|date:"d M Y" }}</p>
                     <p class="mb-2"><strong>Nights:</strong> {{ booking.hotel_details.total_nights }}</p>
                     <p class="mb-2"><strong>Rooms:</strong> {{ booking.hotel_details.number_of_rooms }}</p>
+                    {% if booking.hotel_details.meal_plan %}
+                    <div style="background: #f0f7ff; padding: 1rem; border-radius: 6px; margin-top: 1rem;">
+                        <p class="mb-2" style="border-bottom: 1px solid #cce5ff; padding-bottom: 0.5rem;"><strong style="color: #0056b3;">🍽️ Meal Plan</strong></p>
+                        <p class="mb-1"><strong>{{ booking.hotel_details.meal_plan.name }}</strong></p>
+                        <p class="text-muted small mb-1">{{ booking.hotel_details.meal_plan.description }}</p>
+                        <p class="text-muted small"><strong>Price:</strong> ₹{{ booking.hotel_details.meal_plan.price_per_night }}/night</p>
+                    </div>
+                    {% endif %}
                     {% elif booking.bus_details %}
                     <hr>
                     <h6>Bus Booking Details</h6>
