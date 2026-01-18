@@ -256,7 +256,7 @@
                             class="form-select mb-2" required>
                         <option value="">Select</option>
                         {% for room in hotel.room_types.all %}
-                        <option value="{{ room.id }}" data-price="{{ room.base_price }}">
+                        <option value="{{ room.id }}" data-price="{{ room.base_price }}" {% if prefill_room_type|stringformat:'s' == room.id|stringformat:'s' %}selected{% endif %}>
                             {{ room.name }} - ₹{{ room.base_price }}
                         </option>
                         {% endfor %}
@@ -264,19 +264,19 @@
 
                     <label class="form-label">Rooms</label>
                     <input type="number" id="num_rooms" name="num_rooms"
-                           class="form-control mb-2" min="1" value="1">
+                           class="form-control mb-2" min="1" value="{{ prefill_num_rooms|default:'1' }}">
 
                           <label class="form-label">Guest Name</label>
                           <input type="text" name="guest_name" id="guest_name"
-                              class="form-control mb-2" required>
+                              class="form-control mb-2" value="{{ prefill_guest_name|default:'' }}" required>
 
                           <label class="form-label">Email</label>
                           <input type="email" name="guest_email" id="guest_email"
-                              class="form-control mb-2" required>
+                              class="form-control mb-2" value="{{ prefill_guest_email|default:'' }}" required>
 
                           <label class="form-label">Phone</label>
                           <input type="tel" name="guest_phone" id="guest_phone"
-                              class="form-control mb-3" required>
+                              class="form-control mb-3" value="{{ prefill_guest_phone|default:'' }}" required>
 
                     <div class="alert alert-info">
                         Base: ₹<span id="basePrice">0</span><br>

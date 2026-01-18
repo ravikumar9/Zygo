@@ -411,6 +411,23 @@ def hotel_detail(request, pk):
     default_checkout = request.GET.get('checkout') or (today + timedelta(days=1)).strftime('%Y-%m-%d')
     default_guests = request.GET.get('guests') or 1
     default_room_type = request.GET.get('room_type')
+
+    # Restore draft booking data from session (Option A: session-based draft)
+    draft = request.session.get('booking_draft') or {}
+    if draft.get('hotel_id') == hotel.id:
+        default_checkin = draft.get('check_in', default_checkin)
+        default_checkout = draft.get('check_out', default_checkout)
+        default_guests = draft.get('num_guests', default_guests)
+        default_room_type = draft.get('room_type_id', default_room_type)
+        request.prefill_guest_name = draft.get('guest_name', '')
+        request.prefill_guest_email = draft.get('guest_email', '')
+        request.prefill_guest_phone = draft.get('guest_phone', '')
+        request.prefill_num_rooms = draft.get('num_rooms', 1)
+    else:
+        request.prefill_guest_name = ''
+        request.prefill_guest_email = ''
+        request.prefill_guest_phone = ''
+        request.prefill_num_rooms = 1
     
     try:
         availability_snapshot = get_hotel_availability_snapshot(hotel, default_checkin, default_checkout, int(default_guests or 1))
@@ -423,6 +440,10 @@ def hotel_detail(request, pk):
         'prefill_checkout': default_checkout,
         'prefill_guests': default_guests,
         'prefill_room_type': default_room_type,
+        'prefill_guest_name': getattr(request, 'prefill_guest_name', ''),
+        'prefill_guest_email': getattr(request, 'prefill_guest_email', ''),
+        'prefill_guest_phone': getattr(request, 'prefill_guest_phone', ''),
+        'prefill_num_rooms': getattr(request, 'prefill_num_rooms', 1),
         'availability_snapshot': availability_snapshot,
     }
     
@@ -457,6 +478,21 @@ def book_hotel(request, pk):
         guest_email = request.POST.get('guest_email', '').strip()
         guest_phone = request.POST.get('guest_phone', '').strip()
 
+        # Persist draft to session so "Back to Booking" restores fields
+        booking_draft = {
+            'hotel_id': hotel.id,
+            'room_type_id': room_type_id,
+            'check_in': checkin_date,
+            'check_out': checkout_date,
+            'num_rooms': num_rooms,
+            'num_guests': guests,
+            'guest_name': guest_name,
+            'guest_email': guest_email,
+            'guest_phone': guest_phone,
+        }
+        request.session['booking_draft'] = booking_draft
+        request.session.modified = True
+
         # Validate all mandatory fields
         errors = []
         if not room_type_id:
@@ -476,7 +512,19 @@ def book_hotel(request, pk):
             from django.contrib import messages
             for error in errors:
                 messages.error(request, error)
-            return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'errors': errors})
+            context = {
+                'hotel': hotel,
+                'errors': errors,
+                'prefill_checkin': checkin_date,
+                'prefill_checkout': checkout_date,
+                'prefill_guests': guests,
+                'prefill_room_type': room_type_id,
+                'prefill_guest_name': guest_name,
+                'prefill_guest_email': guest_email,
+                'prefill_guest_phone': guest_phone,
+                'prefill_num_rooms': num_rooms,
+            }
+            return render(request, 'hotels/hotel_detail.html', context)
 
         # Parse dates
         try:
@@ -501,7 +549,19 @@ def book_hotel(request, pk):
             num_rooms = int(num_rooms) if num_rooms and num_rooms.isdigit() else 1
             guests = int(guests) if guests and guests.isdigit() else 1
         except ValueError:
-            return render(request, 'hotels/hotel_detail.html', {'hotel': hotel, 'error': 'Invalid room or guest count'})
+            context = {
+                'hotel': hotel,
+                'error': 'Invalid room or guest count',
+                'prefill_checkin': checkin_date,
+                'prefill_checkout': checkout_date,
+                'prefill_guests': guests,
+                'prefill_room_type': room_type_id,
+                'prefill_guest_name': guest_name,
+                'prefill_guest_email': guest_email,
+                'prefill_guest_phone': guest_phone,
+                'prefill_num_rooms': num_rooms,
+            }
+            return render(request, 'hotels/hotel_detail.html', context)
 
         hold_minutes = 10
         lock = None
@@ -606,6 +666,19 @@ def book_hotel(request, pk):
                 'rooms': num_rooms,
                 'hotel_id': hotel.id,
                 'num_guests': guests,
+                'booking_id': str(booking.booking_id),
+            }
+            # Keep booking_draft aligned with actual booking for Back to Booking
+            request.session['booking_draft'] = {
+                'hotel_id': hotel.id,
+                'room_type_id': str(room_type.id),
+                'check_in': checkin.isoformat(),
+                'check_out': checkout.isoformat(),
+                'num_rooms': num_rooms,
+                'num_guests': guests,
+                'guest_name': guest_name,
+                'guest_email': guest_email,
+                'guest_phone': guest_phone,
                 'booking_id': str(booking.booking_id),
             }
             request.session.modified = True

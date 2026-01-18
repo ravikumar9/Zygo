@@ -12,4 +12,5 @@ urlpatterns = [
     path('wallet/', views.WalletView.as_view(), name='wallet'),
     path('cashfree-checkout/', views.cashfree_checkout, name='cashfree-checkout'),
     path('cashfree-success/', views.cashfree_success, name='cashfree-success'),
+    path('cashfree-webhook/', views.cashfree_webhook, name='cashfree-webhook'),
 ]

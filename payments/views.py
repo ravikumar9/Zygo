@@ -150,165 +150,196 @@ class RazorpayWebhookView(APIView):
 @permission_classes([IsAuthenticated])
 def process_wallet_payment(request):
     """
-    Process payment using wallet balance and cashback.
-    
-    Uses atomic transaction to ensure wallet debit and booking confirmation
-    either both succeed or both fail. If anything fails, entire transaction
-    rolls back and wallet balance is restored.
-    
-    ISSUE #4 FIX: Use request.data instead of request.body to prevent
-    "cannot access body after reading from request's data stream" error
+    Confirm a booking using wallet funds only.
+
+    Requirements implemented:
+    - Validate balance >= payable
+    - Deduct wallet (and cashback) atomically
+    - Create wallet transaction + payment record
+    - Update booking status -> confirmed (idempotent)
+    - Lock inventory via finalize_booking_after_payment
+    - Idempotent: if already confirmed/paid, no double charge
+    - If any step fails, rollback the entire transaction
     """
     from bookings.models import Booking
     from .models import Payment, Wallet, WalletTransaction, CashbackLedger
     from django.utils import timezone
     from django.db import transaction
-    
+    from django.urls import reverse
+
+    booking_id = request.data.get('booking_id')
     try:
-        # ISSUE #4 FIX: Use request.data (DRF-parsed) instead of request.body (raw stream)
-        # This prevents "cannot access body after reading from request's data stream" error
-        booking_id = request.data.get('booking_id')
-        amount = Decimal(str(request.data.get('amount', 0)))
-        
-        # Validate booking
-        try:
-            booking = Booking.objects.get(booking_id=booking_id, user=request.user)
-        except Booking.DoesNotExist:
-            return JsonResponse({'status': 'error', 'message': 'Booking not found'}, status=404)
-        
-        # Get wallet
-        try:
-            wallet = Wallet.objects.get(user=request.user, is_active=True)
-        except Wallet.DoesNotExist:
-            return JsonResponse({'status': 'error', 'message': 'Wallet not found'}, status=404)
-        
-        # Check available balance
-        total_available = wallet.get_available_balance()
-        if total_available < amount:
-            return JsonResponse({
-                'status': 'error',
-                'message': f'Insufficient balance. Available: ₹{total_available}, Required: ₹{amount}'
-            }, status=400)
-        
-        # ATOMIC TRANSACTION: Either both wallet and booking update, or neither
-        try:
-            with transaction.atomic():
-                # Lock rows to prevent race conditions
-                wallet = Wallet.objects.select_for_update().get(pk=wallet.pk)
-                booking = Booking.objects.select_for_update().get(pk=booking.pk)
-                
-                # Calculate how much to deduct from wallet balance vs cashback
-                wallet_deduction = min(wallet.balance, amount)
-                cashback_needed = amount - wallet_deduction
-                
-                # Step 1: Deduct from wallet balance
-                wallet_txn = None
-                wallet_balance_before = wallet.balance
-                if wallet_deduction > 0:
-                    previous_balance = wallet.balance
-                    wallet.balance -= wallet_deduction
-                    wallet.save(update_fields=['balance', 'updated_at'])
-                    
-                    # Record transaction
-                    wallet_txn = WalletTransaction.objects.create(
-                        wallet=wallet,
-                        transaction_type='debit',
-                        amount=wallet_deduction,
-                        balance_before=previous_balance,
-                        balance_after=wallet.balance,
-                        reference_id=str(booking.booking_id),
-                        description=f"Wallet payment for booking {booking_id}",
-                        booking=booking,
-                        status='success',
-                        payment_gateway='internal',
-                    )
-                
-                # Step 2: Use cashback if needed
-                cashback_used = Decimal('0')
-                if cashback_needed > 0:
-                    cashback_entries = CashbackLedger.objects.filter(
-                        wallet=wallet,
-                        is_used=False,
-                        is_expired=False,
-                        expires_at__gt=timezone.now()
-                    ).order_by('expires_at')
-                    
-                    remaining = cashback_needed
-                    for cb_entry in cashback_entries:
-                        if remaining <= 0:
-                            break
-                        use_amount = min(cb_entry.amount, remaining)
-                        cb_entry.mark_as_used(use_amount)
-                        cashback_used += use_amount
-                        remaining -= use_amount
-                
-                # Step 3: Create payment record
-                payment = Payment.objects.create(
-                    booking=booking,
-                    amount=amount,
-                    payment_method='wallet',
-                    status='success',
-                    transaction_date=timezone.now(),
-                    transaction_id=f"WALLET-{booking_id}",
-                    gateway_response={
-                        'wallet_amount': float(wallet_deduction),
-                        'cashback_amount': float(cashback_used)
-                    }
-                )
-                
-                # Step 4: Update booking with wallet traceability (THIS MUST SUCCEED OR ROLLBACK ENTIRE TX)
-                now = timezone.now()
-                booking.paid_amount += amount
-                booking.payment_reference = payment.transaction_id
-                booking.status = 'confirmed'  # ← CRITICAL: Move from RESERVED to CONFIRMED
-                booking.confirmed_at = now
-                booking.wallet_balance_before = wallet_balance_before
-                booking.wallet_balance_after = wallet.balance
-                booking.save(update_fields=[
-                    'paid_amount', 'payment_reference', 'status', 'confirmed_at', 
-                    'wallet_balance_before', 'wallet_balance_after', 'updated_at'
-                ])
-                
-                # Step 5: Finalize booking (lock inventory)
-                from hotels.channel_manager_service import finalize_booking_after_payment
-                finalize_booking_after_payment(booking, payment_reference=payment.transaction_id)
-                
-                # SUCCESS: All steps completed, transaction commits
-                return JsonResponse({
-                    'status': 'success',
-                    'message': 'Payment successful - booking confirmed',
-                    'payment_id': str(payment.id),
-                    'booking_id': str(booking.booking_id),
-                    'booking_status': 'confirmed'
-                })
-        
-        except Exception as payment_error:
-            # AUTOMATIC ROLLBACK: All DB changes reverted
-            # wallet.balance is restored
-            # booking.status stays RESERVED
-            # Transaction is rolled back
-            
-            booking.status = 'payment_failed'
-            booking.cancelled_at = timezone.now()
-            booking.save(update_fields=['status', 'cancelled_at', 'updated_at'])
-            
-            # Create refund record for audit trail (OUTSIDE atomic block)
-            # This shows admin what failed and was rolled back
-            if wallet_txn:
-                wallet_txn.create_refund(reason=f"Payment failed: {str(payment_error)}")
-            
-            return JsonResponse({
-                'status': 'error',
-                'message': f'Payment processing failed: {str(payment_error)}',
-                'booking_status': 'payment_failed'
-            }, status=500)
-    
-    except json.JSONDecodeError:
-        return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
-    except Exception as exc:
+        amount_requested = Decimal(str(request.data.get('amount', 0)))
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid amount'}, status=400)
+
+    # Validate booking belongs to user
+    try:
+        booking = Booking.objects.get(booking_id=booking_id, user=request.user)
+    except Booking.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Booking not found'}, status=404)
+
+    # Idempotency and disallow paying cancelled/expired
+    payable = booking.total_amount - booking.paid_amount
+    if payable <= 0 or booking.status in ['confirmed', 'completed', 'refunded', 'cancelled', 'expired']:
+        redirect_url = reverse('bookings:booking-confirm', kwargs={'booking_id': booking.booking_id})
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Booking already confirmed',
+            'redirect_url': redirect_url,
+            'booking_status': booking.status,
+        })
+
+    # Enforce that frontend-provided amount matches server-side payable
+    amount = payable
+    if amount_requested and amount_requested != payable:
+        # Optional: allow equal within rounding
+        if abs(amount_requested - payable) > Decimal('0.01'):
+            return JsonResponse({'status': 'error', 'message': 'Amount mismatch'}, status=400)
+
+    # Validate wallet
+    wallet = Wallet.objects.filter(user=request.user, is_active=True).first()
+    if not wallet:
+        return JsonResponse({'status': 'error', 'message': 'Wallet not found'}, status=404)
+
+    # Check balance + cashback availability (non-mutating)
+    total_available = wallet.get_available_balance()
+    if total_available < amount:
         return JsonResponse({
             'status': 'error',
-            'message': f'Unexpected error: {str(exc)}'
+            'message': f'Insufficient balance. Available: ₹{total_available}, Required: ₹{amount}'
+        }, status=400)
+
+    # Perform atomic debit + booking confirm
+    try:
+        with transaction.atomic():
+            # Lock rows
+            wallet = Wallet.objects.select_for_update().get(pk=wallet.pk)
+            booking = Booking.objects.select_for_update().get(pk=booking.pk)
+
+            # Recompute payable inside lock to avoid race
+            payable_locked = booking.total_amount - booking.paid_amount
+            if payable_locked <= 0 or booking.status in ['confirmed', 'completed', 'refunded', 'cancelled', 'expired']:
+                redirect_url = reverse('bookings:booking-confirm', kwargs={'booking_id': booking.booking_id})
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Booking already confirmed',
+                    'redirect_url': redirect_url,
+                    'booking_status': booking.status,
+                })
+
+            # Validate funds again with locked balances
+            total_available_locked = wallet.get_available_balance()
+            if total_available_locked < payable_locked:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Insufficient balance. Available: ₹{total_available_locked}, Required: ₹{payable_locked}'
+                }, status=400)
+
+            # Deduct from wallet balance first
+            wallet_txn = None
+            wallet_balance_before = wallet.balance
+            wallet_deduction = min(wallet.balance, payable_locked)
+            cashback_needed = payable_locked - wallet_deduction
+
+            if wallet_deduction > 0:
+                previous_balance = wallet.balance
+                wallet.balance -= wallet_deduction
+                wallet.save(update_fields=['balance', 'updated_at'])
+                wallet_txn = WalletTransaction.objects.create(
+                    wallet=wallet,
+                    transaction_type='debit',
+                    amount=wallet_deduction,
+                    balance_before=previous_balance,
+                    balance_after=wallet.balance,
+                    reference_id=str(booking.booking_id),
+                    description=f"Wallet payment for booking {booking.booking_id}",
+                    booking=booking,
+                    status='success',
+                    payment_gateway='internal',
+                )
+
+            # Use cashback ledger FIFO for remainder
+            cashback_used = Decimal('0')
+            if cashback_needed > 0:
+                cashback_entries = CashbackLedger.objects.select_for_update().filter(
+                    wallet=wallet,
+                    is_used=False,
+                    is_expired=False,
+                    expires_at__gt=timezone.now()
+                ).order_by('expires_at')
+
+                remaining = cashback_needed
+                for cb_entry in cashback_entries:
+                    if remaining <= 0:
+                        break
+                    use_amount = min(cb_entry.amount, remaining)
+                    cb_entry.mark_as_used(use_amount)
+                    cashback_used += use_amount
+                    remaining -= use_amount
+
+                if remaining > 0:
+                    raise ValueError("Cashback balance changed during processing")
+
+            # Create payment record (idempotent per booking via transaction_id)
+            payment = Payment.objects.create(
+                booking=booking,
+                amount=payable_locked,
+                payment_method='wallet',
+                status='success',
+                transaction_date=timezone.now(),
+                transaction_id=f"WALLET-{booking.booking_id}",
+                gateway_response={
+                    'wallet_amount': float(wallet_deduction),
+                    'cashback_amount': float(cashback_used)
+                }
+            )
+
+            # Update booking
+            now = timezone.now()
+            booking.paid_amount += payable_locked
+            booking.payment_reference = payment.transaction_id
+            booking.status = 'confirmed'
+            booking.confirmed_at = now
+            booking.wallet_balance_before = wallet_balance_before
+            booking.wallet_balance_after = wallet.balance
+            booking.save(update_fields=[
+                'paid_amount', 'payment_reference', 'status', 'confirmed_at',
+                'wallet_balance_before', 'wallet_balance_after', 'updated_at'
+            ])
+
+            # Lock inventory permanently
+            finalize_booking_after_payment(booking, payment_reference=payment.transaction_id)
+
+            redirect_url = reverse('bookings:booking-confirm', kwargs={'booking_id': booking.booking_id})
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Payment successful - booking confirmed',
+                'payment_id': str(payment.id),
+                'booking_id': str(booking.booking_id),
+                'booking_status': 'confirmed',
+                'redirect_url': redirect_url,
+            })
+
+    except Exception as exc:
+        # Rollback is automatic. Mark booking as payment_failed and release lock defensively.
+        from hotels.channel_manager_service import release_inventory_on_failure
+        booking.status = 'payment_failed'
+        booking.cancelled_at = timezone.now()
+        booking.save(update_fields=['status', 'cancelled_at', 'updated_at'])
+        release_inventory_on_failure(booking)
+
+        # Attempt to record a refund for any wallet txn if created (best-effort)
+        try:
+            if 'wallet_txn' in locals() and wallet_txn:
+                wallet_txn.create_refund(reason=f"Payment failed: {str(exc)}")
+        except Exception:
+            pass
+
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Payment processing failed: {str(exc)}',
+            'booking_status': 'payment_failed'
         }, status=500)
 
 
@@ -318,8 +349,11 @@ def add_money(request):
     """Initiate wallet top-up via Cashfree payment gateway."""
     from django.utils import timezone
     from django.urls import reverse
+    from django.db import transaction
+    from .models import WalletTransaction, Wallet
+
     amount_raw = request.POST.get('amount', '0').strip()
-    notes = request.POST.get('notes', '').strip()
+    notes = request.POST.get('notes', '').strip() or 'Wallet top-up'
 
     try:
         amount = Decimal(amount_raw)
@@ -331,9 +365,33 @@ def add_money(request):
         messages.error(request, "Amount must be greater than zero.")
         return redirect('payments:wallet')
 
+    wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': Decimal('0.00')})
+
     # Generate unique order ID for wallet top-up
     order_id = f"WALLET-{request.user.id}-{int(timezone.now().timestamp())}"
-    
+
+    # Create a pending wallet transaction (idempotent by reference_id)
+    with transaction.atomic():
+        txn, created = WalletTransaction.objects.get_or_create(
+            wallet=wallet,
+            reference_id=order_id,
+            defaults={
+                'transaction_type': 'credit',
+                'amount': amount,
+                'balance_before': wallet.balance,
+                'balance_after': wallet.balance,
+                'description': notes,
+                'status': 'pending',
+                'payment_gateway': 'cashfree',
+            }
+        )
+        if not created:
+            txn.amount = amount
+            txn.description = notes
+            txn.status = 'pending'
+            txn.payment_gateway = 'cashfree'
+            txn.save(update_fields=['amount', 'description', 'status', 'payment_gateway', 'updated_at'])
+
     # Store pending wallet transaction in session (NOT credited yet)
     request.session['pending_wallet_topup'] = {
         'amount': float(amount),
@@ -371,37 +429,119 @@ def cashfree_checkout(request):
 def cashfree_success(request):
     """Handle Cashfree payment success callback."""
     from django.utils import timezone
+    from django.db import transaction
     order_id = request.GET.get('order_id')
     pending = request.session.get('pending_wallet_topup', {})
-    
+
     if not pending or pending.get('order_id') != order_id:
         messages.error(request, 'Invalid payment session')
         return redirect('payments:wallet')
-    
+
     amount = Decimal(str(pending['amount']))
     notes = pending.get('notes', 'Wallet top-up')
-    
-    # Credit wallet ONLY after payment success
+
     wallet, _ = Wallet.objects.get_or_create(user=request.user, defaults={'balance': Decimal('0.00')})
-    wallet.add_balance(amount, description=notes)
-    
-    # Log transaction
-    WalletTransaction.objects.create(
-        wallet=wallet,
-        transaction_type='credit',
-        amount=amount,
-        description=f'{notes} (via Cashfree)',
-        status='success',
-        reference_id=order_id,
-    )
-    
+
+    # Idempotent credit inside atomic block
+    with transaction.atomic():
+        txn = WalletTransaction.objects.select_for_update().filter(
+            wallet=wallet,
+            reference_id=order_id,
+            transaction_type='credit'
+        ).first()
+
+        if not txn:
+            messages.error(request, 'Transaction not found')
+            return redirect('payments:wallet')
+
+        if txn.status == 'success':
+            messages.info(request, 'Payment already processed')
+            return redirect('payments:wallet')
+
+        balance_before = wallet.balance
+        wallet.balance += amount
+        wallet.save(update_fields=['balance', 'updated_at'])
+
+        txn.status = 'success'
+        txn.balance_before = balance_before
+        txn.balance_after = wallet.balance
+        txn.description = f'{notes} (via Cashfree)'
+        txn.payment_gateway = 'cashfree'
+        txn.save(update_fields=['status', 'balance_before', 'balance_after', 'description', 'payment_gateway', 'updated_at'])
+
     # Clear pending transaction
     if 'pending_wallet_topup' in request.session:
         del request.session['pending_wallet_topup']
         request.session.modified = True
-    
+
     messages.success(request, f'₹{amount} added to your wallet successfully.')
     return redirect('payments:wallet')
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def cashfree_webhook(request):
+    """Webhook to credit wallet after Cashfree success (idempotent)."""
+    from django.db import transaction
+    from django.utils import timezone
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid payload'}, status=400)
+
+    order_id = payload.get('order_id') or payload.get('cf_order_id')
+    amount = payload.get('order_amount') or payload.get('amount')
+    user_id = payload.get('customer_details', {}).get('user_id') or payload.get('user_id')
+
+    if not order_id or not amount or not user_id:
+        return JsonResponse({'status': 'error', 'message': 'Missing fields'}, status=400)
+
+    try:
+        amount_dec = Decimal(str(amount))
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': 'Invalid amount'}, status=400)
+
+    # Resolve wallet
+    wallet = Wallet.objects.filter(user_id=user_id).first()
+    if not wallet:
+        return JsonResponse({'status': 'error', 'message': 'Wallet not found'}, status=404)
+
+    with transaction.atomic():
+        txn = WalletTransaction.objects.select_for_update().filter(
+            wallet=wallet,
+            reference_id=order_id,
+            transaction_type='credit'
+        ).first()
+
+        if txn and txn.status == 'success':
+            return JsonResponse({'status': 'ok', 'message': 'Already processed'})
+
+        if not txn:
+            txn = WalletTransaction.objects.create(
+                wallet=wallet,
+                transaction_type='credit',
+                amount=amount_dec,
+                balance_before=wallet.balance,
+                balance_after=wallet.balance,
+                description='Wallet top-up (Cashfree webhook)',
+                status='pending',
+                payment_gateway='cashfree',
+                reference_id=order_id,
+                gateway_order_id=order_id,
+            )
+
+        balance_before = wallet.balance
+        wallet.balance += amount_dec
+        wallet.save(update_fields=['balance', 'updated_at'])
+
+        txn.status = 'success'
+        txn.balance_before = balance_before
+        txn.balance_after = wallet.balance
+        txn.payment_gateway = 'cashfree'
+        txn.save(update_fields=['status', 'balance_before', 'balance_after', 'payment_gateway', 'updated_at'])
+
+    return JsonResponse({'status': 'ok'})
 
 
 class WalletView(TemplateView):
