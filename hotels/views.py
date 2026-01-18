@@ -297,10 +297,14 @@ def get_hotel_occupancy(request, hotel_id):
 
 def hotel_list(request):
     """Hotel listing page with search"""
+    # CRITICAL: Only show hotels from approved property owners (Session 2 enforcement)
     hotels = (
-        Hotel.objects.filter(is_active=True)
+        Hotel.objects.filter(
+            is_active=True,
+            property_owner__is_approved=True  # Backend enforcement of Session 2
+        )
         .annotate(min_price=Coalesce(Min('room_types__base_price'), Value(0, output_field=DecimalField())))
-        .select_related('city')
+        .select_related('city', 'property_owner')
         .prefetch_related('images', 'room_types', 'channel_mappings')
     )
     cities = City.objects.all().order_by('name')

@@ -52,6 +52,7 @@ class Booking(TimeStampedModel):
     reserved_at = models.DateTimeField(null=True, blank=True)  # When booking was created
     confirmed_at = models.DateTimeField(null=True, blank=True)  # When payment succeeded
     expires_at = models.DateTimeField(null=True, blank=True)  # When reservation expires (30 min after reserved_at)
+    completed_at = models.DateTimeField(null=True, blank=True)  # When journey/stay completed
 
     inventory_channel = models.CharField(max_length=20, choices=INVENTORY_CHANNELS, default='internal_cm')
     lock_id = models.CharField(max_length=128, blank=True)

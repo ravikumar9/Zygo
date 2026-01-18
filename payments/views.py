@@ -243,21 +243,33 @@ def process_wallet_payment(request):
             cashback_needed = payable_locked - wallet_deduction
 
             if wallet_deduction > 0:
-                previous_balance = wallet.balance
-                wallet.balance -= wallet_deduction
-                wallet.save(update_fields=['balance', 'updated_at'])
-                wallet_txn = WalletTransaction.objects.create(
-                    wallet=wallet,
-                    transaction_type='debit',
-                    amount=wallet_deduction,
-                    balance_before=previous_balance,
-                    balance_after=wallet.balance,
-                    reference_id=str(booking.booking_id),
-                    description=f"Wallet payment for booking {booking.booking_id}",
+                # Idempotency: Check if wallet transaction already exists
+                existing_txn = WalletTransaction.objects.filter(
                     booking=booking,
-                    status='success',
-                    payment_gateway='internal',
-                )
+                    transaction_type='debit',
+                    reference_id=str(booking.booking_id),
+                    status='success'
+                ).first()
+                
+                if existing_txn:
+                    # Already debited, use existing transaction
+                    wallet_txn = existing_txn
+                else:
+                    previous_balance = wallet.balance
+                    wallet.balance -= wallet_deduction
+                    wallet.save(update_fields=['balance', 'updated_at'])
+                    wallet_txn = WalletTransaction.objects.create(
+                        wallet=wallet,
+                        transaction_type='debit',
+                        amount=wallet_deduction,
+                        balance_before=previous_balance,
+                        balance_after=wallet.balance,
+                        reference_id=str(booking.booking_id),
+                        description=f"Wallet payment for booking {booking.booking_id}",
+                        booking=booking,
+                        status='success',
+                        payment_gateway='internal',
+                    )
 
             # Use cashback ledger FIFO for remainder
             cashback_used = Decimal('0')

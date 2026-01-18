@@ -475,12 +475,20 @@ class BusSchedule(TimeStampedModel):
         return f"{self.route} - {self.date} ({available} seats left)"
     
     def book_seats(self, num_seats):
-        """Book seats and update availability"""
+        """Book seats and update availability
+        
+        WARNING: This method is NOT thread-safe. Always use within:
+        - transaction.atomic() block
+        - schedule = BusSchedule.objects.select_for_update().get(...)
+        - Then call schedule.book_seats()
+        
+        For production bookings, use the atomic booking flow in views.py
+        """
         available = self.available_seats or 0
         if available >= num_seats:
             self.available_seats = (available - num_seats)
             self.booked_seats = (self.booked_seats or 0) + num_seats
-            self.save()
+            self.save(update_fields=['available_seats', 'booked_seats', 'updated_at'])
             return True
         return False
     

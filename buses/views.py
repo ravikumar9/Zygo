@@ -232,6 +232,7 @@ def book_bus(request, bus_id):
     from .models import SeatLayout
     from bookings.models import BusBooking, BusBookingSeat
     from datetime import datetime
+    from django.db import transaction
     
     bus = get_object_or_404(Bus, id=bus_id)
     
@@ -268,11 +269,6 @@ def book_bus(request, bus_id):
         
         # Create booking
         date_obj = datetime.strptime(travel_date, '%Y-%m-%d').date()
-        schedule, created = BusSchedule.objects.get_or_create(
-            route=route,
-            date=date_obj,
-            defaults={'available_seats': bus.total_seats, 'fare': route.base_fare}
-        )
         
         base_total = Decimal(str(route.base_fare)) * Decimal(str(len(seat_ids)))
 
@@ -292,63 +288,91 @@ def book_bus(request, bus_id):
                         'discount_amount': float(corp_discount_amount),
                     })
 
-        total_amount = base_total - corp_discount_amount
-        now = timezone.now()
-        booking = Booking.objects.create(
-            user=request.user,
-            booking_type='bus',
-            total_amount=total_amount,
-            status='payment_pending',  # Start in payment_pending until gateway confirms
-            reserved_at=now,
-            expires_at=now + timedelta(minutes=10),
-            customer_name=passenger_name or request.user.get_full_name() or request.user.username,
-            customer_email=request.user.email,
-            customer_phone=getattr(request.user, 'phone', '') or '',
-            channel_reference=corp_meta or '',
-        )
-        
-        # Create bus booking details
-        # Resolve display text for boarding/dropping (IDs may be fallback tokens)
-        try:
-            from .models import BoardingPoint as BP, DroppingPoint as DP
-            if boarding_point and boarding_point not in ['__source__', '__dest__']:
-                bp_obj = BP.objects.filter(id=boarding_point).first()
-                boarding_point_text = bp_obj.name if bp_obj else ''
-            else:
-                boarding_point_text = f"{route.source_city.name} ({route.departure_time.strftime('%H:%M')})"
-            if dropping_point and dropping_point not in ['__source__', '__dest__']:
-                dp_obj = DP.objects.filter(id=dropping_point).first()
-                dropping_point_text = dp_obj.name if dp_obj else ''
-            else:
-                dropping_point_text = f"{route.destination_city.name} ({route.arrival_time.strftime('%H:%M')})"
-        except Exception:
-            boarding_point_text = ''
-            dropping_point_text = ''
-
-        bus_booking = BusBooking.objects.create(
-            booking=booking,
-            bus_schedule=schedule,
-            bus_route=route,
-            journey_date=date_obj,
-            boarding_point=boarding_point_text,
-            dropping_point=dropping_point_text,
-        )
-        
-        # Create seat bookings
-        booked_seats = []
-        for seat_id in seat_ids:
-            seat = SeatLayout.objects.get(id=seat_id)
-            BusBookingSeat.objects.create(
-                bus_booking=bus_booking,
-                seat=seat,
-                passenger_name=passenger_name,
-                passenger_age=passenger_age or 0,
-                passenger_gender=passenger_gender,
+        # CRITICAL: Use atomic transaction to prevent race conditions
+        with transaction.atomic():
+            # Lock schedule row to prevent concurrent bookings
+            schedule = BusSchedule.objects.select_for_update().get(
+                route=route,
+                date=date_obj
+            ) if BusSchedule.objects.filter(route=route, date=date_obj).exists() else None
+            
+            if not schedule:
+                schedule = BusSchedule.objects.create(
+                    route=route,
+                    date=date_obj,
+                    available_seats=bus.total_seats,
+                    fare=route.base_fare
+                )
+                # Re-lock the newly created schedule
+                schedule = BusSchedule.objects.select_for_update().get(pk=schedule.pk)
+            
+            # Verify seats still available under lock
+            if schedule.available_seats < len(seat_ids):
+                raise ValueError(f"Only {schedule.available_seats} seats available")
+            
+            total_amount = base_total - corp_discount_amount
+            now = timezone.now()
+            booking = Booking.objects.create(
+                user=request.user,
+                booking_type='bus',
+                total_amount=total_amount,
+                status='payment_pending',  # Start in payment_pending until gateway confirms
+                reserved_at=now,
+                expires_at=now + timedelta(minutes=10),
+                customer_name=passenger_name or request.user.get_full_name() or request.user.username,
+                customer_email=request.user.email,
+                customer_phone=getattr(request.user, 'phone', '') or '',
+                channel_reference=corp_meta or '',
             )
-            booked_seats.append(seat)
-        
-        # Update schedule availability
-        schedule.book_seats(len(seat_ids))
+            
+            # Create bus booking details
+            # Resolve display text for boarding/dropping (IDs may be fallback tokens)
+            try:
+                from .models import BoardingPoint as BP, DroppingPoint as DP
+                if boarding_point and boarding_point not in ['__source__', '__dest__']:
+                    bp_obj = BP.objects.filter(id=boarding_point).first()
+                    boarding_point_text = bp_obj.name if bp_obj else ''
+                else:
+                    boarding_point_text = f"{route.source_city.name} ({route.departure_time.strftime('%H:%M')})"
+                if dropping_point and dropping_point not in ['__source__', '__dest__']:
+                    dp_obj = DP.objects.filter(id=dropping_point).first()
+                    dropping_point_text = dp_obj.name if dp_obj else ''
+                else:
+                    dropping_point_text = f"{route.destination_city.name} ({route.arrival_time.strftime('%H:%M')})"
+            except Exception:
+                boarding_point_text = ''
+                dropping_point_text = ''
+
+            bus_booking = BusBooking.objects.create(
+                booking=booking,
+                bus_schedule=schedule,
+                bus_route=route,
+                journey_date=date_obj,
+                boarding_point=boarding_point_text,
+                dropping_point=dropping_point_text,
+            )
+            
+            # Create seat bookings
+            booked_seats = []
+            for seat_id in seat_ids:
+                seat = SeatLayout.objects.get(id=seat_id)
+                BusBookingSeat.objects.create(
+                    bus_booking=bus_booking,
+                    seat=seat,
+                    passenger_name=passenger_name,
+                    passenger_age=passenger_age or 0,
+                    passenger_gender=passenger_gender,
+                )
+                booked_seats.append(seat)
+            
+            # Update schedule availability (already locked)
+            if schedule.available_seats >= len(seat_ids):
+                schedule.available_seats -= len(seat_ids)
+                schedule.booked_seats = (schedule.booked_seats or 0) + len(seat_ids)
+                schedule.save(update_fields=['available_seats', 'booked_seats', 'updated_at'])
+            else:
+                raise ValueError("Seats no longer available")
+        # End of atomic block
         
         messages.success(request, f'Bus booked successfully! Booking ID: {booking.booking_id}')
         return redirect(reverse('bookings:booking-confirm', kwargs={'booking_id': booking.booking_id}))
