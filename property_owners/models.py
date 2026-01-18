@@ -80,28 +80,94 @@ class PropertyOwner(TimeStampedModel):
 
 
 class Property(TimeStampedModel):
-    """Individual property listings"""
+    """Individual property listings with approval workflow"""
+    
+    # Approval Status Workflow
+    APPROVAL_STATUS = [
+        ('draft', 'Draft (Incomplete)'),
+        ('pending_verification', 'Pending Verification'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+    
     owner = models.ForeignKey(PropertyOwner, on_delete=models.CASCADE, related_name='properties')
     
+    # Core Details (MANDATORY)
     name = models.CharField(max_length=200)
     description = models.TextField()
-    amenities = models.TextField(help_text="Comma-separated list of amenities")
+    property_type = models.ForeignKey(PropertyType, on_delete=models.SET_NULL, null=True, blank=True)
     
-    # Pricing
-    base_price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Price per night")
+    # Location (MANDATORY)
+    city = models.ForeignKey(City, on_delete=models.PROTECT, null=True, blank=True)
+    address = models.TextField(blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    pincode = models.CharField(max_length=10, blank=True)
+    latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    
+    # Contact (MANDATORY)
+    contact_phone = models.CharField(max_length=20, blank=True)
+    contact_email = models.EmailField(blank=True)
+    
+    # Rules & Policies (MANDATORY - stored as JSON for flexibility)
+    checkin_time = models.TimeField(null=True, blank=True, help_text="e.g., 14:00")
+    checkout_time = models.TimeField(null=True, blank=True, help_text="e.g., 11:00")
+    property_rules = models.TextField(blank=True, help_text="Check-in/out policies, pets, smoking, etc.")
+    
+    # Cancellation Policy (MANDATORY)
+    cancellation_policy = models.TextField(blank=True)
+    cancellation_type = models.CharField(max_length=50, blank=True, choices=[
+        ('no_cancellation', 'No Cancellation'),
+        ('until_checkin', 'Free cancellation until check-in'),
+        ('x_days_before', 'Free cancellation X days before check-in'),
+    ])
+    cancellation_days = models.IntegerField(null=True, blank=True)
+    refund_percentage = models.IntegerField(default=100, help_text="Refund percentage")
+    
+    # Amenities (MANDATORY - structured)
+    has_wifi = models.BooleanField(default=False)
+    has_parking = models.BooleanField(default=False)
+    has_pool = models.BooleanField(default=False)
+    has_gym = models.BooleanField(default=False)
+    has_restaurant = models.BooleanField(default=False)
+    has_spa = models.BooleanField(default=False)
+    has_ac = models.BooleanField(default=False)
+    amenities = models.TextField(blank=True, help_text="Additional amenities (free text)")
+    
+    # Pricing (MANDATORY)
+    base_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Price per night")
     currency = models.CharField(max_length=3, default='INR')
+    gst_percentage = models.IntegerField(default=18)
     
-    # Capacity
+    # Capacity (MANDATORY)
     max_guests = models.IntegerField(default=2)
     num_bedrooms = models.IntegerField(default=1)
     num_bathrooms = models.IntegerField(default=1)
     
-    # Media
+    # Media (MANDATORY - minimum images required)
     image = models.ImageField(upload_to='properties/', null=True, blank=True)
     
     # Rating & Reviews
     average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     total_reviews = models.IntegerField(default=0)
+    
+    # Approval Workflow (NEW - Session 2 CRITICAL)
+    approval_status = models.CharField(
+        max_length=20, 
+        choices=[
+            ('draft', 'Draft (Incomplete)'),
+            ('pending_verification', 'Pending Verification'),
+            ('approved', 'Approved'),
+            ('rejected', 'Rejected'),
+        ], 
+        default='draft',
+        help_text="Draft → Pending → Approved/Rejected"
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True, help_text="When owner submitted for verification")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_properties')
+    rejection_reason = models.TextField(blank=True, help_text="Reason for rejection (visible to owner)")
+    admin_notes = models.TextField(blank=True, help_text="Internal admin notes (not visible to owner)")
     
     # Status
     is_active = models.BooleanField(default=True)
@@ -109,9 +175,48 @@ class Property(TimeStampedModel):
     
     class Meta:
         ordering = ['-is_featured', '-average_rating', 'name']
+        indexes = [
+            models.Index(fields=['approval_status', 'is_active']),
+            models.Index(fields=['owner', 'approval_status']),
+        ]
     
     def __str__(self):
-        return f"{self.name} by {self.owner.business_name}"
+        return f"{self.name} by {self.owner.business_name} [{self.get_approval_status_display()}]"
+    
+    @property
+    def is_approved(self):
+        """Check if property is approved (used in booking queries)"""
+        return self.approval_status == 'approved' and self.is_active
+    
+    @property
+    def completion_percentage(self):
+        """Calculate property submission completeness"""
+        required_fields = [
+            self.name, self.description, self.property_type,
+            self.city, self.address, self.pincode, self.contact_phone, self.contact_email,
+            self.property_rules, self.cancellation_policy,
+            self.base_price, self.max_guests, self.num_bedrooms
+        ]
+        completed = sum(1 for field in required_fields if field)
+        return int((completed / len(required_fields)) * 100)
+    
+    def has_required_fields(self):
+        """Validate all required fields for submission"""
+        checks = {
+            'name': bool(self.name and self.name.strip()),
+            'description': bool(self.description and self.description.strip()),
+            'property_type': self.property_type is not None,
+            'location': bool(self.city and self.address and self.pincode),
+            'contact': bool(self.contact_phone and self.contact_email),
+            'rules': bool(self.property_rules and self.property_rules.strip()),
+            'cancellation': bool(self.cancellation_policy and self.cancellation_type),
+            'amenities': True,  # At least one should be selected
+            'pricing': self.base_price > 0,
+            'capacity': self.max_guests > 0 and self.num_bedrooms > 0,
+            'images': self.images.filter(is_primary=True).exists(),
+            'rooms': self.room_types.exists() if hasattr(self, 'room_types') else False,
+        }
+        return checks, all(checks.values())
 
 
 class PropertyBooking(TimeStampedModel):

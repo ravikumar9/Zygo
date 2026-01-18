@@ -208,32 +208,46 @@
 
     <!-- Stats Section -->
     <div class="row mb-4">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="stat-card">
                 <i class="fas fa-home stat-icon"></i>
-                <h3>{{ properties_count }}</h3>
-                <p>Properties Listed</p>
+                <h3>{{ stats.total_properties }}</h3>
+                <p>Total Properties</p>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <div class="stat-card" style="background: #d4edda;">
+                <i class="fas fa-check stat-icon" style="color: #28A745;"></i>
+                <h3>{{ stats.approved_count }}</h3>
+                <p>Approved</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card" style="background: #fff3cd;">
+                <i class="fas fa-clock stat-icon" style="color: #FFC107;"></i>
+                <h3>{{ stats.pending_count }}</h3>
+                <p>Pending Review</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card" style="background: #f8d7da;">
+                <i class="fas fa-times stat-icon" style="color: #DC3545;"></i>
+                <h3>{{ stats.rejected_count }}</h3>
+                <p>Rejected</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card" style="background: #f0f0f0;">
+                <i class="fas fa-edit stat-icon" style="color: #6C757D;"></i>
+                <h3>{{ stats.draft_count }}</h3>
+                <p>Draft</p>
+            </div>
+        </div>
+        <div class="col-md-2">
             <div class="stat-card">
                 <i class="fas fa-calendar-check stat-icon"></i>
-                <h3>{{ total_bookings }}</h3>
-                <p>Total Bookings</p>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="stat-card">
-                <i class="fas fa-star stat-icon"></i>
-                <h3>{{ average_rating|default:"0" }}</h3>
-                <p>Average Rating</p>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="stat-card">
-                <i class="fas fa-rupiah stat-icon"></i>
-                <h3>₹{{ total_earnings|default:"0" }}</h3>
-                <p>Total Earnings</p>
+                <h3>{{ stats.total_bookings }}</h3>
+                <p>Bookings (Approved)</p>
             </div>
         </div>
     </div>
@@ -243,54 +257,36 @@
         <div class="col-md-12">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                 <h2>Your Properties</h2>
-                {% if property_owner.verification_status == 'verified' %}
-                    <a href="{% url 'property_owners:add_property' %}" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Add New Property
-                    </a>
-                {% else %}
-                    <button class="btn btn-secondary" disabled title="Verify your account first">
-                        <i class="fas fa-plus"></i> Add New Property
-                    </button>
-                {% endif %}
+                <a href="{% url 'property_owners:create_property' %}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Register New Property
+                </a>
             </div>
 
-            {% if properties %}
+            <!-- APPROVED PROPERTIES -->
+            {% if approved_properties %}
+            <div style="margin-bottom: 2rem;">
+                <h4 style="display: flex; align-items: center; gap: 10px; color: #28A745; font-weight: 700; margin-bottom: 1rem;">
+                    ✅ APPROVED PROPERTIES ({{ approved_properties.count }})
+                </h4>
                 <div class="row">
-                    {% for property in properties %}
+                    {% for property in approved_properties %}
                     <div class="col-md-6 col-lg-4">
                         <div class="property-card">
                             <div class="property-image">
-                                <i class="fas fa-building" style="opacity: 0.5;"></i>
+                                <span style="background: #d4edda; padding: 10px; border-radius: 5px; color: #28A745; font-weight: 600;">✅ APPROVED</span>
                             </div>
                             <div class="property-content">
                                 <div class="property-title">{{ property.name }}</div>
-                                <span class="property-type">{{ property.property_type }}</span>
-                                
-                                <div class="property-stats">
-                                    <div class="property-stat">
-                                        <strong>{{ property.total_bookings }}</strong>
-                                        <small>Bookings</small>
-                                    </div>
-                                    <div class="property-stat">
-                                        <strong>{{ property.avg_rating|default:"0" }}</strong>
-                                        <small>Rating</small>
-                                    </div>
-                                    <div class="property-stat">
-                                        <strong>{{ property.occupancy|default:"0" }}%</strong>
-                                        <small>Occupancy</small>
-                                    </div>
-                                </div>
-
+                                <span class="property-type">{{ property.get_property_type_display }}</span>
                                 <p class="text-muted small mb-3">
                                     <i class="fas fa-map-marker-alt"></i> {{ property.city.name }}
                                 </p>
-
                                 <div class="property-actions">
-                                    <a href="{% url 'property_owners:edit_property' property.id %}" class="btn btn-sm btn-outline-primary">
-                                        <i class="fas fa-edit"></i> Edit
+                                    <a href="{% url 'property_owners:property_detail' property.id %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i> View
                                     </a>
-                                    <a href="{% url 'property_owners:property_bookings' property.id %}" class="btn btn-sm btn-outline-info">
-                                        <i class="fas fa-calendar"></i> Bookings
+                                    <a href="{% url 'property_owners:create_property' %}?edit={{ property.id }}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="fas fa-edit"></i> Edit
                                     </a>
                                 </div>
                             </div>
@@ -298,6 +294,138 @@
                     </div>
                     {% endfor %}
                 </div>
+            </div>
+            {% endif %}
+
+            <!-- PENDING PROPERTIES -->
+            {% if pending_properties %}
+            <div style="margin-bottom: 2rem;">
+                <h4 style="display: flex; align-items: center; gap: 10px; color: #FFC107; font-weight: 700; margin-bottom: 1rem;">
+                    ⏳ PENDING VERIFICATION ({{ pending_properties.count }})
+                </h4>
+                <p style="color: #856404; margin-bottom: 1rem;">
+                    Admin is reviewing your properties. You'll receive an email notification once they're approved or rejected.
+                </p>
+                <div class="row">
+                    {% for property in pending_properties %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="property-card">
+                            <div class="property-image">
+                                <span style="background: #fff3cd; padding: 10px; border-radius: 5px; color: #856404; font-weight: 600;">⏳ PENDING</span>
+                            </div>
+                            <div class="property-content">
+                                <div class="property-title">{{ property.name }}</div>
+                                <span class="property-type">{{ property.get_property_type_display }}</span>
+                                <p class="text-muted small mb-3">
+                                    <i class="fas fa-map-marker-alt"></i> {{ property.city.name }}
+                                </p>
+                                <p style="font-size: 12px; color: #666;">
+                                    Submitted: {{ property.submitted_at|date:"M d, Y H:i" }}
+                                </p>
+                                <div class="property-actions">
+                                    <a href="{% url 'property_owners:property_detail' property.id %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- REJECTED PROPERTIES -->
+            {% if rejected_properties %}
+            <div style="margin-bottom: 2rem;">
+                <h4 style="display: flex; align-items: center; gap: 10px; color: #DC3545; font-weight: 700; margin-bottom: 1rem;">
+                    ❌ REJECTED ({{ rejected_properties.count }})
+                </h4>
+                <p style="color: #721c24; margin-bottom: 1rem;">
+                    Please review the rejection reason and fix the issues before resubmitting.
+                </p>
+                <div class="row">
+                    {% for property in rejected_properties %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="property-card">
+                            <div class="property-image">
+                                <span style="background: #f8d7da; padding: 10px; border-radius: 5px; color: #721c24; font-weight: 600;">❌ REJECTED</span>
+                            </div>
+                            <div class="property-content">
+                                <div class="property-title">{{ property.name }}</div>
+                                <span class="property-type">{{ property.get_property_type_display }}</span>
+                                {% if property.rejection_reason %}
+                                <p style="font-size: 12px; color: #721c24; background: #f8d7da; padding: 8px; border-radius: 3px; margin: 10px 0;">
+                                    <strong>Reason:</strong> {{ property.rejection_reason|truncatewords:20 }}
+                                </p>
+                                {% endif %}
+                                <div class="property-actions">
+                                    <a href="{% url 'property_owners:property_detail' property.id %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                    <a href="{% url 'property_owners:create_property' %}?edit={{ property.id }}" class="btn btn-sm btn-outline-success">
+                                        <i class="fas fa-redo"></i> Resubmit
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- DRAFT PROPERTIES -->
+            {% if draft_properties %}
+            <div style="margin-bottom: 2rem;">
+                <h4 style="display: flex; align-items: center; gap: 10px; color: #6C757D; font-weight: 700; margin-bottom: 1rem;">
+                    📝 DRAFT (NOT SUBMITTED) ({{ draft_properties.count }})
+                </h4>
+                <p style="color: #666; margin-bottom: 1rem;">
+                    Complete these properties and submit them for approval.
+                </p>
+                <div class="row">
+                    {% for property in draft_properties %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="property-card">
+                            <div class="property-image">
+                                <span style="background: #f0f0f0; padding: 10px; border-radius: 5px; color: #666; font-weight: 600;">📝 DRAFT</span>
+                            </div>
+                            <div class="property-content">
+                                <div class="property-title">{{ property.name }}</div>
+                                <span class="property-type">{{ property.get_property_type_display }}</span>
+                                <p style="font-size: 12px; color: #666; margin: 8px 0;">
+                                    📊 {{ property.completion_percentage }}% Complete
+                                </p>
+                                <div style="background: #f0f0f0; border-radius: 3px; height: 4px; margin-bottom: 10px; overflow: hidden;">
+                                    <div style="background: #6C757D; height: 100%; width: {{ property.completion_percentage }}%;"></div>
+                                </div>
+                                <div class="property-actions">
+                                    <a href="{% url 'property_owners:property_detail' property.id %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                    <a href="{% url 'property_owners:create_property' %}?edit={{ property.id }}" class="btn btn-sm btn-outline-success">
+                                        <i class="fas fa-edit"></i> Continue
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if not all_properties %}
+            <div style="text-align: center; padding: 3rem 1rem;">
+                <i class="fas fa-inbox" style="font-size: 3rem; color: #ccc; margin-bottom: 1rem;"></i>
+                <h3 style="color: #999;">No Properties Yet</h3>
+                <p style="color: #999;">Start by registering your first property.</p>
+                <a href="{% url 'property_owners:create_property' %}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Register First Property
+                </a>
+            </div>
+            {% endif %}
             {% else %}
                 <div class="empty-state">
                     <i class="fas fa-inbox"></i>

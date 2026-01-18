@@ -355,21 +355,25 @@ class PropertyOwnerAdmin(admin.ModelAdmin):
 
 @admin.register(Property)
 class PropertyAdmin(admin.ModelAdmin):
+    """Admin interface for property approval workflow"""
+    
+    change_list_template = 'admin/property_changelist.html'
+    
     list_display = (
         'property_id_short',
         'name_short',
         'owner_name',
-        'owner_city',
-        'base_price_display',
-        'max_guests_display',
-        'created_date',
+        'approval_status_badge',
+        'submitted_date',
+        'completion_percent',
+        'action_buttons',
     )
     
     list_filter = (
+        'approval_status',
+        'is_active',
         'created_at',
-        'owner__city',
-        'base_price',
-        'max_guests',
+        'submitted_at',
     )
     
     search_fields = (
@@ -383,44 +387,105 @@ class PropertyAdmin(admin.ModelAdmin):
         'owner',
         'created_at',
         'updated_at',
+        'submitted_at',
+        'approved_at',
+        'approved_by',
+        'completion_status_display',
         'amenities_display',
+        'approval_info_display',
     )
     
     fieldsets = (
-        ('Basic Information', {
+        ('🏠 BASIC INFORMATION', {
             'fields': (
                 'owner',
                 'name',
                 'description',
-            )
+                'property_type',
+            ),
+            'classes': ('wide',)
         }),
-        ('Amenities', {
-            'fields': ('amenities_display',)
+        ('📍 LOCATION', {
+            'fields': (
+                'city',
+                'address',
+                'state',
+                'pincode',
+                'latitude',
+                'longitude',
+            ),
         }),
-        ('Pricing & Capacity', {
+        ('📞 CONTACT', {
+            'fields': (
+                'contact_phone',
+                'contact_email',
+            ),
+        }),
+        ('🏨 RULES & POLICIES', {
+            'fields': (
+                'property_rules',
+                'checkin_time',
+                'checkout_time',
+            ),
+        }),
+        ('💰 PRICING', {
             'fields': (
                 'base_price',
                 'currency',
+                'gst_percentage',
+            ),
+        }),
+        ('🛏️ CAPACITY', {
+            'fields': (
                 'max_guests',
                 'num_bedrooms',
                 'num_bathrooms',
-            )
+            ),
         }),
-        ('Media', {
+        ('✨ AMENITIES', {
+            'fields': ('amenities_display',),
+            'classes': ('wide',)
+        }),
+        ('❌ CANCELLATION POLICY', {
+            'fields': (
+                'cancellation_policy',
+                'cancellation_type',
+                'cancellation_days',
+                'refund_percentage',
+            ),
+            'classes': ('wide',)
+        }),
+        ('🔒 APPROVAL WORKFLOW', {
+            'fields': (
+                'approval_info_display',
+                'approval_status',
+                'submitted_at',
+                'approved_at',
+                'approved_by',
+                'rejection_reason',
+                'admin_notes',
+            ),
+            'classes': ('wide',)
+        }),
+        ('📸 MEDIA', {
             'fields': ('image',),
             'classes': ('collapse',)
         }),
-        ('Timestamps', {
+        ('⏰ TIMESTAMPS', {
             'fields': (
                 'created_at',
                 'updated_at',
+                'is_active',
+                'is_featured',
             ),
             'classes': ('collapse',)
         }),
     )
     
+    actions = ['approve_properties', 'reject_properties_action']
+    
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('owner', 'owner__city')
+        return super().get_queryset(request).select_related('owner', 'owner__city', 'approved_by')
     
     def property_id_short(self, obj):
         """Display shortened property ID"""
@@ -430,8 +495,8 @@ class PropertyAdmin(admin.ModelAdmin):
     
     def name_short(self, obj):
         """Display property name, truncated if needed"""
-        name = obj.name[:40]
-        if len(obj.name) > 40:
+        name = obj.name[:40] if obj.name else '-'
+        if obj.name and len(obj.name) > 40:
             return f"{name}..."
         return name
     name_short.short_description = 'Property Name'
@@ -443,49 +508,162 @@ class PropertyAdmin(admin.ModelAdmin):
     owner_name.short_description = 'Owner'
     owner_name.admin_order_field = 'owner__business_name'
     
-    def base_price_display(self, obj):
-        """Display price with currency"""
+    def approval_status_badge(self, obj):
+        """Display approval status as colored badge"""
+        colors = {
+            'draft': '#6C757D',
+            'pending_verification': '#FFC107',
+            'approved': '#28A745',
+            'rejected': '#DC3545',
+        }
+        labels = {
+            'draft': 'DRAFT',
+            'pending_verification': '⏳ PENDING REVIEW',
+            'approved': '✅ APPROVED',
+            'rejected': '❌ REJECTED',
+        }
         return format_html(
-            '₹{:,.2f}',
-            obj.base_price
+            '<span style="background-color: {}; color: white; padding: 5px 10px; border-radius: 3px; font-weight: bold;">{}</span>',
+            colors.get(obj.approval_status, '#6C757D'),
+            labels.get(obj.approval_status, obj.approval_status.upper())
         )
-    base_price_display.short_description = 'Price/Night'
-    base_price_display.admin_order_field = 'base_price'
+    approval_status_badge.short_description = 'Status'
+    approval_status_badge.admin_order_field = 'approval_status'
     
-    def max_guests_display(self, obj):
-        """Display guest capacity"""
+    def submitted_date(self, obj):
+        """Display submission date"""
+        if obj.submitted_at:
+            return obj.submitted_at.strftime('%d-%m-%Y %H:%M')
+        return format_html('<span style="color: #999;">-</span>')
+    submitted_date.short_description = 'Submitted'
+    submitted_date.admin_order_field = 'submitted_at'
+    
+    def completion_percent(self, obj):
+        """Display completion percentage"""
+        percent = obj.completion_percentage
+        color = '#28A745' if percent == 100 else '#FFC107' if percent >= 50 else '#DC3545'
         return format_html(
-            '<span style="background-color: #0dcaf0; color: white; padding: 3px 8px; border-radius: 3px;">{} guests</span>',
-            obj.max_guests
+            '<span style="color: {}; font-weight: bold;">{}%</span>',
+            color,
+            percent
         )
-    max_guests_display.short_description = 'Capacity'
-    max_guests_display.admin_order_field = 'max_guests'
+    completion_percent.short_description = 'Complete'
+    completion_percent.admin_order_field = 'completion_percentage'
     
-    def created_date(self, obj):
-        """Display created date"""
-        return obj.created_at.strftime('%d-%m-%Y')
-    created_date.short_description = 'Created'
-    created_date.admin_order_field = 'created_at'
+    def action_buttons(self, obj):
+        """Display action buttons based on status"""
+        if obj.approval_status == 'pending_verification':
+            return format_html(
+                '<a class="button" style="background-color: #28A745; margin-right: 5px;" href="?id={}&action=approve_properties">✅ Approve</a>'
+                '<a class="button" style="background-color: #DC3545;" href="?id={}&action=reject_properties_action">❌ Reject</a>',
+                obj.id, obj.id
+            )
+        return format_html('<span style="color: #999;">-</span>')
+    action_buttons.short_description = 'Actions'
+    
+    def approval_info_display(self, obj):
+        """Display approval information"""
+        html = '<div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px;">'
+        html += f'<p><strong>Status:</strong> {obj.get_approval_status_display()}</p>'
+        
+        checks, is_complete = obj.has_required_fields()
+        html += f'<p><strong>Completeness:</strong> {obj.completion_percentage}%</p>'
+        html += '<p><strong>Required Fields:</strong><ul>'
+        for field, complete in checks.items():
+            icon = '✅' if complete else '❌'
+            html += f'<li>{icon} {field.title()}</li>'
+        html += '</ul></p>'
+        
+        if obj.submitted_at:
+            html += f'<p><strong>Submitted:</strong> {obj.submitted_at.strftime("%d-%m-%Y %H:%M")}</p>'
+        
+        if obj.approved_at:
+            html += f'<p><strong>Approved:</strong> {obj.approved_at.strftime("%d-%m-%Y %H:%M")} by {obj.approved_by}</p>'
+        
+        if obj.rejection_reason:
+            html += f'<p><strong>Rejection Reason:</strong></p><p style="background-color: #ffe0e0; padding: 10px; border-radius: 3px;">{obj.rejection_reason}</p>'
+        
+        html += '</div>'
+        return format_html(html)
+    approval_info_display.short_description = 'Approval Information'
+    
+    def completion_status_display(self, obj):
+        """Display detailed completion status"""
+        checks, is_complete = obj.has_required_fields()
+        html = '<table style="width: 100%; border-collapse: collapse;">'
+        html += '<tr style="background-color: #f0f0f0;"><th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">Field</th><th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">Status</th></tr>'
+        
+        for field, complete in checks.items():
+            icon = '✅' if complete else '❌'
+            color = '#28A745' if complete else '#DC3545'
+            html += f'<tr><td style="padding: 10px; border-bottom: 1px solid #ddd;">{field.title()}</td><td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd; color: {color}; font-weight: bold;">{icon}</td></tr>'
+        
+        html += '</table>'
+        html += f'<p style="margin-top: 15px;"><strong>Overall: {obj.completion_percentage}% Complete</strong></p>'
+        return format_html(html)
+    completion_status_display.short_description = 'Completion Status'
     
     def amenities_display(self, obj):
         """Display amenities as formatted list"""
-        if not obj.amenities:
-            return format_html('<span style="color: #999;">No amenities listed</span>')
+        amenities = []
+        if obj.has_wifi:
+            amenities.append('📶 WiFi')
+        if obj.has_parking:
+            amenities.append('🅿️ Parking')
+        if obj.has_pool:
+            amenities.append('🏊 Pool')
+        if obj.has_gym:
+            amenities.append('💪 Gym')
+        if obj.has_restaurant:
+            amenities.append('🍽️ Restaurant')
+        if obj.has_spa:
+            amenities.append('🧖 Spa')
+        if obj.has_ac:
+            amenities.append('❄️ Air Conditioning')
         
-        amenities = [a.strip() for a in obj.amenities.split(',')]
+        if not amenities and not obj.amenities:
+            return format_html('<span style="color: #999;">No amenities selected</span>')
+        
         html = '<ul style="list-style-type: none; padding-left: 0;">'
         for amenity in amenities:
             html += f'<li style="padding: 5px; margin-bottom: 5px; background-color: #f0f0f0; border-radius: 3px;">✓ {amenity}</li>'
+        
+        if obj.amenities:
+            for amenity in [a.strip() for a in obj.amenities.split(',')]:
+                if amenity:
+                    html += f'<li style="padding: 5px; margin-bottom: 5px; background-color: #f0f0f0; border-radius: 3px;">✓ {amenity}</li>'
+        
         html += '</ul>'
         return format_html(html)
     amenities_display.short_description = 'Amenities'
-
-    def owner_city(self, obj):
-        if obj.owner and obj.owner.city:
-            return obj.owner.city.name
-        return format_html('<span style="color: #999;">-</span>')
-    owner_city.short_description = 'City'
-    owner_city.admin_order_field = 'owner__city'
+    
+    def approve_properties(self, request, queryset):
+        """Approve selected pending properties"""
+        updated = 0
+        for prop in queryset.filter(approval_status='pending_verification'):
+            prop.approval_status = 'approved'
+            prop.approved_at = timezone.now()
+            prop.approved_by = request.user
+            prop.save()
+            updated += 1
+        
+        self.message_user(request, f'✅ {updated} property/properties approved successfully!')
+    
+    approve_properties.short_description = '✅ Approve Selected Properties'
+    
+    def reject_properties_action(self, request, queryset):
+        """Placeholder for reject action (should use inline form)"""
+        self.message_user(request, 'Use the property detail page to add rejection reason before rejecting.')
+    
+    reject_properties_action.short_description = '❌ Reject Selected Properties'
+    
+    def has_delete_permission(self, request, obj=None):
+        """Prevent accidental deletion"""
+        return False
+    
+    def has_add_permission(self, request):
+        """Properties created through owner interface, not admin"""
+        return False
 
 
 @admin.register(PropertyImage)

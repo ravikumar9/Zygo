@@ -1,0 +1,597 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Register Property - Go Explorer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .property-form-container {
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 0 15px;
+    }
+    
+    .form-section {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 30px;
+        margin-bottom: 20px;
+    }
+    
+    .section-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #f0f0f0;
+    }
+    
+    .section-icon {
+        font-size: 28px;
+        margin-right: 12px;
+    }
+    
+    .section-header h3 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .completion-bar {
+        background: #f0f0f0;
+        border-radius: 20px;
+        height: 8px;
+        margin: 10px 0;
+        overflow: hidden;
+    }
+    
+    .completion-fill {
+        background: linear-gradient(90deg, #28A745, #20C997);
+        height: 100%;
+        border-radius: 20px;
+        transition: width 0.3s ease;
+    }
+    
+    .completion-text {
+        font-size: 14px;
+        color: #666;
+        margin-top: 5px;
+    }
+    
+    .required-field::after {
+        content: " *";
+        color: #DC3545;
+        font-weight: bold;
+    }
+    
+    .form-group label {
+        font-weight: 500;
+        color: #333;
+        margin-bottom: 8px;
+    }
+    
+    .form-control:focus,
+    .form-select:focus {
+        border-color: #00BCD4;
+        box-shadow: 0 0 0 0.2rem rgba(0, 188, 212, 0.25);
+    }
+    
+    .form-text {
+        font-size: 13px;
+        color: #666;
+        margin-top: 5px;
+    }
+    
+    .amenity-checkbox {
+        display: inline-block;
+        margin-right: 15px;
+        margin-bottom: 10px;
+    }
+    
+    .amenity-checkbox input[type="checkbox"] {
+        margin-right: 6px;
+    }
+    
+    .amenity-checkbox label {
+        margin: 0;
+        font-weight: normal;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+    }
+    
+    .button-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 30px;
+    }
+    
+    .btn-save-draft {
+        background-color: #6C757D;
+        color: white;
+        padding: 10px 30px;
+        border: none;
+        border-radius: 5px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+    
+    .btn-save-draft:hover {
+        background-color: #5A6268;
+    }
+    
+    .btn-submit {
+        background-color: #28A745;
+        color: white;
+        padding: 10px 30px;
+        border: none;
+        border-radius: 5px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+    
+    .btn-submit:hover {
+        background-color: #218838;
+    }
+    
+    .btn-submit:disabled {
+        background-color: #CCC;
+        cursor: not-allowed;
+    }
+    
+    .alert-warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        color: #856404;
+        padding: 12px 20px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .alert-danger {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+        padding: 12px 20px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .checklist-item {
+        display: flex;
+        align-items: center;
+        padding: 8px 0;
+        font-size: 14px;
+    }
+    
+    .checklist-icon {
+        margin-right: 10px;
+        font-size: 16px;
+        min-width: 20px;
+    }
+    
+    .checklist-complete .checklist-icon {
+        color: #28A745;
+    }
+    
+    .checklist-incomplete .checklist-icon {
+        color: #DC3545;
+    }
+    
+    .errorlist {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .errorlist li {
+        color: #DC3545;
+        font-size: 13px;
+        margin-bottom: 5px;
+        padding-left: 20px;
+        position: relative;
+    }
+    
+    .errorlist li::before {
+        content: "✕";
+        position: absolute;
+        left: 0;
+        font-weight: bold;
+    }
+    
+    .form-group.has-error .form-control {
+        border-color: #DC3545;
+    }
+    
+    .input-group {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+    
+    .input-group > div {
+        flex: 1;
+        min-width: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="property-form-container">
+    <div style="margin-bottom: 30px;">
+        <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 10px;">
+            🏠 Register Your Property
+        </h1>
+        <p style="color: #666; margin-bottom: 0;">
+            Complete all sections to submit your property for verification. Admin will review and approve within 24-48 hours.
+        </p>
+    </div>
+    
+    <!-- Completion Status -->
+    {% if mode == 'draft' %}
+    <div class="form-section" style="background: #f8f9fa; border: 1px solid #dee2e6;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h4 style="margin: 0;">📊 Property Completion Status</h4>
+            <span style="font-size: 20px; font-weight: 700; color: #00BCD4;">{{ completion_percentage }}%</span>
+        </div>
+        <div class="completion-bar">
+            <div class="completion-fill" style="width: {{ completion_percentage }}%;"></div>
+        </div>
+        <p class="completion-text">
+            {% if completion_percentage == 100 %}
+                ✅ <strong>All sections complete!</strong> You can now submit for approval.
+            {% elif completion_percentage >= 50 %}
+                📈 Good progress! Complete remaining sections to submit.
+            {% else %}
+                📝 Start filling in your property details below.
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+    
+    <!-- Error Messages -->
+    {% if form.non_field_errors %}
+    <div class="alert-danger">
+        <strong>Please fix the following errors:</strong>
+        <ul class="errorlist">
+            {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <form method="POST" id="propertyForm" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <!-- SECTION 1: CORE DETAILS -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">🏢</span>
+                <h3>Core Details</h3>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.name.id_for_label }}" class="required-field">Property Name</label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <ul class="errorlist">{{ form.name.errors }}</ul>
+                {% endif %}
+                <div class="form-text">Name your property (e.g., "Ocean View Villa", "Mountain Retreat")</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.description.id_for_label }}" class="required-field">Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}
+                    <ul class="errorlist">{{ form.description.errors }}</ul>
+                {% endif %}
+                <div class="form-text">Describe your property - location, architecture, ambiance, amenities</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.property_type.id_for_label }}" class="required-field">Property Type</label>
+                {{ form.property_type }}
+                {% if form.property_type.errors %}
+                    <ul class="errorlist">{{ form.property_type.errors }}</ul>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- SECTION 2: LOCATION -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">📍</span>
+                <h3>Location</h3>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.city.id_for_label }}" class="required-field">City</label>
+                {{ form.city }}
+                {% if form.city.errors %}
+                    <ul class="errorlist">{{ form.city.errors }}</ul>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.address.id_for_label }}" class="required-field">Address</label>
+                {{ form.address }}
+                {% if form.address.errors %}
+                    <ul class="errorlist">{{ form.address.errors }}</ul>
+                {% endif %}
+                <div class="form-text">Full street address with building/house number</div>
+            </div>
+            
+            <div class="input-group">
+                <div>
+                    <label for="{{ form.state.id_for_label }}" class="required-field">State</label>
+                    {{ form.state }}
+                    {% if form.state.errors %}
+                        <ul class="errorlist">{{ form.state.errors }}</ul>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.pincode.id_for_label }}" class="required-field">Pincode</label>
+                    {{ form.pincode }}
+                    {% if form.pincode.errors %}
+                        <ul class="errorlist">{{ form.pincode.errors }}</ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECTION 3: CONTACT -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">📞</span>
+                <h3>Contact Information</h3>
+            </div>
+            
+            <div class="input-group">
+                <div>
+                    <label for="{{ form.contact_phone.id_for_label }}" class="required-field">Phone Number</label>
+                    {{ form.contact_phone }}
+                    {% if form.contact_phone.errors %}
+                        <ul class="errorlist">{{ form.contact_phone.errors }}</ul>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.contact_email.id_for_label }}" class="required-field">Email Address</label>
+                    {{ form.contact_email }}
+                    {% if form.contact_email.errors %}
+                        <ul class="errorlist">{{ form.contact_email.errors }}</ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECTION 4: RULES & POLICIES -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">📋</span>
+                <h3>Rules & Policies</h3>
+            </div>
+            
+            <div class="input-group">
+                <div>
+                    <label for="{{ form.checkin_time.id_for_label }}" class="required-field">Check-in Time</label>
+                    {{ form.checkin_time }}
+                    {% if form.checkin_time.errors %}
+                        <ul class="errorlist">{{ form.checkin_time.errors }}</ul>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.checkout_time.id_for_label }}" class="required-field">Check-out Time</label>
+                    {{ form.checkout_time }}
+                    {% if form.checkout_time.errors %}
+                        <ul class="errorlist">{{ form.checkout_time.errors }}</ul>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.property_rules.id_for_label }}" class="required-field">House Rules</label>
+                {{ form.property_rules }}
+                {% if form.property_rules.errors %}
+                    <ul class="errorlist">{{ form.property_rules.errors }}</ul>
+                {% endif %}
+                <div class="form-text">Include check-in/out policies, pet policy, smoking policy, noise restrictions, etc.</div>
+            </div>
+        </div>
+        
+        <!-- SECTION 5: CAPACITY -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">🛏️</span>
+                <h3>Capacity & Layout</h3>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                <div class="form-group">
+                    <label for="{{ form.max_guests.id_for_label }}" class="required-field">Max Guests</label>
+                    {{ form.max_guests }}
+                    {% if form.max_guests.errors %}
+                        <ul class="errorlist">{{ form.max_guests.errors }}</ul>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.num_bedrooms.id_for_label }}" class="required-field">Bedrooms</label>
+                    {{ form.num_bedrooms }}
+                    {% if form.num_bedrooms.errors %}
+                        <ul class="errorlist">{{ form.num_bedrooms.errors }}</ul>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.num_bathrooms.id_for_label }}" class="required-field">Bathrooms</label>
+                    {{ form.num_bathrooms }}
+                    {% if form.num_bathrooms.errors %}
+                        <ul class="errorlist">{{ form.num_bathrooms.errors }}</ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECTION 6: PRICING -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">💰</span>
+                <h3>Pricing</h3>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                <div class="form-group">
+                    <label for="{{ form.base_price.id_for_label }}" class="required-field">Price per Night (₹)</label>
+                    {{ form.base_price }}
+                    {% if form.base_price.errors %}
+                        <ul class="errorlist">{{ form.base_price.errors }}</ul>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.currency.id_for_label }}">Currency</label>
+                    {{ form.currency }}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.gst_percentage.id_for_label }}">GST Percentage (%)</label>
+                    {{ form.gst_percentage }}
+                    {% if form.gst_percentage.errors %}
+                        <ul class="errorlist">{{ form.gst_percentage.errors }}</ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECTION 7: AMENITIES -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">✨</span>
+                <h3>Amenities</h3>
+            </div>
+            
+            <div class="form-group">
+                <label class="required-field">Select Available Amenities</label>
+                <div>
+                    {% for value, label in form.amenities_list.field.choices %}
+                    <div class="amenity-checkbox">
+                        <label>
+                            <input type="checkbox" name="amenities_list" value="{{ value }}" 
+                                {% if value in form.amenities_list.value %}checked{% endif %}>
+                            {{ label }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if form.amenities_list.errors %}
+                    <ul class="errorlist">{{ form.amenities_list.errors }}</ul>
+                {% endif %}
+                <div class="form-text">Select at least one amenity your property offers</div>
+            </div>
+        </div>
+        
+        <!-- SECTION 8: CANCELLATION POLICY -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">❌</span>
+                <h3>Cancellation Policy</h3>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.cancellation_policy.id_for_label }}" class="required-field">Policy Details</label>
+                {{ form.cancellation_policy }}
+                {% if form.cancellation_policy.errors %}
+                    <ul class="errorlist">{{ form.cancellation_policy.errors }}</ul>
+                {% endif %}
+                <div class="form-text">Explain your cancellation terms, refund conditions, and deadlines</div>
+            </div>
+            
+            <div class="form-group">
+                <label class="required-field">Cancellation Type</label>
+                <div>
+                    {% for value, label in form.cancellation_type.field.choices %}
+                    <div style="margin-bottom: 10px;">
+                        <label>
+                            <input type="radio" name="cancellation_type" value="{{ value }}" 
+                                {% if value == form.cancellation_type.value %}checked{% endif %}>
+                            {{ label }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if form.cancellation_type.errors %}
+                    <ul class="errorlist">{{ form.cancellation_type.errors }}</ul>
+                {% endif %}
+            </div>
+            
+            {% if 'x_days_before' %}
+            <div class="form-group">
+                <label for="{{ form.cancellation_days.id_for_label }}">Days Before Check-in</label>
+                {{ form.cancellation_days }}
+                {% if form.cancellation_days.errors %}
+                    <ul class="errorlist">{{ form.cancellation_days.errors }}</ul>
+                {% endif %}
+                <div class="form-text">(Only applicable if "X days before check-in" policy selected)</div>
+            </div>
+            {% endif %}
+            
+            <div class="form-group">
+                <label for="{{ form.refund_percentage.id_for_label }}">Refund Percentage (%)</label>
+                {{ form.refund_percentage }}
+                {% if form.refund_percentage.errors %}
+                    <ul class="errorlist">{{ form.refund_percentage.errors }}</ul>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- ACTION BUTTONS -->
+        <div class="button-group">
+            <button type="submit" name="save_draft" class="btn-save-draft" title="Save progress as draft">
+                💾 Save as Draft
+            </button>
+            <button type="submit" name="submit_for_approval" class="btn-submit" 
+                {% if completion_percentage < 100 %}disabled title="Complete all sections first"{% endif %}>
+                ✅ Submit for Approval
+            </button>
+        </div>
+        
+        {% if mode == 'draft' and required_checks %}
+        <div style="margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 5px;">
+            <h4 style="margin-top: 0;">Required Fields Status:</h4>
+            {% for field, complete in required_checks.items %}
+            <div class="checklist-item {% if complete %}checklist-complete{% else %}checklist-incomplete{% endif %}">
+                <span class="checklist-icon">{% if complete %}✅{% else %}❌{% endif %}</span>
+                {{ field|title }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+    // Auto-save draft on change
+    document.getElementById('propertyForm').addEventListener('change', function() {
+        // Could add auto-save functionality here if desired
+    });
+    
+    // Prevent accidental navigation away
+    let formChanged = false;
+    document.getElementById('propertyForm').addEventListener('input', function() {
+        formChanged = true;
+    });
+    
+    window.addEventListener('beforeunload', function(e) {
+        if (formChanged) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+    
+    // Reset flag on submit
+    document.getElementById('propertyForm').addEventListener('submit', function() {
+        formChanged = false;
+    });
+</script>
+{% endblock %}

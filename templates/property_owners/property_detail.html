@@ -1,0 +1,426 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ property.name }} - Property Details{% endblock %}
+
+{% block extra_css %}
+<style>
+    .property-detail-container {
+        max-width: 900px;
+        margin: 30px auto;
+        padding: 0 15px;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        padding: 10px 15px;
+        border-radius: 5px;
+        font-weight: 600;
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+    
+    .status-draft {
+        background-color: #f0f0f0;
+        color: #333;
+        border-left: 4px solid #6C757D;
+    }
+    
+    .status-pending {
+        background-color: #fff3cd;
+        color: #856404;
+        border-left: 4px solid #FFC107;
+    }
+    
+    .status-approved {
+        background-color: #d4edda;
+        color: #155724;
+        border-left: 4px solid #28A745;
+    }
+    
+    .status-rejected {
+        background-color: #f8d7da;
+        color: #721c24;
+        border-left: 4px solid #DC3545;
+    }
+    
+    .property-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .property-header h1 {
+        margin: 0 0 5px 0;
+        font-size: 28px;
+        font-weight: 700;
+    }
+    
+    .property-meta {
+        display: flex;
+        gap: 20px;
+        font-size: 14px;
+        color: #666;
+        margin-top: 10px;
+    }
+    
+    .info-section {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 20px;
+    }
+    
+    .info-section h3 {
+        margin-top: 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: #333;
+        border-bottom: 2px solid #f0f0f0;
+        padding-bottom: 12px;
+    }
+    
+    .info-row {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 20px;
+        padding: 15px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        font-weight: 600;
+        color: #666;
+    }
+    
+    .info-value {
+        color: #333;
+    }
+    
+    .completion-bar {
+        background: #f0f0f0;
+        border-radius: 20px;
+        height: 8px;
+        margin: 10px 0;
+        overflow: hidden;
+    }
+    
+    .completion-fill {
+        background: linear-gradient(90deg, #28A745, #20C997);
+        height: 100%;
+        border-radius: 20px;
+    }
+    
+    .checklist-item {
+        display: flex;
+        align-items: center;
+        padding: 8px 0;
+        font-size: 14px;
+    }
+    
+    .checklist-icon {
+        margin-right: 10px;
+        font-size: 16px;
+        min-width: 20px;
+    }
+    
+    .checklist-complete .checklist-icon {
+        color: #28A745;
+    }
+    
+    .checklist-incomplete .checklist-icon {
+        color: #DC3545;
+    }
+    
+    .button-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+    }
+    
+    .btn-primary {
+        background-color: #00BCD4;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 5px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        transition: background-color 0.3s ease;
+    }
+    
+    .btn-primary:hover {
+        background-color: #0097A7;
+    }
+    
+    .btn-secondary {
+        background-color: #6C757D;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 5px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        transition: background-color 0.3s ease;
+    }
+    
+    .btn-secondary:hover {
+        background-color: #5A6268;
+    }
+    
+    .rejection-box {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        border-left: 4px solid #DC3545;
+        padding: 15px 20px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .rejection-box h4 {
+        margin-top: 0;
+        color: #721c24;
+    }
+    
+    .rejection-box p {
+        margin: 0;
+        color: #721c24;
+        line-height: 1.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="property-detail-container">
+    <div class="property-header">
+        <div>
+            <h1>{{ property.name }}</h1>
+            <div class="property-meta">
+                <span>📍 {{ property.city.name }}</span>
+                <span>🏠 {{ property.get_property_type_display }}</span>
+                <span>Updated: {{ property.updated_at|date:"M d, Y" }}</span>
+            </div>
+        </div>
+        <div>
+            <div class="status-badge status-{{ property.approval_status }}">
+                {% if property.approval_status == 'draft' %}
+                    📝 DRAFT
+                {% elif property.approval_status == 'pending_verification' %}
+                    ⏳ PENDING REVIEW
+                {% elif property.approval_status == 'approved' %}
+                    ✅ APPROVED
+                {% elif property.approval_status == 'rejected' %}
+                    ❌ REJECTED
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- REJECTION NOTICE -->
+    {% if property.approval_status == 'rejected' and property.rejection_reason %}
+    <div class="rejection-box">
+        <h4>❌ Property Rejected</h4>
+        <p>{{ property.rejection_reason }}</p>
+        <p style="margin-top: 10px; font-size: 13px;">
+            You can edit your property and resubmit it for approval.
+        </p>
+    </div>
+    {% endif %}
+    
+    <!-- COMPLETION STATUS -->
+    {% if property.approval_status == 'draft' %}
+    <div class="info-section" style="background: #f8f9fa; border: 1px solid #dee2e6;">
+        <h3>📊 Completion Status</h3>
+        <p style="color: #666;">
+            {% if is_complete %}
+                ✅ <strong>All sections complete!</strong> Your property is ready to submit for approval.
+            {% else %}
+                📝 Complete remaining sections to submit your property.
+            {% endif %}
+        </p>
+        <div style="font-size: 20px; font-weight: 700; color: #00BCD4; margin-bottom: 10px;">
+            {{ completion_percentage }}% Complete
+        </div>
+        <div class="completion-bar">
+            <div class="completion-fill" style="width: {{ completion_percentage }}%;"></div>
+        </div>
+        
+        <h4 style="margin-top: 20px; margin-bottom: 10px;">Required Fields:</h4>
+        {% for field, complete in required_checks.items %}
+        <div class="checklist-item {% if complete %}checklist-complete{% else %}checklist-incomplete{% endif %}">
+            <span class="checklist-icon">{% if complete %}✅{% else %}❌{% endif %}</span>
+            {{ field|title }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    <!-- BASIC INFORMATION -->
+    <div class="info-section">
+        <h3>🏢 Basic Information</h3>
+        <div class="info-row">
+            <div class="info-label">Property Name:</div>
+            <div class="info-value">{{ property.name }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Type:</div>
+            <div class="info-value">{{ property.get_property_type_display }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Description:</div>
+            <div class="info-value">{{ property.description }}</div>
+        </div>
+    </div>
+    
+    <!-- LOCATION -->
+    <div class="info-section">
+        <h3>📍 Location</h3>
+        <div class="info-row">
+            <div class="info-label">City:</div>
+            <div class="info-value">{{ property.city.name }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Address:</div>
+            <div class="info-value">{{ property.address }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">State:</div>
+            <div class="info-value">{{ property.state }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Pincode:</div>
+            <div class="info-value">{{ property.pincode }}</div>
+        </div>
+    </div>
+    
+    <!-- CONTACT -->
+    <div class="info-section">
+        <h3>📞 Contact Information</h3>
+        <div class="info-row">
+            <div class="info-label">Phone:</div>
+            <div class="info-value">{{ property.contact_phone }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Email:</div>
+            <div class="info-value">{{ property.contact_email }}</div>
+        </div>
+    </div>
+    
+    <!-- RULES & POLICIES -->
+    <div class="info-section">
+        <h3>📋 Rules & Policies</h3>
+        <div class="info-row">
+            <div class="info-label">Check-in:</div>
+            <div class="info-value">{{ property.checkin_time|time:"H:i" }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Check-out:</div>
+            <div class="info-value">{{ property.checkout_time|time:"H:i" }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">House Rules:</div>
+            <div class="info-value">{{ property.property_rules }}</div>
+        </div>
+    </div>
+    
+    <!-- CAPACITY -->
+    <div class="info-section">
+        <h3>🛏️ Capacity & Layout</h3>
+        <div class="info-row">
+            <div class="info-label">Max Guests:</div>
+            <div class="info-value">{{ property.max_guests }} person(s)</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Bedrooms:</div>
+            <div class="info-value">{{ property.num_bedrooms }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Bathrooms:</div>
+            <div class="info-value">{{ property.num_bathrooms }}</div>
+        </div>
+    </div>
+    
+    <!-- PRICING -->
+    <div class="info-section">
+        <h3>💰 Pricing</h3>
+        <div class="info-row">
+            <div class="info-label">Price/Night:</div>
+            <div class="info-value">₹{{ property.base_price|floatformat:2 }} {{ property.currency }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">GST:</div>
+            <div class="info-value">{{ property.gst_percentage }}%</div>
+        </div>
+    </div>
+    
+    <!-- AMENITIES -->
+    {% if property.has_wifi or property.has_parking or property.has_pool or property.has_gym or property.has_restaurant or property.has_spa or property.has_ac %}
+    <div class="info-section">
+        <h3>✨ Amenities</h3>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+            {% if property.has_wifi %}<div>📶 WiFi</div>{% endif %}
+            {% if property.has_parking %}<div>🅿️ Parking</div>{% endif %}
+            {% if property.has_pool %}<div>🏊 Pool</div>{% endif %}
+            {% if property.has_gym %}<div>💪 Gym</div>{% endif %}
+            {% if property.has_restaurant %}<div>🍽️ Restaurant</div>{% endif %}
+            {% if property.has_spa %}<div>🧖 Spa</div>{% endif %}
+            {% if property.has_ac %}<div>❄️ Air Conditioning</div>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- CANCELLATION POLICY -->
+    <div class="info-section">
+        <h3>❌ Cancellation Policy</h3>
+        <div class="info-row">
+            <div class="info-label">Type:</div>
+            <div class="info-value">{{ property.get_cancellation_type_display }}</div>
+        </div>
+        {% if property.cancellation_days %}
+        <div class="info-row">
+            <div class="info-label">Days:</div>
+            <div class="info-value">{{ property.cancellation_days }} day(s) before check-in</div>
+        </div>
+        {% endif %}
+        <div class="info-row">
+            <div class="info-label">Refund %:</div>
+            <div class="info-value">{{ property.refund_percentage }}%</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Policy:</div>
+            <div class="info-value">{{ property.cancellation_policy }}</div>
+        </div>
+    </div>
+    
+    <!-- ACTION BUTTONS -->
+    <div class="button-group">
+        {% if can_edit %}
+            <a href="{% url 'property_owners:create_property' %}?edit={{ property.id }}" class="btn-primary">
+                ✏️ Edit Property
+            </a>
+        {% endif %}
+        
+        {% if can_resubmit %}
+            <a href="{% url 'property_owners:create_property' %}?edit={{ property.id }}" class="btn-primary">
+                🔄 Edit & Resubmit
+            </a>
+        {% endif %}
+        
+        <a href="{% url 'property_owners:dashboard' %}" class="btn-secondary">
+            ← Back to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}
