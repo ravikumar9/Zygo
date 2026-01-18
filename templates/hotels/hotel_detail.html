@@ -460,6 +460,10 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     });
 
+    // ===== CRITICAL FIX: Run validation on initial page load =====
+    calc();
+    validateAllFields();
+
     // Form validation for hotel booking
     window.validateHotelBooking = function(event) {
         event.preventDefault();
