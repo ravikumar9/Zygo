@@ -268,3 +268,137 @@ class PropertyAmenity(models.Model):
 
     def __str__(self):
         return self.name
+
+# ============================================================================
+# ROLE-BASED SYSTEM FOR PRODUCTION SCALABILITY
+# ============================================================================
+
+class UserRole(models.Model):
+    """User role assignments for multi-tenant system"""
+    ROLE_CHOICES = [
+        ('admin', 'Platform Admin'),
+        ('property_owner', 'Property Owner'),
+        ('operator', 'Bus Operator'),
+        ('corporate', 'Corporate Partner'),
+        ('employee', 'Employee'),
+        ('customer', 'Customer'),
+    ]
+    
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user_role')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='customer')
+    is_verified = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        verbose_name_plural = "User Roles"
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.get_role_display()}"
+
+
+class PropertyUpdateRequest(TimeStampedModel):
+    """Property owners submit updates for admin approval (production workflow)"""
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+    
+    owner = models.ForeignKey(PropertyOwner, on_delete=models.CASCADE, related_name='update_requests')
+    
+    change_type = models.CharField(max_length=50, choices=[
+        ('room_types', 'Room Types'),
+        ('pricing', 'Pricing'),
+        ('images', 'Images'),
+        ('amenities', 'Amenities'),
+        ('rules', 'Rules'),
+    ])
+    
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    old_data = models.JSONField(default=dict, blank=True)
+    new_data = models.JSONField(default=dict)
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    rejection_reason = models.TextField(blank=True)
+    
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_property_requests')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def approve(self, admin_user):
+        """Approve and apply changes"""
+        from django.utils import timezone
+        self.status = 'approved'
+        self.reviewed_by = admin_user
+        self.reviewed_at = timezone.now()
+        self.save()
+    
+    def reject(self, admin_user, reason=''):
+        """Reject update request"""
+        from django.utils import timezone
+        self.status = 'rejected'
+        self.rejection_reason = reason
+        self.reviewed_by = admin_user
+        self.reviewed_at = timezone.now()
+        self.save()
+    
+    def __str__(self):
+        return f"{self.owner.business_name} - {self.get_change_type_display()} ({self.get_status_display()})"
+
+
+class SeasonalPricing(TimeStampedModel):
+    """Seasonal pricing managed by property owner"""
+    room_type = models.ForeignKey('hotels.RoomType', on_delete=models.CASCADE, related_name='seasonal_pricing')
+    owner = models.ForeignKey(PropertyOwner, on_delete=models.CASCADE)
+    
+    start_date = models.DateField()
+    end_date = models.DateField()
+    
+    base_price = models.DecimalField(max_digits=10, decimal_places=2)
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    
+    occupancy_threshold = models.IntegerField(default=70, help_text="Min occupancy % to apply discount")
+    
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['-start_date']
+    
+    def effective_price(self, occupancy_percentage=100):
+        """Get effective price based on occupancy threshold"""
+        from decimal import Decimal
+        if occupancy_percentage >= self.occupancy_threshold:
+            discount_amount = self.base_price * Decimal(self.discount_percentage) / Decimal('100')
+            return self.base_price - discount_amount
+        return self.base_price
+    
+    def __str__(self):
+        return f"{self.room_type} - {self.start_date} to {self.end_date}"
+
+
+class AdminApprovalLog(TimeStampedModel):
+    """Log of all admin approvals for audit trail"""
+    APPROVAL_TYPE_CHOICES = [
+        ('property_owner', 'Property Owner Verification'),
+        ('update_request', 'Update Request'),
+        ('image', 'Image Upload'),
+        ('pricing', 'Pricing Change'),
+    ]
+    
+    admin = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='approval_logs')
+    approval_type = models.CharField(max_length=50, choices=APPROVAL_TYPE_CHOICES)
+    
+    subject = models.CharField(max_length=255)
+    details = models.JSONField(default=dict)
+    
+    decision = models.CharField(max_length=20, choices=[('approved', 'Approved'), ('rejected', 'Rejected')])
+    reason = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.get_approval_type_display()} - {self.decision} on {self.created_at.date()}"
