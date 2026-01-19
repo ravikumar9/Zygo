@@ -39,9 +39,10 @@ def calculate_pricing(booking, promo_code=None, wallet_apply_amount=None, user=N
     
     # Add corporate discount if applicable (stored in metadata)
     promo_discount = Decimal('0.00')
-    if booking.metadata and isinstance(booking.metadata, dict):
-        if 'corporate_discount_amount' in booking.metadata:
-            promo_discount += abs(Decimal(str(booking.metadata['corporate_discount_amount'])))
+    metadata = getattr(booking, 'metadata', None)
+    if metadata and isinstance(metadata, dict):
+        if 'corporate_discount_amount' in metadata:
+            promo_discount += abs(Decimal(str(metadata['corporate_discount_amount'])))
     
     # Step 2: Apply Promo Code Discount (if valid)
     if promo_code and user:
