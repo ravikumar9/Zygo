@@ -39,6 +39,41 @@ class BookingDetailView(LoginRequiredMixin, DetailView):
     def get_object(self, queryset=None):
         booking_id = self.kwargs.get('booking_id')
         return get_object_or_404(Booking, booking_id=booking_id, user=self.request.user)
+    
+    def get_context_data(self, **kwargs):
+        from bookings.pricing_calculator import calculate_pricing
+        from payments.models import Wallet
+        from decimal import Decimal
+        
+        context = super().get_context_data(**kwargs)
+        booking = self.object
+        
+        # Calculate pricing using unified calculator
+        pricing = calculate_pricing(
+            booking=booking,
+            promo_code=booking.promo_code,
+            wallet_apply_amount=None,  # Don't apply wallet on detail page
+            user=self.request.user
+        )
+        
+        # Get wallet balance for display
+        wallet_balance = Decimal('0.00')
+        try:
+            wallet = Wallet.objects.get(user=self.request.user, is_active=True)
+            wallet_balance = wallet.balance
+        except Wallet.DoesNotExist:
+            pass
+        
+        context.update({
+            'base_amount': pricing['base_amount'],
+            'promo_discount': pricing['promo_discount'],
+            'subtotal_after_promo': pricing['subtotal_after_promo'],
+            'gst_amount': pricing['gst_amount'],
+            'total_payable': pricing['total_payable'],
+            'wallet_balance': wallet_balance,
+        })
+        
+        return context
 
 @login_required
 def booking_confirmation(request, booking_id):
@@ -50,14 +85,18 @@ def booking_confirmation(request, booking_id):
     
     BLOCKER FIX: If booking is already confirmed, show detail view instead.
     """
-    # Clear any auth/login messages before entering booking flow
+    from django.contrib import messages
     from django.contrib.messages import get_messages
+    from bookings.pricing_calculator import calculate_pricing
+    from core.models import PromoCode
+    from payments.models import Wallet
+    
+    # Clear any auth/login messages before entering booking flow
     storage = get_messages(request)
     storage.used = True
     
     # ENFORCE EMAIL VERIFICATION (mobile optional/deferred)
     if not request.user.email_verified_at:
-        from django.contrib import messages
         messages.error(request, 'Please verify your email before booking. Check your inbox for OTP.')
         request.session['pending_user_id'] = request.user.id
         request.session['pending_email'] = request.user.email
@@ -71,19 +110,64 @@ def booking_confirmation(request, booking_id):
         return redirect('bookings:booking-detail', booking_id=booking.booking_id)
 
     if booking.check_reservation_timeout():
-        from django.contrib import messages
         messages.error(request, 'Reservation hold expired. Please start a new booking.')
         target_hotel = getattr(getattr(booking, 'hotel_details', None), 'room_type', None)
         if target_hotel and target_hotel.hotel_id:
             return redirect('hotels:hotel_detail', pk=target_hotel.hotel_id)
         return redirect('hotels:hotel_list')
 
-    if request.method == 'POST':
+    # Handle promo code application (AJAX or POST)
+    promo_code = None
+    promo_error = None
+    if request.method == 'POST' and 'promo_code' in request.POST:
+        promo_code_str = request.POST.get('promo_code', '').strip().upper()
+        if promo_code_str:
+            try:
+                promo_code = PromoCode.objects.get(code=promo_code_str, is_active=True)
+                is_valid, error_msg = promo_code.is_valid_for_user(request.user)
+                if not is_valid:
+                    promo_error = error_msg
+                    promo_code = None
+                else:
+                    # Save promo to booking
+                    booking.promo_code = promo_code
+                    booking.save(update_fields=['promo_code'])
+            except PromoCode.DoesNotExist:
+                promo_error = "Invalid promo code"
+    elif booking.promo_code:
+        promo_code = booking.promo_code
+
+    # Calculate pricing using unified function
+    pricing = calculate_pricing(
+        booking=booking,
+        promo_code=promo_code,
+        wallet_apply_amount=None,  # Not applied on confirm page
+        user=request.user
+    )
+
+    # Get wallet balance for display
+    wallet_balance = Decimal('0.00')
+    try:
+        wallet = Wallet.objects.get(user=request.user, is_active=True)
+        wallet_balance = wallet.balance
+    except Wallet.DoesNotExist:
+        pass
+
+    if request.method == 'POST' and 'proceed_to_payment' in request.POST:
         return redirect(reverse('bookings:booking-payment', kwargs={'booking_id': booking.booking_id}))
 
-    return render(request, 'bookings/confirmation.html', {
+    context = {
         'booking': booking,
-    })
+        'base_amount': pricing['base_amount'],
+        'promo_discount': pricing['promo_discount'],
+        'subtotal_after_promo': pricing['subtotal_after_promo'],
+        'gst_amount': pricing['gst_amount'],
+        'total_payable': pricing['total_payable'],
+        'wallet_balance': wallet_balance,
+        'promo_code': promo_code,
+        'promo_error': promo_error,
+    }
+    return render(request, 'bookings/confirmation.html', context)
 
 
 @login_required
@@ -98,12 +182,13 @@ def payment_page(request, booking_id):
     """
     # Clear any auth/login messages before payment flow
     from django.contrib.messages import get_messages
+    from django.contrib import messages
+    from bookings.pricing_calculator import calculate_pricing
     storage = get_messages(request)
     storage.used = True
     
     # ENFORCE EMAIL VERIFICATION (mobile optional/deferred)
     if not request.user.email_verified_at:
-        from django.contrib import messages
         messages.error(request, 'Please verify your email before booking. Check your inbox for OTP.')
         request.session['pending_user_id'] = request.user.id
         request.session['pending_email'] = request.user.email
@@ -115,29 +200,54 @@ def payment_page(request, booking_id):
     
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
 
-    # Block payment if booking is not payable (BLOCKER FIX for confirmed)
-    if booking.status in ['cancelled', 'expired', 'completed', 'refunded', 'deleted', 'confirmed']:
-        from django.contrib import messages
-        messages.error(request, f'Booking is in {booking.get_status_display()} status and cannot be paid.')
-        return redirect('bookings:booking-detail', booking_id=booking.booking_id)
+    # HARD GUARD: Block payment if booking is already confirmed/completed (403 Forbidden)
+    if booking.status in ['confirmed', 'completed', 'cancelled', 'expired', 'refunded', 'deleted']:
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden(
+            f'Booking is in {booking.get_status_display()} status. Payment is no longer allowed.'
+        )
 
     if booking.check_reservation_timeout():
-        from django.contrib import messages
         messages.error(request, 'Reservation hold expired. Please start a new booking.')
         target_hotel = getattr(getattr(booking, 'hotel_details', None), 'room_type', None)
         if target_hotel and target_hotel.hotel_id:
             return redirect('hotels:hotel_detail', pk=target_hotel.hotel_id)
         return redirect('hotels:hotel_list')
 
+    # Get wallet and determine wallet application amount
+    wallet_balance = Decimal('0.00')
+    wallet_apply_amount = Decimal('0.00')
+    available_cashback = Decimal('0.00')
+    
+    try:
+        wallet = Wallet.objects.get(user=request.user, is_active=True)
+        wallet_balance = wallet.balance
+        available_cashback = wallet.get_available_balance() - wallet_balance
+    except Wallet.DoesNotExist:
+        pass
+
+    # Check if wallet checkbox is checked (default: unchecked)
+    use_wallet = request.GET.get('use_wallet', 'false') == 'true'
+    if use_wallet and wallet_balance > Decimal('0.00'):
+        wallet_apply_amount = wallet_balance  # Will be capped in calculate_pricing
+
+    # Calculate unified pricing (ORDER: Base → Promo → GST → Wallet → Final)
+    pricing = calculate_pricing(
+        booking=booking,
+        promo_code=booking.promo_code,
+        wallet_apply_amount=wallet_apply_amount,
+        user=request.user
+    )
+
     razorpay_key = settings.RAZORPAY_KEY_ID or 'rzp_test_dummy_key'
     order_id = f"order_{uuid.uuid4().hex[:20]}"
 
-    # Create real order if keys and SDK are available
+    # Create real order if keys and SDK are available (use gateway_payable)
     if razorpay and settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET:
         try:
             client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
             order = client.order.create(data={
-                'amount': int(float(booking.total_amount) * 100),
+                'amount': int(float(pricing['gateway_payable']) * 100),  # Gateway amount (after wallet)
                 'currency': 'INR',
                 'receipt': str(booking.booking_id),
                 'notes': {'booking_id': str(booking.booking_id), 'user_id': str(request.user.id)}
@@ -146,34 +256,6 @@ def payment_page(request, booking_id):
         except Exception:
             # Keep fallback order_id for non-blocking local runs
             pass
-
-    # Derive corporate discount from booking metadata (if any)
-    corp_discount_amount = Decimal('0.00')
-    corp_label = 'Corporate Discount'
-    try:
-        if booking.channel_reference:
-            data = json.loads(booking.channel_reference)
-            if isinstance(data, dict) and data.get('type') == 'corp':
-                corp_discount_amount = Decimal(str(data.get('discount_amount', 0)))
-                company = data.get('company') or data.get('domain')
-                if company:
-                    corp_label = f"Corporate Discount ({company})"
-    except Exception:
-        # Never block payment page due to malformed metadata
-        corp_discount_amount = Decimal('0.00')
-        corp_label = 'Corporate Discount'
-
-    base_amount = Decimal(str(booking.total_amount)) + corp_discount_amount
-
-    # Get wallet balance and available cashback
-    wallet_balance = Decimal('0.00')
-    available_cashback = Decimal('0.00')
-    try:
-        wallet = Wallet.objects.get(user=request.user, is_active=True)
-        wallet_balance = wallet.balance
-        available_cashback = wallet.get_available_balance() - wallet_balance
-    except Wallet.DoesNotExist:
-        pass
 
     # Include hotel booking details (room type and meal plan)
     hotel_booking = getattr(booking, 'hotel_details', None)
@@ -185,15 +267,18 @@ def payment_page(request, booking_id):
         'hotel_booking': hotel_booking,
         'room_type': room_type,
         'meal_plan': meal_plan,
-        'total_amount': booking.total_amount,
-        'base_amount': base_amount,
-        'gst_amount': 0,
-        'discount_amount': corp_discount_amount,
-        'discount_label': corp_label,
+        'base_amount': pricing['base_amount'],
+        'promo_discount': pricing['promo_discount'],
+        'subtotal_after_promo': pricing['subtotal_after_promo'],
+        'gst_amount': pricing['gst_amount'],
+        'total_payable': pricing['total_payable'],
+        'wallet_balance': wallet_balance,
+        'wallet_applied': pricing['wallet_applied'],
+        'gateway_payable': pricing['gateway_payable'],
+        'available_cashback': available_cashback,
         'razorpay_key': razorpay_key,
         'order_id': order_id,
-        'wallet_balance': wallet_balance,
-        'available_cashback': available_cashback,
+        'use_wallet': use_wallet,
     }
     return render(request, 'payments/payment.html', context)
 

@@ -215,6 +215,11 @@ if not DEBUG and (not MSG91_AUTHKEY or not MSG91_OTP_TEMPLATE_ID):
 RAZORPAY_KEY_ID = config("RAZORPAY_KEY_ID", default="")
 RAZORPAY_KEY_SECRET = config("RAZORPAY_KEY_SECRET", default="")
 
+# Cashfree UPI Integration
+CASHFREE_APP_ID = config("CASHFREE_APP_ID", default="")
+CASHFREE_SECRET_KEY = config("CASHFREE_SECRET_KEY", default="")
+CASHFREE_API_VERSION = "2023-08-01"
+
 STRIPE_PUBLIC_KEY = config("STRIPE_PUBLIC_KEY", default="")
 STRIPE_SECRET_KEY = config("STRIPE_SECRET_KEY", default="")
 

@@ -22,8 +22,43 @@
                     <span class="badge bg-secondary">{{ object.get_status_display }}</span>
                 {% endif %}
             </p>
-            <p class="mb-2"><strong>Total Amount:</strong> ₹{{ object.total_amount|floatformat:"0" }}</p>
-            <p class="mb-2"><strong>Paid Amount:</strong> ₹{{ object.paid_amount|floatformat:"0" }}</p>
+            
+            <!-- Price Breakdown -->
+            <div class="card mt-3" style="background: #f8f9fa; border: none;">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">Price Breakdown</h6>
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <td>Base Amount</td>
+                            <td class="text-end">₹{{ base_amount|floatformat:"2" }}</td>
+                        </tr>
+                        {% if promo_discount > 0 %}
+                        <tr class="text-success">
+                            <td>Promo Discount</td>
+                            <td class="text-end">-₹{{ promo_discount|floatformat:"2" }}</td>
+                        </tr>
+                        <tr>
+                            <td>Subtotal</td>
+                            <td class="text-end">₹{{ subtotal_after_promo|floatformat:"2" }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <td>GST (18%)</td>
+                            <td class="text-end">₹{{ gst_amount|floatformat:"2" }}</td>
+                        </tr>
+                        <tr class="border-top" style="font-weight: 600;">
+                            <td><strong>Total Payable</strong></td>
+                            <td class="text-end"><strong>₹{{ total_payable|floatformat:"2" }}</strong></td>
+                        </tr>
+                        {% if object.paid_amount > 0 %}
+                        <tr class="text-success">
+                            <td>Paid Amount</td>
+                            <td class="text-end">₹{{ object.paid_amount|floatformat:"2" }}</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 

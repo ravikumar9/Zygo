@@ -188,7 +188,7 @@
 <div class="container payment-container">
     <div class="payment-header">
         <h2>Secure Payment</h2>
-        <div class="payment-amount">₹{{ total_amount }}</div>
+        <div class="payment-amount">₹{{ gateway_payable|default:total_payable|floatformat:"2" }}</div>
         <p class="mb-0">Complete your booking</p>
     </div>
 
@@ -256,43 +256,62 @@
         <div class="price-breakdown">
             <div class="price-row">
                 <span>Base Amount:</span>
-                <span>₹{{ base_amount }}</span>
+                <span>₹{{ base_amount|floatformat:"2" }}</span>
             </div>
-            {% if gst_amount %}
-                <div class="price-row">
-                    <span>GST (18%):</span>
-                    <span>₹{{ gst_amount }}</span>
-                </div>
-            {% endif %}
-            {% if discount_amount %}
+            {% if promo_discount > 0 %}
                 <div class="price-row text-success">
-                    <span>{{ discount_label|default:"Discount" }}:</span>
-                    <span>-₹{{ discount_amount }}</span>
+                    <span>Promo Discount:</span>
+                    <span>-₹{{ promo_discount|floatformat:"2" }}</span>
+                </div>
+                <div class="price-row">
+                    <span>Subtotal:</span>
+                    <span>₹{{ subtotal_after_promo|floatformat:"2" }}</span>
                 </div>
             {% endif %}
+            <div class="price-row">
+                <span>GST (18%):</span>
+                <span>₹{{ gst_amount|floatformat:"2" }}</span>
+            </div>
             <div class="price-total">
-                <span>Total Amount:</span>
-                <span>₹{{ total_amount }}</span>
+                <span>Total Payable:</span>
+                <span id="total-payable-amount">₹{{ total_payable|floatformat:"2" }}</span>
             </div>
         </div>
+
+        <!-- Wallet Checkbox (Optional) -->
+        {% if wallet_balance > 0 %}
+        <div class="wallet-checkbox-section" style="margin-top: 1rem; padding: 1rem; background: #f0f8ff; border-radius: 8px;">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="useWalletCheck" {% if use_wallet %}checked{% endif %} onchange="toggleWalletApplication()">
+                <label class="form-check-label" for="useWalletCheck">
+                    <strong>Use Wallet Balance: ₹{{ wallet_balance|floatformat:"2" }}</strong>
+                </label>
+            </div>
+            <div id="wallet-breakdown" style="margin-top: 0.75rem; {% if not use_wallet %}display:none;{% endif %}">
+                <div class="price-row" style="background: #e8f5e9; padding: 8px; border-radius: 4px;">
+                    <span>Wallet Applied:</span>
+                    <span style="color: green;" id="wallet-applied-amount">-₹{{ wallet_applied|floatformat:"2" }}</span>
+                </div>
+                <div class="price-row" style="background: #fff3e0; padding: 8px; border-radius: 4px; margin-top: 5px;">
+                    <span><strong>Gateway Payable:</strong></span>
+                    <span><strong id="gateway-payable-amount">₹{{ gateway_payable|floatformat:"2" }}</strong></span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Payment Methods -->
         <div class="payment-methods">
             <h5>Select Payment Method</h5>
-            {% if wallet_balance and wallet_balance > 0 %}
-            <label class="payment-method-option">
-                <input type="radio" name="payment_method" value="wallet" id="walletRadio">
-                <strong>Wallet Balance: ₹{{ wallet_balance|floatformat:0 }}</strong>
-                {% if available_cashback > 0 %}
-                <p class="small text-success mb-0">+ Cashback: ₹{{ available_cashback|floatformat:0 }} (expiring soon)</p>
-                {% endif %}
-                <p class="small text-muted mb-0">Pay with your wallet balance</p>
-            </label>
-            {% endif %}
-            <label class="payment-method-option {% if not wallet_balance or wallet_balance <= 0 %}active{% endif %}">
-                <input type="radio" name="payment_method" value="razorpay" id="razorpayRadio" {% if not wallet_balance or wallet_balance <= 0 %}checked{% endif %}>
-                <strong>Razorpay (Recommended)</strong>
+            <label class="payment-method-option active">
+                <input type="radio" name="payment_method" value="razorpay" id="razorpayRadio" checked>
+                <strong>Razorpay (Credit/Debit/UPI/Cards)</strong>
                 <p class="small text-muted mb-0">Pay via Credit/Debit Card, UPI, Net Banking</p>
+            </label>
+            <label class="payment-method-option">
+                <input type="radio" name="payment_method" value="upi" id="upiRadio">
+                <strong>UPI (Cashfree)</strong>
+                <p class="small text-muted mb-0">Fast UPI payment or scan QR code</p>
             </label>
             <label class="payment-method-option">
                 <input type="radio" name="payment_method" value="netbanking">
@@ -303,7 +322,7 @@
 
         <!-- Payment Button -->
         <button id="paymentBtn" class="razorpay-button">
-            <i class="fas fa-lock"></i> Pay Now - ₹{{ total_amount }}
+            <i class="fas fa-lock"></i> <span id="payment-button-text">{% if use_wallet and wallet_applied >= total_payable %}Confirm using Wallet{% else %}Pay ₹{{ gateway_payable|default:total_payable|floatformat:"2" }} via RAZORPAY{% endif %}</span>
         </button>
 
         <!-- Security Information -->
@@ -480,11 +499,43 @@ function getCookie(name) {
 
 // Update payment button on method change
 document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-        const btn = document.getElementById('paymentBtn');
-        btn.textContent = `\u{1F512} Pay Now via ${this.value.toUpperCase()} - ₹${AMOUNT}`;
-    });
+    radio.addEventListener('change', updatePaymentButton);
 });
+
+// Wallet toggle function
+function toggleWalletApplication() {
+    const useWallet = document.getElementById('useWalletCheck').checked;
+    const walletBreakdown = document.getElementById('wallet-breakdown');
+    
+    if (useWallet) {
+        walletBreakdown.style.display = 'block';
+        window.location.href = '?use_wallet=true';
+    } else {
+        walletBreakdown.style.display = 'none';
+        window.location.href = '?use_wallet=false';
+    }
+}
+
+function updatePaymentButton() {
+    const useWalletCheck = document.getElementById('useWalletCheck');
+    const useWallet = useWalletCheck ? useWalletCheck.checked : false;
+    const paymentMethodRadio = document.querySelector('input[name="payment_method"]:checked');
+    const paymentMethod = paymentMethodRadio ? paymentMethodRadio.value : 'razorpay';
+    
+    const gatewayAmountEl = document.getElementById('gateway-payable-amount');
+    const gatewayAmount = gatewayAmountEl ? parseFloat(gatewayAmountEl.textContent.replace('₹', '').replace(',', '')) : {{ gateway_payable|default:total_payable }};
+    const totalAmount = parseFloat({{ total_payable }});
+    
+    const btnText = document.getElementById('payment-button-text');
+    
+    if (useWallet && gatewayAmount <= 0) {
+        btnText.innerHTML = `Confirm using Wallet`;
+    } else if (useWallet && gatewayAmount > 0) {
+        btnText.innerHTML = `Pay ₹${gatewayAmount.toFixed(2)} via RAZORPAY`;
+    } else {
+        btnText.innerHTML = `Pay ₹${totalAmount.toFixed(2)} via RAZORPAY`;
+    }
+}
 
 // Attach payment button handler with idempotency guard
 document.getElementById('paymentBtn').addEventListener('click', function(e) {

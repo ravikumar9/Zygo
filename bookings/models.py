@@ -62,6 +62,15 @@ class Booking(TimeStampedModel):
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     paid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
+    # Promo code (optional)
+    promo_code = models.ForeignKey(
+        'core.PromoCode',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bookings_with_promo'
+    )
+    
     # Wallet traceability (for admin visibility)
     wallet_balance_before = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Wallet balance before payment")
     wallet_balance_after = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Wallet balance after payment")

@@ -4,14 +4,6 @@
 
 {% block content %}
 <div class="container my-5">
-    {% if messages %}
-        {% for message in messages %}
-            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        {% endfor %}
-    {% endif %}
     
     {% if not booking %}
     <div class="alert alert-danger alert-dismissible fade show" role="alert">
@@ -106,19 +98,70 @@
                     {% if booking.status == 'confirmed' %}
                     <h5 class="card-title">✅ Confirmed</h5>
                     <div class="alert alert-success">
-                        <p class="mb-0"><strong>₹{{ booking.total_amount|floatformat:"0" }}</strong></p>
+                        <p class="mb-0"><strong>₹{{ total_payable|floatformat:"2" }}</strong></p>
                         <p class="text-muted small mb-0">Payment successful</p>
                     </div>
                     <a href="{% url 'bookings:booking-detail' booking.booking_id %}" class="btn btn-primary w-100">
                         <i class="fas fa-eye"></i> View Details
                     </a>
                     {% else %}
-                    <h5 class="card-title">Total Amount</h5>
-                    <div class="alert alert-info" id="expiry-alert">
-                        <p class="mb-0"><strong>₹{{ booking.total_amount|floatformat:"0" }}</strong></p>
+                    <h5 class="card-title">Price Breakdown</h5>
+                    
+                    <!-- Promo Code Application -->
+                    <form method="post" class="mb-3">
+                        {% csrf_token %}
+                        <div class="input-group">
+                            <input type="text" name="promo_code" class="form-control" placeholder="Promo Code" value="{{ promo_code.code|default:'' }}" {% if promo_code %}readonly{% endif %}>
+                            {% if not promo_code %}
+                            <button type="submit" class="btn btn-outline-primary">Apply</button>
+                            {% else %}
+                            <button type="submit" name="remove_promo" class="btn btn-outline-danger">Remove</button>
+                            {% endif %}
+                        </div>
+                        {% if promo_error %}
+                        <small class="text-danger">{{ promo_error }}</small>
+                        {% endif %}
+                        {% if promo_code %}
+                        <small class="text-success">✓ {{ promo_code.code }} applied</small>
+                        {% endif %}
+                    </form>
+                    
+                    <div class="alert alert-light border">
+                        <table class="table table-sm mb-0">
+                            <tr>
+                                <td>Base Amount</td>
+                                <td class="text-end"><strong>₹{{ base_amount|floatformat:"2" }}</strong></td>
+                            </tr>
+                            {% if promo_discount > 0 %}
+                            <tr class="text-success">
+                                <td>Promo Discount</td>
+                                <td class="text-end"><strong>-₹{{ promo_discount|floatformat:"2" }}</strong></td>
+                            </tr>
+                            <tr>
+                                <td>Subtotal</td>
+                                <td class="text-end">₹{{ subtotal_after_promo|floatformat:"2" }}</td>
+                            </tr>
+                            {% endif %}
+                            <tr>
+                                <td>GST (18%)</td>
+                                <td class="text-end">₹{{ gst_amount|floatformat:"2" }}</td>
+                            </tr>
+                            <tr class="border-top">
+                                <td><strong>Total Payable</strong></td>
+                                <td class="text-end"><strong>₹{{ total_payable|floatformat:"2" }}</strong></td>
+                            </tr>
+                        </table>
                     </div>
+                    
+                    {% if wallet_balance > 0 %}
+                    <div class="alert alert-info small">
+                        <i class="fas fa-wallet"></i> Wallet Balance: <strong>₹{{ wallet_balance|floatformat:"2" }}</strong>
+                    </div>
+                    {% endif %}
+                    
                     <form method="post" class="text-center">
                         {% csrf_token %}
+                        <input type="hidden" name="proceed_to_payment" value="1">
                         <button type="submit" class="btn btn-primary btn-lg w-100" id="proceed-payment-btn" {% if booking.status == 'expired' %}disabled{% endif %}>
                             <i class="fas fa-credit-card"></i> Proceed to Payment
                         </button>
