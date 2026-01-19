@@ -28,21 +28,41 @@
     </div>
 
     <div class="d-flex gap-2 flex-wrap">
-        {% if object.status == 'payment_pending' %}
+        {% if object.status == 'reserved' %}
             <a href="{% url 'bookings:booking-payment' object.booking_id %}" class="btn btn-primary">Proceed to Payment</a>
-            <form method="post" action="{% url 'bookings:cancel-booking' object.booking_id %}" style="display:inline;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure? This action cannot be undone.');">Cancel Booking</button>
-            </form>
+            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">Cancel Booking</button>
+        {% elif object.status == 'payment_pending' %}
+            <a href="{% url 'bookings:booking-payment' object.booking_id %}" class="btn btn-primary">Proceed to Payment</a>
+            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">Cancel Booking</button>
         {% elif object.status == 'confirmed' %}
             <a href="{% url 'core:home' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
-            <form method="post" action="{% url 'bookings:cancel-booking' object.booking_id %}" style="display:inline;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Are you sure? This will cancel and refund.');">Cancel Booking</button>
-            </form>
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">Cancel Booking</button>
         {% else %}
             <a href="{% url 'core:home' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
         {% endif %}
+    </div>
+
+    <!-- Cancel Confirmation Modal -->
+    <div class="modal fade" id="cancelModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Cancel Booking</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to cancel this booking?</p>
+                    <p class="text-muted small">This action cannot be undone. You will receive a refund according to the hotel's cancellation policy.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Keep Booking</button>
+                    <form method="post" action="{% url 'bookings:cancel-booking' object.booking_id %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">Yes, Cancel Booking</button>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

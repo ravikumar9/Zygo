@@ -89,6 +89,31 @@ class Invoice(TimeStampedModel):
     
     def __str__(self):
         return f"Invoice {self.invoice_number}"
+    
+    @classmethod
+    def create_for_booking(cls, booking, payment=None):
+        """Create invoice after successful booking payment"""
+        import random
+        timestamp = timezone.now().strftime('%Y%m%d%H%M%S')
+        random_suffix = random.randint(1000, 9999)
+        invoice_number = f"INV-{timestamp}-{random_suffix}"
+        
+        # Calculate tax (can be enhanced)
+        subtotal = booking.total_amount
+        tax_amount = Decimal('0')  # Add tax calculation if needed
+        
+        invoice = cls.objects.create(
+            booking=booking,
+            invoice_number=invoice_number,
+            billing_name=booking.customer_name,
+            billing_email=booking.customer_email,
+            billing_phone=booking.customer_phone,
+            billing_address=booking.hotel_details.get('address', ''),
+            subtotal=subtotal,
+            tax_amount=tax_amount,
+            total_amount=booking.total_amount,
+        )
+        return invoice
 
 
 class Wallet(TimeStampedModel):
@@ -304,4 +329,3 @@ class CashbackLedger(TimeStampedModel):
             description=description
         )
         return cashback
-

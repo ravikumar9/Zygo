@@ -172,10 +172,14 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
 
     @property
     def display_image_url(self):
-        """Return primary image URL or fallback placeholder"""
+        """Return primary image URL with cache-busting or fallback placeholder"""
         image_url = self.primary_image_url
         if image_url:
-            return image_url
+            # Add cache-busting based on updated_at timestamp
+            from django.utils import timezone
+            timestamp = int(self.updated_at.timestamp()) if hasattr(self, 'updated_at') and self.updated_at else int(timezone.now().timestamp())
+            separator = '&' if '?' in image_url else '?'
+            return f"{image_url}{separator}v={timestamp}"
         return '/static/images/hotel_placeholder.svg'
 
     def can_cancel_booking(self, check_in_date):
@@ -210,7 +214,7 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
         return False, 'Unknown cancellation policy'
 
 
-class HotelImage(models.Model):
+class HotelImage(TimeStampedModel):
     """Additional images for hotels"""
     hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='hotels/gallery/')
@@ -224,6 +228,16 @@ class HotelImage(models.Model):
     
     def __str__(self):
         return f"{self.hotel.name} - Image"
+    
+    def get_url_with_cache_busting(self):
+        """Return image URL with cache-busting timestamp"""
+        if self.image:
+            from django.utils import timezone
+            timestamp = int(self.updated_at.timestamp()) if self.updated_at else int(timezone.now().timestamp())
+            url = self.image.url
+            separator = '&' if '?' in url else '?'
+            return f"{url}{separator}v={timestamp}"
+        return ''
 
 
 
@@ -429,3 +443,26 @@ class PriceLog(TimeStampedModel):
     
     def __str__(self):
         return f"{self.room_type} - {self.old_price} -> {self.new_price}"
+
+class RoomImage(TimeStampedModel):
+    """Multiple images for room types with cache-busting support"""
+    room_type = models.ForeignKey(RoomType, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField(upload_to='hotels/rooms/')
+    is_primary = models.BooleanField(default=False)
+    display_order = models.IntegerField(default=0)
+    
+    class Meta:
+        ordering = ['-is_primary', 'display_order', 'id']
+    
+    def __str__(self):
+        return f"{self.room_type.name} - Image {self.display_order}"
+    
+    @property
+    def image_url_with_cache_busting(self):
+        """Return image URL with cache-busting parameter"""
+        if self.image:
+            base_url = self.image.url
+            timestamp = int(self.updated_at.timestamp())
+            separator = '&' if '?' in base_url else '?'
+            return f"{base_url}{separator}v={timestamp}"
+        return None

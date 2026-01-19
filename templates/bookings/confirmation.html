@@ -32,7 +32,11 @@
         <h4 class="alert-heading">
             <i class="fas fa-info-circle"></i> Booking Review
         </h4>
+        {% if booking.status == 'confirmed' %}
+        <p>✅ Your booking has been confirmed! Your reservation is locked.</p>
+        {% else %}
         <p>Your booking has been reserved. Please complete the payment to confirm your reservation.</p>
+        {% endif %}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     
@@ -43,8 +47,8 @@
                 <div class="card-body">
                     <h5 class="card-title">{{ booking.get_booking_type_display }} Booking</h5>
                     <p class="mb-2"><strong>Booking ID:</strong> <code>{{ booking.booking_id }}</code></p>
-                    <p class="mb-2"><strong>Status:</strong> <span id="booking-status" class="badge {% if booking.status == 'expired' %}bg-danger{% else %}bg-warning{% endif %}">{{ booking.get_status_display }}</span></p>
-                    {% if booking.reservation_seconds_left %}
+                    <p class="mb-2"><strong>Status:</strong> <span id="booking-status" class="badge {% if booking.status == 'confirmed' %}bg-success{% elif booking.status == 'expired' %}bg-danger{% else %}bg-warning{% endif %}">{{ booking.get_status_display }}</span></p>
+                    {% if booking.status == 'reserved' and booking.reservation_seconds_left %}
                     <p class="mb-2"><strong>Hold Expires In:</strong> <span id="expiry-countdown" data-seconds="{{ booking.reservation_seconds_left }}"></span></p>
                     {% endif %}
                     <p class="mb-2"><strong>Guest Name:</strong> {{ booking.customer_name|default:"Not specified" }}</p>
@@ -99,6 +103,16 @@
         <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
+                    {% if booking.status == 'confirmed' %}
+                    <h5 class="card-title">✅ Confirmed</h5>
+                    <div class="alert alert-success">
+                        <p class="mb-0"><strong>₹{{ booking.total_amount|floatformat:"0" }}</strong></p>
+                        <p class="text-muted small mb-0">Payment successful</p>
+                    </div>
+                    <a href="{% url 'bookings:booking-detail' booking.booking_id %}" class="btn btn-primary w-100">
+                        <i class="fas fa-eye"></i> View Details
+                    </a>
+                    {% else %}
                     <h5 class="card-title">Total Amount</h5>
                     <div class="alert alert-info" id="expiry-alert">
                         <p class="mb-0"><strong>₹{{ booking.total_amount|floatformat:"0" }}</strong></p>
@@ -109,6 +123,7 @@
                             <i class="fas fa-credit-card"></i> Proceed to Payment
                         </button>
                     </form>
+                    {% endif %}
                 </div>
             </div>
         </div>

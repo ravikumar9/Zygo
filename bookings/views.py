@@ -47,6 +47,8 @@ def booking_confirmation(request, booking_id):
     Accepts only UUID booking_id and ensures the booking belongs to the user.
     CRITICAL: User must have email_verified_at (mobile optional/deferred).
     POST from this page redirects to the payment page.
+    
+    BLOCKER FIX: If booking is already confirmed, show detail view instead.
     """
     # Clear any auth/login messages before entering booking flow
     from django.contrib.messages import get_messages
@@ -63,6 +65,10 @@ def booking_confirmation(request, booking_id):
         return redirect('users:verify-registration-otp')
     
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
+
+    # BLOCKER FIX: If already confirmed, redirect to detail
+    if booking.status == 'confirmed':
+        return redirect('bookings:booking-detail', booking_id=booking.booking_id)
 
     if booking.check_reservation_timeout():
         from django.contrib import messages
@@ -87,6 +93,8 @@ def payment_page(request, booking_id):
     CRITICAL: User must have email_verified_at (mobile optional/deferred).
     If Razorpay credentials are not configured, fall back to a dummy order id so
     the template renders without breaking local flows.
+    
+    BLOCKER FIX: Block access if booking is already confirmed.
     """
     # Clear any auth/login messages before payment flow
     from django.contrib.messages import get_messages
@@ -107,7 +115,7 @@ def payment_page(request, booking_id):
     
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
 
-    # Block payment if booking is not payable
+    # Block payment if booking is not payable (BLOCKER FIX for confirmed)
     if booking.status in ['cancelled', 'expired', 'completed', 'refunded', 'deleted', 'confirmed']:
         from django.contrib import messages
         messages.error(request, f'Booking is in {booking.get_status_display()} status and cannot be paid.')
@@ -293,3 +301,38 @@ def verify_payment(request):
     # Inform callers to use the dedicated payments endpoints
     return JsonResponse({"status": "error", "message": "Use payments:verify-payment API"}, status=405)
 
+
+def get_booking_timer(request, booking_id):
+    """API endpoint to get current booking timer status."""
+    from django.http import JsonResponse
+    from django.utils import timezone
+    
+    try:
+        booking = Booking.objects.get(booking_id=booking_id, user=request.user)
+        
+        if booking.status == 'reserved' and booking.expires_at:
+            now = timezone.now()
+            if booking.expires_at > now:
+                remaining_seconds = int((booking.expires_at - now).total_seconds())
+                return JsonResponse({
+                    'status': 'active',
+                    'expires_at': booking.expires_at.isoformat(),
+                    'remaining_seconds': remaining_seconds,
+                    'formatted_time': f"{remaining_seconds // 60}:{remaining_seconds % 60:02d}"
+                })
+            else:
+                # Expired
+                booking.status = 'expired'
+                booking.save(update_fields=['status'])
+                return JsonResponse({
+                    'status': 'expired',
+                    'remaining_seconds': 0
+                })
+        
+        return JsonResponse({
+            'status': booking.status,
+            'remaining_seconds': 0
+        })
+    
+    except Booking.DoesNotExist:
+        return JsonResponse({'error': 'Booking not found'}, status=404)

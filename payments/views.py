@@ -307,17 +307,18 @@ def process_wallet_payment(request):
                 }
             )
 
-            # Update booking
+            # Update booking (BLOCKER FIX: clear expires_at after payment)
             now = timezone.now()
             booking.paid_amount += payable_locked
             booking.payment_reference = payment.transaction_id
             booking.status = 'confirmed'
             booking.confirmed_at = now
+            booking.expires_at = None  # BLOCKER FIX: Clear timer after payment
             booking.wallet_balance_before = wallet_balance_before
             booking.wallet_balance_after = wallet.balance
             booking.save(update_fields=[
                 'paid_amount', 'payment_reference', 'status', 'confirmed_at',
-                'wallet_balance_before', 'wallet_balance_after', 'updated_at'
+                'expires_at', 'wallet_balance_before', 'wallet_balance_after', 'updated_at'
             ])
 
             # Lock inventory permanently
