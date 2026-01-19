@@ -46,8 +46,10 @@ def calculate_pricing(booking, promo_code=None, wallet_apply_amount=None, user=N
     
     # Step 2: Apply Promo Code Discount (if valid)
     if promo_code and user:
-        # Use core.PromoCode.calculate_discount method
-        promo_discount += promo_code.calculate_discount(base_amount - promo_discount, user)
+        # Use core.PromoCode.calculate_discount method (returns tuple: (amount, error))
+        discount_amount, error = promo_code.calculate_discount(base_amount - promo_discount, user)
+        if not error:
+            promo_discount += Decimal(str(discount_amount))
     
     subtotal_after_promo = base_amount - promo_discount
     
