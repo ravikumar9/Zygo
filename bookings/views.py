@@ -12,6 +12,9 @@ from .models import Booking
 import uuid
 from decimal import Decimal
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 try:
     import razorpay
 except Exception:
@@ -55,6 +58,7 @@ class BookingDetailView(LoginRequiredMixin, DetailView):
             wallet_apply_amount=None,  # Don't apply wallet on detail page
             user=self.request.user
         )
+        logger.info("DETAIL_PAGE base=%s promo=%s subtotal=%s gst=%s total=%s booking_id=%s", pricing['base_amount'], pricing['promo_discount'], pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'], booking.booking_id)
         
         # Get wallet balance for display
         wallet_balance = Decimal('0.00')
@@ -144,6 +148,7 @@ def booking_confirmation(request, booking_id):
         wallet_apply_amount=None,  # Not applied on confirm page
         user=request.user
     )
+    logger.info("CONFIRM_PAGE base=%s promo=%s subtotal=%s gst=%s total=%s booking_id=%s", pricing['base_amount'], pricing['promo_discount'], pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'], booking.booking_id)
 
     # Get wallet balance for display
     wallet_balance = Decimal('0.00')
@@ -238,6 +243,7 @@ def payment_page(request, booking_id):
         wallet_apply_amount=wallet_apply_amount,
         user=request.user
     )
+    logger.info("PAYMENT_PAGE base=%s promo=%s subtotal=%s gst=%s total=%s wallet=%s gateway=%s use_wallet=%s booking_id=%s", pricing['base_amount'], pricing['promo_discount'], pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'], pricing['wallet_applied'], pricing['gateway_payable'], use_wallet, booking.booking_id)
 
     razorpay_key = settings.RAZORPAY_KEY_ID or 'rzp_test_dummy_key'
     order_id = f"order_{uuid.uuid4().hex[:20]}"
