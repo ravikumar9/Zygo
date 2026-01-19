@@ -53,8 +53,11 @@ def calculate_pricing(booking, promo_code=None, wallet_apply_amount=None, user=N
             discount_amount, error = promo_code.calculate_discount(base_amount - promo_discount, service_type)
             if not error:
                 promo_discount += Decimal(str(discount_amount))
-        except Exception:
+        except Exception as e:
             # Defensive: never break pricing flow due to promo errors
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error("[PRICING_CALC_PROMO_ERROR] booking=%s promo=%s error=%s", booking.booking_id, promo_code.code, str(e))
             discount_amount, error = (0, 'Promo calculation failed')
     subtotal_after_promo = base_amount - promo_discount
     

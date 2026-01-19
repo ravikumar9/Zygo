@@ -404,6 +404,9 @@ def user_profile(request):
         booking.final_amount_with_gst = pricing['total_payable']
         bookings.append(booking)
     
+    logger.info("[PROFILE_PAGE_LOADED] user=%s bookings_count=%d wallet_balance=%.2f",
+                request.user.email, len(bookings), wallet_balance)
+    
     # Get wallet information
     wallet = Wallet.objects.filter(user=request.user).first()
     wallet_balance = wallet.balance if wallet else Decimal('0.00')

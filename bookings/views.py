@@ -58,7 +58,10 @@ class BookingDetailView(LoginRequiredMixin, DetailView):
             wallet_apply_amount=None,  # Don't apply wallet on detail page
             user=self.request.user
         )
-        logger.info("DETAIL_PAGE base=%s promo=%s subtotal=%s gst=%s total=%s booking_id=%s", pricing['base_amount'], pricing['promo_discount'], pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'], booking.booking_id)
+        logger.info("[DETAIL_PAGE_PRICING] booking=%s base=%.2f promo=%.2f subtotal=%.2f gst=%.2f total=%.2f status=%s",
+                    booking.booking_id, pricing['base_amount'], pricing['promo_discount'],
+                    pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'],
+                    booking.status)
         
         # Get wallet balance for display
         wallet_balance = Decimal('0.00')
@@ -126,6 +129,7 @@ def booking_confirmation(request, booking_id):
     if request.method == 'POST' and 'remove_promo' in request.POST:
         booking.promo_code = None
         booking.save(update_fields=['promo_code'])
+        logger.info("[CONFIRM_PROMO_REMOVED] booking=%s", booking.booking_id)
     elif request.method == 'POST' and 'promo_code' in request.POST:
         promo_code_str = request.POST.get('promo_code', '').strip().upper()
         if promo_code_str:
@@ -135,12 +139,15 @@ def booking_confirmation(request, booking_id):
                 if not is_valid:
                     promo_error = error_msg
                     promo_code = None
+                    logger.warning("[CONFIRM_PROMO_INVALID] booking=%s code=%s error=%s", booking.booking_id, promo_code_str, error_msg)
                 else:
                     # Save promo to booking
                     booking.promo_code = promo_code
                     booking.save(update_fields=['promo_code'])
+                    logger.info("[CONFIRM_PROMO_APPLIED] booking=%s code=%s", booking.booking_id, promo_code_str)
             except PromoCode.DoesNotExist:
                 promo_error = "Invalid promo code"
+                logger.warning("[CONFIRM_PROMO_NOT_FOUND] booking=%s code=%s", booking.booking_id, promo_code_str)
     elif booking.promo_code:
         promo_code = booking.promo_code
 
@@ -151,8 +158,7 @@ def booking_confirmation(request, booking_id):
         wallet_apply_amount=None,  # Not applied on confirm page
         user=request.user
     )
-    logger.info("CONFIRM_PAGE base=%s promo=%s subtotal=%s gst=%s total=%s booking_id=%s", pricing['base_amount'], pricing['promo_discount'], pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'], booking.booking_id)
-
+    
     # Get wallet balance for display
     wallet_balance = Decimal('0.00')
     try:
@@ -160,6 +166,11 @@ def booking_confirmation(request, booking_id):
         wallet_balance = wallet.balance
     except Wallet.DoesNotExist:
         pass
+    
+    logger.info("[CONFIRM_PAGE_PRICING] booking=%s base=%.2f promo=%.2f subtotal=%.2f gst=%.2f total=%.2f wallet_balance=%.2f", 
+                booking.booking_id, pricing['base_amount'], pricing['promo_discount'], 
+                pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'],
+                wallet_balance)
 
     if request.method == 'POST' and 'proceed_to_payment' in request.POST:
         return redirect(reverse('bookings:booking-payment', kwargs={'booking_id': booking.booking_id}))
@@ -246,7 +257,10 @@ def payment_page(request, booking_id):
         wallet_apply_amount=wallet_apply_amount,
         user=request.user
     )
-    logger.info("PAYMENT_PAGE base=%s promo=%s subtotal=%s gst=%s total=%s wallet=%s gateway=%s use_wallet=%s booking_id=%s", pricing['base_amount'], pricing['promo_discount'], pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'], pricing['wallet_applied'], pricing['gateway_payable'], use_wallet, booking.booking_id)
+    logger.info("[PAYMENT_PAGE_PRICING] booking=%s base=%.2f promo=%.2f subtotal=%.2f gst=%.2f total=%.2f wallet_balance=%.2f wallet_applied=%.2f gateway=%.2f use_wallet=%s",
+                booking.booking_id, pricing['base_amount'], pricing['promo_discount'],
+                pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'],
+                wallet_balance, pricing['wallet_applied'], pricing['gateway_payable'], use_wallet)
 
     razorpay_key = settings.RAZORPAY_KEY_ID or 'rzp_test_dummy_key'
     order_id = f"order_{uuid.uuid4().hex[:20]}"
