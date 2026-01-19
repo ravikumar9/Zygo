@@ -15,7 +15,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config("SECRET_KEY", default="dev-secret-key-change-later")
 DEBUG = config("DEBUG", default=True, cast=bool)
 
-ALLOWED_HOSTS = ['goexplorer-dev.cloud','www.goexplorer-dev.cloud','srv1247591.hstgr.cloud','localhost','127.0.0.1']
+ALLOWED_HOSTS = ['goexplorer-dev.cloud','www.goexplorer-dev.cloud','srv1247591.hstgr.cloud','localhost','127.0.0.1','testserver']
 
 # --------------------------------------------------
 # Applications
