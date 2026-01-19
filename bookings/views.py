@@ -123,7 +123,10 @@ def booking_confirmation(request, booking_id):
     # Handle promo code application (AJAX or POST)
     promo_code = None
     promo_error = None
-    if request.method == 'POST' and 'promo_code' in request.POST:
+    if request.method == 'POST' and 'remove_promo' in request.POST:
+        booking.promo_code = None
+        booking.save(update_fields=['promo_code'])
+    elif request.method == 'POST' and 'promo_code' in request.POST:
         promo_code_str = request.POST.get('promo_code', '').strip().upper()
         if promo_code_str:
             try:

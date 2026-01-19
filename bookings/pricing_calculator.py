@@ -45,12 +45,17 @@ def calculate_pricing(booking, promo_code=None, wallet_apply_amount=None, user=N
             promo_discount += abs(Decimal(str(metadata['corporate_discount_amount'])))
     
     # Step 2: Apply Promo Code Discount (if valid)
-    if promo_code and user:
+    if promo_code:
         # Use core.PromoCode.calculate_discount method (returns tuple: (amount, error))
-        discount_amount, error = promo_code.calculate_discount(base_amount - promo_discount, user)
-        if not error:
-            promo_discount += Decimal(str(discount_amount))
-    
+        # service_type uses booking.booking_type to ensure hotel/bus/package correctness
+        service_type = getattr(booking, 'booking_type', 'all') or 'all'
+        try:
+            discount_amount, error = promo_code.calculate_discount(base_amount - promo_discount, service_type)
+            if not error:
+                promo_discount += Decimal(str(discount_amount))
+        except Exception:
+            # Defensive: never break pricing flow due to promo errors
+            discount_amount, error = (0, 'Promo calculation failed')
     subtotal_after_promo = base_amount - promo_discount
     
     # Step 3: Calculate GST on post-discount base (18%)

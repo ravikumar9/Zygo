@@ -5,9 +5,24 @@
 
 {% block extra_css %}
 <style>
+    /* ===== HORIZONTAL LAYOUT: Single-screen payment (no vertical scroll) ===== */
     .payment-container {
-        max-width: 600px;
-        margin: 3rem auto;
+        max-width: 1200px;
+        margin: 2rem auto;
+        padding: 0 15px;
+    }
+
+    .payment-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        align-items: start;
+    }
+
+    @media (max-width: 992px) {
+        .payment-grid {
+            grid-template-columns: 1fr;
+        }
     }
 
     .payment-card {
@@ -15,53 +30,73 @@
         border-radius: 8px;
         padding: 2rem;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        margin-bottom: 2rem;
+        background: white;
     }
 
     .payment-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        padding: 2rem;
+        padding: 1.5rem;
         border-radius: 8px;
         margin-bottom: 2rem;
         text-align: center;
     }
 
     .payment-amount {
-        font-size: 2.5rem;
+        font-size: 2rem;
         font-weight: 700;
         color: white;
     }
 
-    .payment-details {
+    .booking-details {
         background: #f8f9fa;
-        padding: 1.5rem;
+        border: 1px solid #ddd;
         border-radius: 8px;
-        margin-bottom: 2rem;
+        padding: 1.5rem;
     }
 
-    .detail-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 0.75rem 0;
-        border-bottom: 1px solid #ddd;
-    }
-
-    .detail-row:last-child {
-        border-bottom: none;
-    }
-
-    .detail-label {
-        font-weight: 600;
+    .booking-details h5 {
+        font-weight: 700;
+        margin-bottom: 1rem;
         color: #333;
     }
 
-    .detail-value {
-        color: #666;
+    .detail-item {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .detail-item:last-child {
+        border-bottom: none;
+    }
+
+    .price-breakdown {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
+
+    .price-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+        font-size: 0.95rem;
+    }
+
+    .price-total {
+        display: flex;
+        justify-content: space-between;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #667eea;
+        border-top: 2px solid #ddd;
+        padding-top: 1rem;
+        margin-top: 0.75rem;
     }
 
     .payment-methods {
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
     }
 
     .payment-method-option {
@@ -100,68 +135,26 @@
         transition: all 0.3s ease;
     }
 
-    .razorpay-button:hover {
+    .razorpay-button:hover:not(:disabled) {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
     }
 
+    .razorpay-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
     .security-badge {
         text-align: center;
-        margin-top: 1.5rem;
+        margin-top: 1rem;
         color: #666;
+        font-size: 0.9rem;
     }
 
     .security-badge i {
         color: #28a745;
-        font-size: 1.5rem;
-        margin-bottom: 0.5rem;
-    }
-
-    .booking-details {
-        background: white;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 1.5rem;
-        margin-bottom: 2rem;
-    }
-
-    .booking-details h5 {
-        font-weight: 700;
-        margin-bottom: 1rem;
-        color: #333;
-    }
-
-    .detail-item {
-        padding: 0.5rem 0;
-        border-bottom: 1px solid #eee;
-    }
-
-    .detail-item:last-child {
-        border-bottom: none;
-    }
-
-    .price-breakdown {
-        background: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 8px;
-        margin-bottom: 2rem;
-    }
-
-    .price-row {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 0.75rem;
-    }
-
-    .price-total {
-        display: flex;
-        justify-content: space-between;
         font-size: 1.2rem;
-        font-weight: 700;
-        color: #667eea;
-        border-top: 2px solid #ddd;
-        padding-top: 1rem;
-        margin-top: 0.75rem;
     }
 
     .error-message {
@@ -181,161 +174,165 @@
         margin-bottom: 1rem;
         display: none;
     }
+
+    .wallet-checkbox-section {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #f0f8ff;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container payment-container">
+    <!-- Header -->
     <div class="payment-header">
         <h2>Secure Payment</h2>
         <div class="payment-amount">₹{{ gateway_payable|default:total_payable|floatformat:"2" }}</div>
         <p class="mb-0">Complete your booking</p>
     </div>
 
-    <div class="payment-card">
-        <!-- Error Message -->
-        <div id="errorMessage" class="error-message"></div>
-        <div id="successMessage" class="success-message"></div>
+    <!-- Error/Success Messages -->
+    <div id="errorMessage" class="error-message"></div>
+    <div id="successMessage" class="success-message"></div>
 
-        <!-- Booking Summary -->
-        <div class="booking-details">
-            <h5>Booking Summary</h5>
-            {% if hotel_booking %}
-                {% if room_type %}
-                    <div class="detail-item">
-                        <strong>Room Type:</strong> {{ room_type.name }}
-                    </div>
-                    <div class="detail-item">
-                        <strong>Check-in:</strong> {{ hotel_booking.check_in|date:"d M Y" }}
-                    </div>
-                    <div class="detail-item">
-                        <strong>Check-out:</strong> {{ hotel_booking.check_out|date:"d M Y" }}
-                    </div>
-                    <div class="detail-item">
-                        <strong>Number of Rooms:</strong> {{ hotel_booking.number_of_rooms }}
-                    </div>
-                    <div class="detail-item">
-                        <strong>Number of Nights:</strong> {{ hotel_booking.total_nights }}
-                    </div>
-                    {% if meal_plan %}
-                        <div class="detail-item" style="border-top: 1px solid #ddd; padding-top: 0.75rem; margin-top: 0.5rem;">
-                            <strong style="color: #667eea;">🍽️ Meal Plan:</strong>
-                            <p class="mb-0"><strong>{{ meal_plan.name }}</strong></p>
-                            <p class="text-muted small mb-0">{{ meal_plan.description }}</p>
-                            <p class="text-muted small">₹{{ meal_plan.price_per_night }}/night</p>
+    <!-- HORIZONTAL LAYOUT: Booking Summary (left) + Payment Options (right) -->
+    <div class="payment-grid">
+        <!-- LEFT: Booking Summary + Pricing -->
+        <div class="payment-card">
+            <h5 class="mb-3">Booking Summary</h5>
+            <div class="booking-details">
+                {% if hotel_booking %}
+                    {% if room_type %}
+                        <div class="detail-item">
+                            <strong>Room Type:</strong> {{ room_type.name }}
                         </div>
+                        <div class="detail-item">
+                            <strong>Check-in:</strong> {{ hotel_booking.check_in|date:"d M Y" }}
+                        </div>
+                        <div class="detail-item">
+                            <strong>Check-out:</strong> {{ hotel_booking.check_out|date:"d M Y" }}
+                        </div>
+                        <div class="detail-item">
+                            <strong>Number of Rooms:</strong> {{ hotel_booking.number_of_rooms }}
+                        </div>
+                        <div class="detail-item">
+                            <strong>Nights:</strong> {{ hotel_booking.total_nights }}
+                        </div>
+                        {% if meal_plan %}
+                            <div class="detail-item" style="border-top: 1px solid #ddd; padding-top: 0.75rem; margin-top: 0.5rem;">
+                                <strong style="color: #667eea;">🍽️ Meal Plan:</strong>
+                                <p class="mb-0"><strong>{{ meal_plan.name }}</strong></p>
+                                <p class="text-muted small mb-0">{{ meal_plan.description }}</p>
+                                <p class="text-muted small">₹{{ meal_plan.price_per_night }}/night</p>
+                            </div>
+                        {% endif %}
                     {% endif %}
-                {% endif %}
-                {% if hotel %}
+                {% elif booking.booking_type == 'hotel' %}
                     <div class="detail-item">
-                        <strong>Hotel:</strong> {{ hotel.name }}
-                        <p class="text-muted small">{{ hotel.city.name }}</p>
+                        <strong>Type:</strong> Hotel Booking
                     </div>
                 {% endif %}
-            {% elif booking.booking_type == 'hotel' %}
-                <!-- Fallback for older bookings without hotel_booking relation -->
-                <div class="detail-item">
-                    <strong>Type:</strong> Hotel Booking
+                <div class="detail-item" style="border-top: 1px solid #ddd; padding-top: 0.75rem; margin-top: 0.5rem;">
+                    <strong>Booking ID:</strong> <small>{{ booking.booking_id|truncatechars:20 }}</small>
                 </div>
-            {% endif %}
-            {% if bus %}
                 <div class="detail-item">
-                    <strong>{{ bus.bus_number }}</strong>
-                    <p class="text-muted small">{{ bus.operator.name }}</p>
+                    <strong>Date:</strong> {{ booking.created_at|date:"d M Y, H:i" }}
                 </div>
-            {% endif %}
-            <div class="detail-item" style="border-top: 1px solid #ddd; padding-top: 0.75rem; margin-top: 0.5rem;">
-                <strong>Booking ID:</strong> {{ booking.booking_id }}
             </div>
-            <div class="detail-item">
-                <strong>Booking Date:</strong> {{ booking.created_at|date:"d M Y, H:i" }}
-            </div>
-        </div>
 
-        <!-- Price Breakdown -->
-        <div class="price-breakdown">
-            <div class="price-row">
-                <span>Base Amount:</span>
-                <span>₹{{ base_amount|floatformat:"2" }}</span>
-            </div>
-            {% if promo_discount > 0 %}
-                <div class="price-row text-success">
-                    <span>Promo Discount:</span>
-                    <span>-₹{{ promo_discount|floatformat:"2" }}</span>
-                </div>
+            <!-- Price Breakdown -->
+            <h5 class="mb-3 mt-4">Price Breakdown</h5>
+            <div class="price-breakdown">
                 <div class="price-row">
-                    <span>Subtotal:</span>
-                    <span>₹{{ subtotal_after_promo|floatformat:"2" }}</span>
+                    <span>Base Amount:</span>
+                    <span>₹{{ base_amount|floatformat:"2" }}</span>
                 </div>
-            {% endif %}
-            <div class="price-row">
-                <span>GST (18%):</span>
-                <span>₹{{ gst_amount|floatformat:"2" }}</span>
-            </div>
-            <div class="price-total">
-                <span>Total Payable:</span>
-                <span id="total-payable-amount">₹{{ total_payable|floatformat:"2" }}</span>
+                {% if promo_discount > 0 %}
+                    <div class="price-row text-success">
+                        <span>Promo Discount:</span>
+                        <span>-₹{{ promo_discount|floatformat:"2" }}</span>
+                    </div>
+                    <div class="price-row">
+                        <span>Subtotal:</span>
+                        <span>₹{{ subtotal_after_promo|floatformat:"2" }}</span>
+                    </div>
+                {% endif %}
+                <div class="price-row">
+                    <span>GST (18%):</span>
+                    <span>₹{{ gst_amount|floatformat:"2" }}</span>
+                </div>
+                <div class="price-total">
+                    <span>Total Payable:</span>
+                    <span id="total-payable-amount">₹{{ total_payable|floatformat:"2" }}</span>
+                </div>
             </div>
         </div>
 
-        <!-- Wallet Checkbox (Optional) -->
-        {% if wallet_balance > 0 %}
-        <div class="wallet-checkbox-section" style="margin-top: 1rem; padding: 1rem; background: #f0f8ff; border-radius: 8px;">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="useWalletCheck" {% if use_wallet %}checked{% endif %} onchange="toggleWalletApplication()">
-                <label class="form-check-label" for="useWalletCheck">
-                    <strong>Use Wallet Balance: ₹{{ wallet_balance|floatformat:"2" }}</strong>
+        <!-- RIGHT: Payment Methods + Wallet + Button -->
+        <div class="payment-card">
+            <h5 class="mb-3">Payment Options</h5>
+            
+            <!-- Wallet Checkbox -->
+            {% if wallet_balance > 0 %}
+            <div class="wallet-checkbox-section">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="useWalletCheck" {% if use_wallet %}checked{% endif %} onchange="toggleWalletApplication()">
+                    <label class="form-check-label" for="useWalletCheck">
+                        <strong>Use Wallet Balance: ₹{{ wallet_balance|floatformat:"2" }}</strong>
+                    </label>
+                </div>
+                <div id="wallet-breakdown" style="margin-top: 0.75rem; {% if not use_wallet %}display:none;{% endif %}">
+                    <div class="price-row" style="background: #e8f5e9; padding: 8px; border-radius: 4px;">
+                        <span>Wallet Applied:</span>
+                        <span style="color: green;" id="wallet-applied-amount">-₹{{ wallet_applied|floatformat:"2" }}</span>
+                    </div>
+                    <div class="price-row" style="background: #fff3e0; padding: 8px; border-radius: 4px; margin-top: 5px;">
+                        <span><strong>Gateway Payable:</strong></span>
+                        <span><strong id="gateway-payable-amount">₹{{ gateway_payable|floatformat:"2" }}</strong></span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Payment Methods -->
+            <div class="payment-methods">
+                <label class="payment-method-option active">
+                    <input type="radio" name="payment_method" value="razorpay" id="razorpayRadio" checked>
+                    <strong>Razorpay (Credit/Debit/UPI/Cards)</strong>
+                    <p class="small text-muted mb-0">Pay via Credit/Debit Card, UPI, Net Banking</p>
+                </label>
+                <label class="payment-method-option">
+                    <input type="radio" name="payment_method" value="upi" id="upiRadio">
+                    <strong>UPI (Cashfree)</strong>
+                    <p class="small text-muted mb-0">Fast UPI payment or scan QR code</p>
+                </label>
+                <label class="payment-method-option">
+                    <input type="radio" name="payment_method" value="netbanking">
+                    <strong>Net Banking</strong>
+                    <p class="small text-muted mb-0">Direct bank transfer</p>
                 </label>
             </div>
-            <div id="wallet-breakdown" style="margin-top: 0.75rem; {% if not use_wallet %}display:none;{% endif %}">
-                <div class="price-row" style="background: #e8f5e9; padding: 8px; border-radius: 4px;">
-                    <span>Wallet Applied:</span>
-                    <span style="color: green;" id="wallet-applied-amount">-₹{{ wallet_applied|floatformat:"2" }}</span>
-                </div>
-                <div class="price-row" style="background: #fff3e0; padding: 8px; border-radius: 4px; margin-top: 5px;">
-                    <span><strong>Gateway Payable:</strong></span>
-                    <span><strong id="gateway-payable-amount">₹{{ gateway_payable|floatformat:"2" }}</strong></span>
-                </div>
+
+            <!-- Payment Button -->
+            <button id="paymentBtn" class="razorpay-button">
+                <i class="fas fa-lock"></i> <span id="payment-button-text">{% if use_wallet and wallet_applied >= total_payable %}Confirm using Wallet{% else %}Pay ₹{{ gateway_payable|default:total_payable|floatformat:"2" }} via RAZORPAY{% endif %}</span>
+            </button>
+
+            <!-- Security Badge -->
+            <div class="security-badge">
+                <i class="fas fa-shield-alt"></i>
+                <p class="mb-0"><strong>100% Secure Payment</strong></p>
+                <p class="small mb-0">Your payment information is encrypted</p>
             </div>
-        </div>
-        {% endif %}
-
-        <!-- Payment Methods -->
-        <div class="payment-methods">
-            <h5>Select Payment Method</h5>
-            <label class="payment-method-option active">
-                <input type="radio" name="payment_method" value="razorpay" id="razorpayRadio" checked>
-                <strong>Razorpay (Credit/Debit/UPI/Cards)</strong>
-                <p class="small text-muted mb-0">Pay via Credit/Debit Card, UPI, Net Banking</p>
-            </label>
-            <label class="payment-method-option">
-                <input type="radio" name="payment_method" value="upi" id="upiRadio">
-                <strong>UPI (Cashfree)</strong>
-                <p class="small text-muted mb-0">Fast UPI payment or scan QR code</p>
-            </label>
-            <label class="payment-method-option">
-                <input type="radio" name="payment_method" value="netbanking">
-                <strong>Net Banking</strong>
-                <p class="small text-muted mb-0">Direct bank transfer</p>
-            </label>
-        </div>
-
-        <!-- Payment Button -->
-        <button id="paymentBtn" class="razorpay-button">
-            <i class="fas fa-lock"></i> <span id="payment-button-text">{% if use_wallet and wallet_applied >= total_payable %}Confirm using Wallet{% else %}Pay ₹{{ gateway_payable|default:total_payable|floatformat:"2" }} via RAZORPAY{% endif %}</span>
-        </button>
-
-        <!-- Security Information -->
-        <div class="security-badge">
-            <i class="fas fa-shield-alt"></i>
-            <p><strong>100% Secure Payment</strong></p>
-            <p class="small">Your payment information is encrypted and secure</p>
         </div>
     </div>
 
     <!-- Back Button -->
-    <div class="text-center">
-        <a href="{% if hotel %}/hotels/{{ hotel.id }}/{% else %}/buses/{% endif %}" class="btn btn-outline-secondary">
+    <div class="text-center mt-3">
+        <a href="{% url 'bookings:booking-confirm' booking.booking_id %}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left"></i> Back
         </a>
     </div>

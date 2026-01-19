@@ -384,19 +384,33 @@ def logout_view(request):
 
 @login_required(login_url='users:login')
 def user_profile(request):
-    """User profile page with bookings and wallet visibility"""
+    """User profile page with bookings and wallet visibility (shows FINAL amount with GST)"""
     from bookings.models import Booking
     from payments.models import Wallet, CashbackLedger
+    from bookings.pricing_calculator import calculate_pricing
+    from decimal import Decimal
     
-    bookings = Booking.objects.filter(user=request.user).order_by('-created_at')
+    bookings_raw = Booking.objects.filter(user=request.user).order_by('-created_at')
+    
+    # Enrich each booking with final pricing (base + promo + GST)
+    bookings = []
+    for booking in bookings_raw:
+        pricing = calculate_pricing(
+            booking=booking,
+            promo_code=booking.promo_code,
+            wallet_apply_amount=None,
+            user=request.user
+        )
+        booking.final_amount_with_gst = pricing['total_payable']
+        bookings.append(booking)
     
     # Get wallet information
     wallet = Wallet.objects.filter(user=request.user).first()
-    wallet_balance = wallet.balance if wallet else 0
+    wallet_balance = wallet.balance if wallet else Decimal('0.00')
     wallet_currency = wallet.currency if wallet else 'INR'
     
     # Get active cashback
-    active_cashback = 0
+    active_cashback = Decimal('0.00')
     cashback_expiry = None
     if wallet:
         from django.utils import timezone
