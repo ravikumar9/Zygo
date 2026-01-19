@@ -128,7 +128,7 @@ def booking_confirmation(request, booking_id):
         if promo_code_str:
             try:
                 promo_code = PromoCode.objects.get(code=promo_code_str, is_active=True)
-                is_valid, error_msg = promo_code.is_valid_for_user(request.user)
+                is_valid, error_msg = promo_code.is_valid()
                 if not is_valid:
                     promo_error = error_msg
                     promo_code = None
