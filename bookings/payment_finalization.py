@@ -193,7 +193,7 @@ def finalize_booking_payment(
                     booking.wallet_balance_after = wallet.balance
                     
                     logger.info(
-                        "[PAYMENT_FINALIZE_WALLET_DEDUCTED] booking=%s user=%s amount=%.2f wallet_before=%.2f wallet_after=%.2f",
+                        "[PAYMENT_FINALIZE_WALLET_DEDUCTED] [WALLET_DEDUCTED] booking=%s user=%s amount=%.2f wallet_before=%.2f wallet_after=%.2f",
                         booking.booking_id, user.email, wallet_applied, wallet_balance_before, wallet.balance
                     )
                     
