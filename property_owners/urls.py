@@ -26,4 +26,8 @@ urlpatterns = [
     path('admin/approve/<int:request_id>/', admin_views.approve_update_request, name='approve-request'),
     path('admin/reject/<int:request_id>/', admin_views.reject_update_request, name='reject-request'),
     path('admin/approval-history/', admin_views.view_approval_history, name='approval-history'),
+    # Admin workflow
+    path('admin/pending/', views.admin_pending_properties, name='admin-pending'),
+    path('admin/approve/<int:property_id>/', views.admin_approve_property, name='admin-approve'),
+    path('admin/reject/<int:property_id>/', views.admin_reject_property, name='admin-reject'),
 ]

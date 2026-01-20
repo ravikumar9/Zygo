@@ -13,6 +13,8 @@ urlpatterns = [
     path('', include('core.urls')),
     # Corporate dashboard routes
     path('corporate/', include('core.urls_corporate')),
+    # Property owner self-service (Phase-2)
+    path('properties/', include('property_owners.urls')),
     # Web page routes with unique namespaces
     # Web routes (use each app's native namespace)
     path('hotels/', include(('hotels.urls', 'hotels'), namespace='hotels')),
@@ -21,7 +23,6 @@ urlpatterns = [
     path('bookings/', include(('bookings.urls', 'bookings'), namespace='bookings')),
     path('payments/', include(('payments.urls', 'payments'), namespace='payments')),
     path('users/', include(('users.urls', 'users'), namespace='users')),
-    path('properties/', include(('property_owners.urls', 'property_owners'), namespace='property_owners')),
     # API endpoints with api- prefix and unique namespaces
     path('api/hotels/', include(('hotels.urls', 'hotels'), namespace='hotels-api')),
     path('api/buses/', include(('buses.urls', 'buses'), namespace='buses-api')),

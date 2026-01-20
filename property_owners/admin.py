@@ -370,7 +370,7 @@ class PropertyAdmin(admin.ModelAdmin):
     )
     
     list_filter = (
-        'approval_status',
+        'status',
         'is_active',
         'created_at',
         'submitted_at',
@@ -511,21 +511,21 @@ class PropertyAdmin(admin.ModelAdmin):
     def approval_status_badge(self, obj):
         """Display approval status as colored badge"""
         colors = {
-            'draft': '#6C757D',
-            'pending_verification': '#FFC107',
-            'approved': '#28A745',
-            'rejected': '#DC3545',
+            'DRAFT': '#6C757D',
+            'PENDING': '#FFC107',
+            'APPROVED': '#28A745',
+            'REJECTED': '#DC3545',
         }
         labels = {
-            'draft': 'DRAFT',
-            'pending_verification': '⏳ PENDING REVIEW',
-            'approved': '✅ APPROVED',
-            'rejected': '❌ REJECTED',
+            'DRAFT': 'DRAFT',
+            'PENDING': '⏳ PENDING REVIEW',
+            'APPROVED': '✅ APPROVED',
+            'REJECTED': '❌ REJECTED',
         }
         return format_html(
             '<span style="background-color: {}; color: white; padding: 5px 10px; border-radius: 3px; font-weight: bold;">{}</span>',
-            colors.get(obj.approval_status, '#6C757D'),
-            labels.get(obj.approval_status, obj.approval_status.upper())
+            colors.get(obj.status, '#6C757D'),
+            labels.get(obj.status, (obj.status or '').upper())
         )
     approval_status_badge.short_description = 'Status'
     approval_status_badge.admin_order_field = 'approval_status'
@@ -552,7 +552,7 @@ class PropertyAdmin(admin.ModelAdmin):
     
     def action_buttons(self, obj):
         """Display action buttons based on status"""
-        if obj.approval_status == 'pending_verification':
+        if obj.status == 'PENDING':
             return format_html(
                 '<a class="button" style="background-color: #28A745; margin-right: 5px;" href="?id={}&action=approve_properties">✅ Approve</a>'
                 '<a class="button" style="background-color: #DC3545;" href="?id={}&action=reject_properties_action">❌ Reject</a>',
@@ -564,7 +564,7 @@ class PropertyAdmin(admin.ModelAdmin):
     def approval_info_display(self, obj):
         """Display approval information"""
         html = '<div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px;">'
-        html += f'<p><strong>Status:</strong> {obj.get_approval_status_display()}</p>'
+        html += f'<p><strong>Status:</strong> {obj.get_status_display()}</p>'
         
         checks, is_complete = obj.has_required_fields()
         html += f'<p><strong>Completeness:</strong> {obj.completion_percentage}%</p>'
@@ -640,7 +640,7 @@ class PropertyAdmin(admin.ModelAdmin):
     def approve_properties(self, request, queryset):
         """Approve selected pending properties"""
         updated = 0
-        for prop in queryset.filter(approval_status='pending_verification'):
+        for prop in queryset.filter(status='PENDING'):
             prop.approval_status = 'approved'
             prop.approved_at = timezone.now()
             prop.approved_by = request.user

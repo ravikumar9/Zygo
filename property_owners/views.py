@@ -6,9 +6,8 @@ from django.utils import timezone
 from django.http import JsonResponse
 from django.db.models import Q
 from django.db import transaction
-from .models import PropertyOwner, Property
-from .forms import PropertyOwnerRegistrationForm, PropertyRegistrationForm, RoomTypeInlineFormSet
-from hotels.models import RoomType
+from .models import PropertyOwner, Property, PropertyRoomType
+from .forms import PropertyOwnerRegistrationForm, PropertyRegistrationForm, PropertyRoomTypeInlineFormSet
 
 
 def register_property_owner(request):
@@ -48,10 +47,10 @@ def property_owner_dashboard(request):
     properties = owner.properties.all()
     
     # Categorize properties by status
-    approved = properties.filter(approval_status='approved')
-    pending = properties.filter(approval_status='pending_verification')
-    rejected = properties.filter(approval_status='rejected')
-    draft = properties.filter(approval_status='draft')
+    approved = properties.filter(status='APPROVED')
+    pending = properties.filter(status='PENDING')
+    rejected = properties.filter(status='REJECTED')
+    draft = properties.filter(status='DRAFT')
     
     stats = {
         'total_properties': properties.count(),
@@ -79,10 +78,9 @@ def property_owner_dashboard(request):
 @require_http_methods(["GET", "POST"])
 def create_property_draft(request):
     """
-    Create/edit property as DRAFT with inline room type collection.
-    - Allows incomplete data for save-as-you-go experience
-    - MANDATORY: At least 1 room type required before approval
-    - Does NOT submit for approval without complete room data
+    Create/edit property with PropertyRoomType inline formset (Phase-2).
+    - Minimum 1 room type required before submission
+    - Atomic transaction for property + rooms
     """
     try:
         owner = request.user.property_owner_profile
@@ -95,19 +93,19 @@ def create_property_draft(request):
     property_obj = None
     
     if property_id:
-        property_obj = get_object_or_404(Property, id=property_id, owner=owner, approval_status='draft')
+        property_obj = get_object_or_404(Property, id=property_id, owner=owner, status='DRAFT')
     
     if request.method == 'POST':
         form = PropertyRegistrationForm(request.POST, instance=property_obj)
-        formset = RoomTypeInlineFormSet(request.POST, request.FILES, instance=property_obj or Property())
+        formset = PropertyRoomTypeInlineFormSet(request.POST, request.FILES, instance=property_obj or Property())
         
         if form.is_valid() and formset.is_valid():
+            # Count valid rooms in formset
+            valid_rooms = sum(1 for f in formset.forms if f.cleaned_data and not f.cleaned_data.get('DELETE', False))
+            
             # SUBMISSION VALIDATION - Check if user clicked "Submit for Approval"
             if 'submit_for_approval' in request.POST:
                 checks, is_complete = form.instance.has_required_fields()
-                
-                # Count valid rooms in formset
-                valid_rooms = sum(1 for form in formset.forms if form.cleaned_data and not form.cleaned_data.get('DELETE', False))
                 
                 if not is_complete or valid_rooms == 0:
                     # Incomplete - reject submission
@@ -132,7 +130,7 @@ def create_property_draft(request):
                 with transaction.atomic():
                     property_obj = form.save(commit=False)
                     property_obj.owner = owner
-                    property_obj.approval_status = 'pending_verification'
+                    property_obj.status = 'PENDING'
                     property_obj.submitted_at = timezone.now()
                     property_obj.save()
                     
@@ -148,16 +146,15 @@ def create_property_draft(request):
                 with transaction.atomic():
                     property_obj = form.save(commit=False)
                     property_obj.owner = owner
-                    property_obj.approval_status = 'draft'
+                    property_obj.status = 'DRAFT'
                     property_obj.save()
                     
                     # Save room types
                     formset.instance = property_obj
                     formset.save()
                 
-                valid_rooms = sum(1 for form in formset.forms if form.cleaned_data and not form.cleaned_data.get('DELETE', False))
                 completion = property_obj.completion_percentage
-                messages.success(request, f"✅ Draft saved ({completion}% complete, {valid_rooms} room(s)). Add rooms & click 'Submit for Approval'.")
+                messages.success(request, f"✅ Draft saved ({completion}% complete, {valid_rooms} room(s)).")
                 return redirect('property_owners:property_detail', property_id=property_obj.id)
         
         else:
@@ -168,11 +165,10 @@ def create_property_draft(request):
         # GET request - display form
         if property_obj:
             form = PropertyRegistrationForm(instance=property_obj)
-            formset = RoomTypeInlineFormSet(instance=property_obj)
+            formset = PropertyRoomTypeInlineFormSet(instance=property_obj)
         else:
-            # Create empty property for formset binding
             form = PropertyRegistrationForm()
-            formset = RoomTypeInlineFormSet(instance=Property())
+            formset = PropertyRoomTypeInlineFormSet(instance=Property())
     
     # Calculate completion if editing
     completion_percentage = 0
@@ -209,8 +205,8 @@ def property_detail(request, property_id):
     property_obj = get_object_or_404(Property, id=property_id, owner=owner)
     
     # Check if can edit (only DRAFT properties)
-    can_edit = property_obj.approval_status == 'draft'
-    can_resubmit = property_obj.approval_status == 'rejected'
+    can_edit = property_obj.status == 'DRAFT'
+    can_resubmit = property_obj.status == 'REJECTED'
     
     # Get required fields status
     checks, is_complete = property_obj.has_required_fields()
@@ -242,5 +238,46 @@ def property_check_completion(request, property_id):
         'completion_percentage': property_obj.completion_percentage,
         'is_complete': is_complete,
         'checks': checks,
-        'status': property_obj.approval_status,
+        'status': property_obj.status,
     })
+
+
+@login_required
+def admin_pending_properties(request):
+    """List all pending properties for admin review"""
+    if not request.user.is_staff:
+        messages.error(request, "Unauthorized: Admins only")
+        return redirect('users:profile')
+    pending = Property.objects.filter(status='PENDING').order_by('-submitted_at')
+    return render(request, 'property_owners/admin_pending.html', {'properties': pending})
+
+
+@login_required
+def admin_approve_property(request, property_id):
+    """Approve a pending property (1-click)"""
+    if not request.user.is_staff:
+        messages.error(request, "Unauthorized: Admins only")
+        return redirect('users:profile')
+    prop = get_object_or_404(Property, id=property_id)
+    try:
+        prop.approve(admin_user=request.user)
+        messages.success(request, f"Property #{prop.id} approved")
+    except AssertionError as e:
+        messages.error(request, str(e))
+    return redirect('property_owners:admin-pending')
+
+
+@login_required
+def admin_reject_property(request, property_id):
+    """Reject a pending property with mandatory reason"""
+    if not request.user.is_staff:
+        messages.error(request, "Unauthorized: Admins only")
+        return redirect('users:profile')
+    prop = get_object_or_404(Property, id=property_id)
+    reason = request.POST.get('reason') or request.GET.get('reason')
+    try:
+        prop.reject(reason=reason or '')
+        messages.success(request, f"Property #{prop.id} rejected")
+    except AssertionError as e:
+        messages.error(request, str(e))
+    return redirect('property_owners:admin-pending')

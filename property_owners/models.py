@@ -82,12 +82,12 @@ class PropertyOwner(TimeStampedModel):
 class Property(TimeStampedModel):
     """Individual property listings with approval workflow"""
     
-    # Approval Status Workflow
-    APPROVAL_STATUS = [
-        ('draft', 'Draft (Incomplete)'),
-        ('pending_verification', 'Pending Verification'),
-        ('approved', 'Approved'),
-        ('rejected', 'Rejected'),
+    # State Machine (Phase-2)
+    PROPERTY_STATUS = [
+        ('DRAFT', 'Draft'),
+        ('PENDING', 'Pending Approval'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
     ]
     
     owner = models.ForeignKey(PropertyOwner, on_delete=models.CASCADE, related_name='properties')
@@ -151,22 +151,18 @@ class Property(TimeStampedModel):
     average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     total_reviews = models.IntegerField(default=0)
     
-    # Approval Workflow (NEW - Session 2 CRITICAL)
-    approval_status = models.CharField(
-        max_length=20, 
-        choices=[
-            ('draft', 'Draft (Incomplete)'),
-            ('pending_verification', 'Pending Verification'),
-            ('approved', 'Approved'),
-            ('rejected', 'Rejected'),
-        ], 
-        default='draft',
-        help_text="Draft → Pending → Approved/Rejected"
+    # Approval Workflow (Phase-2)
+    status = models.CharField(
+        max_length=20,
+        choices=PROPERTY_STATUS,
+        default='DRAFT',
+        db_index=True,
+        help_text="DRAFT → PENDING → APPROVED/REJECTED"
     )
     submitted_at = models.DateTimeField(null=True, blank=True, help_text="When owner submitted for verification")
     approved_at = models.DateTimeField(null=True, blank=True)
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_properties')
-    rejection_reason = models.TextField(blank=True, help_text="Reason for rejection (visible to owner)")
+    rejection_reason = models.TextField(null=True, blank=True, help_text="Reason for rejection (visible to owner)")
     admin_notes = models.TextField(blank=True, help_text="Internal admin notes (not visible to owner)")
     
     # Status
@@ -176,17 +172,65 @@ class Property(TimeStampedModel):
     class Meta:
         ordering = ['-is_featured', '-average_rating', 'name']
         indexes = [
-            models.Index(fields=['approval_status', 'is_active']),
-            models.Index(fields=['owner', 'approval_status']),
+            models.Index(fields=['status', 'is_active']),
+            models.Index(fields=['owner', 'status']),
         ]
     
     def __str__(self):
-        return f"{self.name} by {self.owner.business_name} [{self.get_approval_status_display()}]"
+        return f"{self.name} by {self.owner.business_name} [{self.get_status_display()}]"
     
     @property
     def is_approved(self):
         """Check if property is approved (used in booking queries)"""
-        return self.approval_status == 'approved' and self.is_active
+        # Backward compatibility: treat both fields; prefer new status
+        if hasattr(self, 'status'):
+            return self.status == 'APPROVED' and self.is_active
+        return getattr(self, 'approval_status', None) == 'approved' and self.is_active
+
+    def submit_for_approval(self):
+        from django.utils import timezone
+        assert self.status in ['DRAFT', 'REJECTED'], "Submit allowed only from DRAFT or REJECTED"
+        assert self.room_types.exists(), "At least one room type required"
+        old = self.status
+        self.status = 'PENDING'
+        self.submitted_at = timezone.now()
+        self.save(update_fields=['status', 'submitted_at'])
+        self.log_status_change(old, self.status, event='PROPERTY_SUBMITTED')
+
+    def approve(self, admin_user):
+        from django.db import transaction
+        from django.utils import timezone
+        assert self.status == 'PENDING', "Approve allowed only from PENDING"
+        with transaction.atomic():
+            old = self.status
+            self.status = 'APPROVED'
+            self.approved_at = timezone.now()
+            self.approved_by = admin_user
+            self.rejection_reason = None
+            self.save(update_fields=['status', 'approved_at', 'approved_by', 'rejection_reason'])
+            self.log_status_change(old, self.status, event='PROPERTY_APPROVED', actor_id=getattr(admin_user, 'id', None))
+
+    def reject(self, reason):
+        assert str(reason).strip(), "Rejection reason required"
+        old = self.status
+        self.status = 'REJECTED'
+        self.rejection_reason = reason
+        self.save(update_fields=['status', 'rejection_reason'])
+        self.log_status_change(old, self.status, event='PROPERTY_REJECTED')
+
+    def mark_pending_on_edit(self, actor_id=None):
+        if self.status == 'APPROVED':
+            old = self.status
+            self.status = 'PENDING'
+            self.save(update_fields=['status'])
+            self.log_status_change(old, self.status, event='PROPERTY_STATUS_CHANGED', actor_id=actor_id)
+
+    def log_status_change(self, old_status, new_status, event='PROPERTY_STATUS_CHANGED', actor_id=None):
+        import logging
+        logger = logging.getLogger('property_approval')
+        logger.info(
+            f"[{event}] property_id={self.id} old_status={old_status} new_status={new_status} actor_id={actor_id}"
+        )
     
     @property
     def completion_percentage(self):
@@ -347,6 +391,79 @@ class PropertyUpdateRequest(TimeStampedModel):
     
     def __str__(self):
         return f"{self.owner.business_name} - {self.get_change_type_display()} ({self.get_status_display()})"
+
+
+class PropertyRoomType(TimeStampedModel):
+    """
+    Room types for properties (Phase-2 architecture).
+    Separate from hotels.RoomType to support property self-service.
+    """
+    ROOM_TYPES = [
+        ('standard', 'Standard Room'),
+        ('deluxe', 'Deluxe Room'),
+        ('suite', 'Suite'),
+        ('family', 'Family Room'),
+        ('dormitory', 'Dormitory'),
+    ]
+    
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='room_types')
+    
+    # Room Details
+    name = models.CharField(max_length=100, help_text="Room type name (e.g., Deluxe Ocean View)")
+    room_type = models.CharField(max_length=20, choices=ROOM_TYPES, default='standard')
+    description = models.TextField(help_text="Room description, features, view details")
+    
+    # Capacity
+    max_occupancy = models.PositiveIntegerField(default=2)
+    number_of_beds = models.PositiveIntegerField(default=1)
+    room_size = models.PositiveIntegerField(null=True, blank=True, help_text="Size in square feet")
+    
+    # Pricing
+    base_price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Base price per night")
+    discounted_price = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Optional discounted price"
+    )
+    
+    # Inventory
+    total_rooms = models.PositiveIntegerField(help_text="Total number of this room type available")
+    
+    # Amenities (JSON field for flexibility)
+    amenities = models.JSONField(
+        default=list,
+        help_text="Room-specific amenities (balcony, TV, minibar, safe, etc.)"
+    )
+    
+    # Images
+    image = models.ImageField(upload_to='property_rooms/', null=True, blank=True)
+    
+    # Status
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['property', 'base_price']
+        verbose_name = "Property Room Type"
+        verbose_name_plural = "Property Room Types"
+    
+    def __str__(self):
+        return f"{self.property.name} - {self.name}"
+
+    class ApprovedQuerySet(models.QuerySet):
+        def visible(self):
+            return self.filter(property__status='APPROVED', property__is_active=True)
+
+    objects = ApprovedQuerySet.as_manager()
+    
+    def current_price(self):
+        """Get current effective price (discounted if available, else base)"""
+        return self.discounted_price if self.discounted_price else self.base_price
+    
+    def has_discount(self):
+        """Check if room has an active discount"""
+        return self.discounted_price is not None and self.discounted_price < self.base_price
 
 
 class SeasonalPricing(TimeStampedModel):
