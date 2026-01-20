@@ -208,11 +208,7 @@
                     </div>
                     <div class="col-md-3 text-end">
                         <div class="room-price">₹{{ room.base_price }}/night</div>
-                        <button class="btn btn-primary mt-2 select-room"
-                                data-id="{{ room.id }}"
-                                data-price="{{ room.base_price }}">
-                            Select Room
-                        </button>
+                        <small class="text-muted mt-2 d-block">Use dropdown below to select</small>
                     </div>
                 </div>
             </div>
@@ -512,15 +508,6 @@ document.addEventListener('DOMContentLoaded', () => {
             validateAllFields(); 
         });
     }
-
-    // Quick select room buttons
-    document.querySelectorAll('.select-room').forEach(btn => {
-        btn.onclick = () => {
-            roomSelect.value = btn.dataset.id;
-            calc();
-            document.querySelector('.booking-widget').scrollIntoView({behavior:'smooth'});
-        };
-    });
 
     // ===== CRITICAL FIX: Run validation on initial page load =====
     loadMealPlans();

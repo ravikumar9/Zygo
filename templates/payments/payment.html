@@ -323,9 +323,15 @@
             </div>
 
             <!-- Payment Button -->
-            <button id="paymentBtn" class="razorpay-button">
-                <i class="fas fa-lock"></i> <span id="payment-button-text">{% if use_wallet and wallet_applied >= total_payable %}Confirm using Wallet{% else %}Pay ₹{{ gateway_payable|default:total_payable|floatformat:"2" }} via RAZORPAY{% endif %}</span>
+            {% if gateway_payable > 0 %}
+            <button id="paymentBtn" class="razorpay-button" onclick="initiatePayment()">
+                <i class="fas fa-lock"></i> <span id="payment-button-text">Pay ₹{{ gateway_payable|floatformat:"2" }} via RAZORPAY</span>
             </button>
+            {% else %}
+            <button id="paymentBtn" class="razorpay-button" onclick="confirmWalletOnlyBooking()">
+                <i class="fas fa-check-circle"></i> <span id="payment-button-text">Confirm Booking (₹{{ total_payable|floatformat:"2" }} from Wallet)</span>
+            </button>
+            {% endif %}
 
             <!-- Security Badge -->
             <div class="security-badge">
@@ -354,6 +360,95 @@ const BOOKING_ID = "{{ booking.booking_id }}";
 const AMOUNT = parseFloat("{{ total_amount|default:'0' }}") || 0;
 const WALLET_BALANCE = parseFloat("{{ wallet_balance|default:'0' }}") || 0;
 const AVAILABLE_CASHBACK = parseFloat("{{ available_cashback|default:'0' }}") || 0;
+const GATEWAY_PAYABLE = parseFloat("{{ gateway_payable|default:'0' }}") || 0;
+const WALLET_APPLIED = parseFloat("{{ wallet_applied|default:'0' }}") || 0;
+
+// Wallet-only booking confirmation (no gateway required)
+function confirmWalletOnlyBooking() {
+    if (WALLET_APPLIED === 0) {
+        showError('Wallet application error. Please refresh the page.');
+        return;
+    }
+    
+    const btn = document.getElementById('paymentBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    
+    fetch('{% url "bookings:confirm-wallet-only" booking.booking_id %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            wallet_applied: WALLET_APPLIED,
+            total_payable: parseFloat("{{ total_payable|default:'0' }}") || 0
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showSuccess('✅ Booking confirmed! Redirecting...');
+            setTimeout(() => {
+                window.location.href = `{% url "bookings:booking-detail" booking.booking_id %}`;
+            }, 1500);
+        } else {
+            showError(data.message || 'Booking confirmation failed');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking';
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showError('Network error. Please try again.');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking';
+    });
+}
+
+
+// Wallet-only booking confirmation (no gateway required)
+function confirmWalletOnlyBooking() {
+    if (WALLET_APPLIED === 0) {
+        showError('Wallet application error. Please refresh the page.');
+        return;
+    }
+    
+    const btn = document.getElementById('paymentBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    
+    fetch('{% url "bookings:confirm-wallet-only" booking.booking_id %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            wallet_applied: WALLET_APPLIED,
+            total_payable: parseFloat("{{ total_payable|default:'0' }}") || 0
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showSuccess('✅ Booking confirmed! Redirecting...');
+            setTimeout(() => {
+                window.location.href = `{% url "bookings:booking-detail" booking.booking_id %}`;
+            }, 1500);
+        } else {
+            showError(data.message || 'Booking confirmation failed');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking';
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        showError('Network error. Please try again.');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking';
+    });
+}
 
 function initiatePayment() {
     const selectedRadio = document.querySelector('input[name="payment_method"]:checked');

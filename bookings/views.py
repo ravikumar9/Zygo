@@ -6,6 +6,7 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
 from django.urls import reverse
 from django.conf import settings
 from .models import Booking
@@ -408,6 +409,123 @@ def create_razorpay_order(request):
 def verify_payment(request):
     # Inform callers to use the dedicated payments endpoints
     return JsonResponse({"status": "error", "message": "Use payments:verify-payment API"}, status=405)
+
+
+@login_required
+@require_http_methods(["POST"])
+def confirm_wallet_only_booking(request, booking_id):
+    """Confirm booking when wallet balance covers full amount (no gateway needed).
+    
+    CRITICAL WORKFLOW:
+    1. Verify booking belongs to user and is in reserved/payment_pending status
+    2. Verify wallet balance >= total_payable
+    3. Deduct wallet amount
+    4. Update booking status to CONFIRMED
+    5. Send confirmations (SMS/Email)
+    6. Return success
+    """
+    import json
+    from django.db import transaction
+    from django.http import JsonResponse
+    from django.utils import timezone
+    from payments.models import Wallet, WalletTransaction
+    from bookings.pricing_calculator import calculate_pricing
+    
+    try:
+        data = json.loads(request.body)
+        wallet_applied = Decimal(str(data.get('wallet_applied', 0)))
+        total_payable = Decimal(str(data.get('total_payable', 0)))
+        
+        booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
+        
+        # BLOCKER: Booking must be in payment-pending state
+        if booking.status not in ['reserved', 'payment_pending']:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Booking status is {booking.status}. Cannot confirm.'
+            }, status=400)
+        
+        # Check reservation timeout
+        if booking.check_reservation_timeout():
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Reservation expired. Please create a new booking.'
+            }, status=400)
+        
+        # Calculate current pricing to verify amounts
+        pricing = calculate_pricing(
+            booking=booking,
+            promo_code=booking.promo_code,
+            wallet_apply_amount=wallet_applied,
+            user=request.user
+        )
+        
+        # Verify wallet covers full amount
+        if pricing['gateway_payable'] > Decimal('0.01'):
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Wallet does not cover full amount. Gateway payment required: ₹{pricing["gateway_payable"]}'
+            }, status=400)
+        
+        # Get wallet
+        try:
+            wallet = Wallet.objects.get(user=request.user, is_active=True)
+        except Wallet.DoesNotExist:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Wallet not found. Please contact support.'
+            }, status=400)
+        
+        # Verify wallet has sufficient balance
+        if wallet.balance < pricing['wallet_applied']:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Insufficient wallet balance. Required: ₹{pricing["wallet_applied"]}, Available: ₹{wallet.balance}'
+            }, status=400)
+        
+        # ATOMIC TRANSACTION: Deduct wallet + Confirm booking
+        with transaction.atomic():
+            # Deduct wallet
+            wallet.balance -= pricing['wallet_applied']
+            wallet.save(update_fields=['balance'])
+            
+            # Create wallet transaction
+            WalletTransaction.objects.create(
+                wallet=wallet,
+                transaction_type='DEBIT',
+                amount=pricing['wallet_applied'],
+                description=f'Payment for booking {booking.booking_id}',
+                booking=booking,
+                status='SUCCESS'
+            )
+            
+            # Update booking status
+            booking.status = 'confirmed'
+            booking.payment_status = 'PAID'
+            booking.confirmed_at = timezone.now()
+            booking.total_amount = pricing['total_payable']  # Final amount with GST
+            booking.save(update_fields=['status', 'payment_status', 'confirmed_at', 'total_amount'])
+            
+            logger.info("[WALLET_ONLY_CONFIRMED] booking=%s user=%s amount=%.2f wallet_deducted=%.2f",
+                        booking.booking_id, request.user.email, pricing['total_payable'], pricing['wallet_applied'])
+        
+        # TODO: Send confirmation SMS/Email (async)
+        # send_booking_confirmation_sms.delay(booking.booking_id)
+        # send_booking_confirmation_email.delay(booking.booking_id)
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Booking confirmed successfully!',
+            'booking_id': str(booking.booking_id),
+            'wallet_deducted': float(pricing['wallet_applied']),
+            'new_wallet_balance': float(wallet.balance)
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        logger.error("[WALLET_ONLY_CONFIRM_ERROR] booking=%s error=%s", booking_id, str(e), exc_info=True)
+        return JsonResponse({'status': 'error', 'message': 'Server error. Please try again.'}, status=500)
 
 
 def get_booking_timer(request, booking_id):

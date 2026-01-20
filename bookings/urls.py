@@ -12,6 +12,7 @@ urlpatterns = [
     path('<uuid:booking_id>/confirm/', views.booking_confirmation, name='booking-confirm'),
     path('<uuid:booking_id>/payment/', views.payment_page, name='booking-payment'),
     path('<uuid:booking_id>/cancel/', views.cancel_booking, name='cancel-booking'),
+    path('<uuid:booking_id>/confirm-wallet-only/', views.confirm_wallet_only_booking, name='confirm-wallet-only'),
     path('api/timer/<uuid:booking_id>/', views.get_booking_timer, name='booking-timer'),
     path('api/status/<uuid:booking_id>/', get_booking_status, name='booking-status'),
     path('api/create-order/', views.create_razorpay_order, name='create-order'),
