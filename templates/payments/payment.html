@@ -192,6 +192,12 @@
         <h2>Secure Payment</h2>
         <div class="payment-amount">₹{{ gateway_payable|default:total_payable|floatformat:"2" }}</div>
         <p class="mb-0">Complete your booking</p>
+        {% if booking.status == 'reserved' and booking.reservation_seconds_left %}
+        <div class="mt-2" style="font-size: 0.9rem;">
+            <i class="fas fa-clock"></i> 
+            <strong>Time remaining: <span id="payment-countdown" data-seconds="{{ booking.reservation_seconds_left }}"></span></strong>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Error/Success Messages -->
@@ -559,5 +565,39 @@ document.getElementById('paymentBtn').addEventListener('click', function(e) {
         this.style.cursor = 'pointer';
     }, 5000);
 });
+
+// Countdown timer for payment page
+(function() {
+    const countdownEl = document.getElementById('payment-countdown');
+    if (!countdownEl) return;
+
+    let remaining = parseInt(countdownEl.dataset.seconds || '0', 10);
+    const paymentBtn = document.getElementById('paymentBtn');
+
+    function renderCountdown() {
+        if (remaining <= 0) {
+            countdownEl.textContent = 'Expired';
+            countdownEl.style.color = '#dc3545';
+            if (paymentBtn) {
+                paymentBtn.disabled = true;
+                paymentBtn.textContent = 'Reservation Expired';
+            }
+            showError('Reservation time expired. Please start a new booking.');
+            clearInterval(timerId);
+            // Redirect after 3 seconds
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
+            return;
+        }
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+        countdownEl.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        remaining -= 1;
+    }
+
+    const timerId = setInterval(renderCountdown, 1000);
+    renderCountdown();
+})();
 </script>
 {% endblock %}
