@@ -384,12 +384,37 @@ def logout_view(request):
 
 @login_required(login_url='users:login')
 def user_profile(request):
-    """User profile page with bookings and wallet visibility (shows FINAL amount with GST)"""
+    """User profile page with bookings and wallet visibility (shows FINAL amount with GST).
+    
+    CATEGORY B FIX: Runs lightweight expiry sync on page load to avoid stale 'payment_pending' rows.
+    """
     from bookings.models import Booking
     from payments.models import Wallet, CashbackLedger
     from bookings.pricing_calculator import calculate_pricing
     from decimal import Decimal
+    from django.utils import timezone
     
+    # CATEGORY B: Lightweight expiry check (sync status on profile load)
+    expired_count = 0
+    pending_bookings = Booking.objects.filter(
+        user=request.user,
+        status__in=['reserved', 'payment_pending'],
+        expires_at__lte=timezone.now()
+    )
+    
+    for booking in pending_bookings:
+        if booking.check_reservation_timeout():  # Atomic expiry + inventory release
+            expired_count += 1
+    
+    if expired_count > 0:
+        logger.info("[PROFILE_EXPIRY_SYNC] user=%s expired_count=%d", request.user.email, expired_count)
+    
+    # Get wallet information (needed for logging)
+    wallet = Wallet.objects.filter(user=request.user).first()
+    wallet_balance = wallet.balance if wallet else Decimal('0.00')
+    wallet_currency = wallet.currency if wallet else 'INR'
+    
+    # Get bookings (after expiry sync)
     bookings_raw = Booking.objects.filter(user=request.user).order_by('-created_at')
     
     # Enrich each booking with final pricing (base + promo + GST)
@@ -404,19 +429,13 @@ def user_profile(request):
         booking.final_amount_with_gst = pricing['total_payable']
         bookings.append(booking)
     
-    logger.info("[PROFILE_PAGE_LOADED] user=%s bookings_count=%d wallet_balance=%.2f",
-                request.user.email, len(bookings), wallet_balance)
-    
-    # Get wallet information
-    wallet = Wallet.objects.filter(user=request.user).first()
-    wallet_balance = wallet.balance if wallet else Decimal('0.00')
-    wallet_currency = wallet.currency if wallet else 'INR'
+    logger.info("[PROFILE_PAGE_LOADED] user=%s bookings_count=%d wallet_balance=%.2f expired_synced=%d",
+                request.user.email, len(bookings), wallet_balance, expired_count)
     
     # Get active cashback
     active_cashback = Decimal('0.00')
     cashback_expiry = None
     if wallet:
-        from django.utils import timezone
         cashback_ledgers = CashbackLedger.objects.filter(
             wallet=wallet,
             is_used=False,

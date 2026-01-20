@@ -324,13 +324,18 @@
 
             <!-- Payment Button -->
             {% if gateway_payable > 0 %}
+            <!-- Gateway payment required (wallet partial or no wallet) -->
             <button id="paymentBtn" class="razorpay-button" onclick="initiatePayment()">
-                <i class="fas fa-lock"></i> <span id="payment-button-text">Pay ₹{{ gateway_payable|floatformat:"2" }} via RAZORPAY</span>
+                <i class="fas fa-lock"></i> <span id="payment-button-text">Pay ₹{{ gateway_payable|floatformat:"2" }} via Gateway</span>
             </button>
             {% else %}
+            <!-- Wallet-only (100% covered by wallet balance) -->
             <button id="paymentBtn" class="razorpay-button" onclick="confirmWalletOnlyBooking()">
-                <i class="fas fa-check-circle"></i> <span id="payment-button-text">Confirm Booking (₹{{ total_payable|floatformat:"2" }} from Wallet)</span>
+                <i class="fas fa-wallet"></i> <span id="payment-button-text">Confirm (₹{{ total_payable|floatformat:"2" }} from Wallet)</span>
             </button>
+            <p class="small text-success mt-2 mb-0">
+                <i class="fas fa-check-circle"></i> No gateway payment needed. Your wallet covers the full amount.
+            </p>
             {% endif %}
 
             <!-- Security Badge -->
@@ -364,59 +369,23 @@ const GATEWAY_PAYABLE = parseFloat("{{ gateway_payable|default:'0' }}") || 0;
 const WALLET_APPLIED = parseFloat("{{ wallet_applied|default:'0' }}") || 0;
 
 // Wallet-only booking confirmation (no gateway required)
-function confirmWalletOnlyBooking() {
-    if (WALLET_APPLIED === 0) {
-        showError('Wallet application error. Please refresh the page.');
-        return;
-    }
-    
-    const btn = document.getElementById('paymentBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-    
-    fetch('{% url "bookings:confirm-wallet-only" booking.booking_id %}', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        body: JSON.stringify({
-            wallet_applied: WALLET_APPLIED,
-            total_payable: parseFloat("{{ total_payable|default:'0' }}") || 0
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showSuccess('✅ Booking confirmed! Redirecting...');
-            setTimeout(() => {
-                window.location.href = `{% url "bookings:booking-detail" booking.booking_id %}`;
-            }, 1500);
-        } else {
-            showError(data.message || 'Booking confirmation failed');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking';
-        }
-    })
-    .catch(err => {
-        console.error(err);
-        showError('Network error. Please try again.');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking';
-    });
-}
-
-
 // Wallet-only booking confirmation (no gateway required)
 function confirmWalletOnlyBooking() {
+    // Defensive assertion: Verify wallet covers full amount
     if (WALLET_APPLIED === 0) {
         showError('Wallet application error. Please refresh the page.');
         return;
     }
     
+    const gatewayPayable = parseFloat("{{ gateway_payable|default:'0' }}") || 0;
+    if (gatewayPayable > 0.01) {
+        showError(`Gateway payment required: ₹${gatewayPayable.toFixed(2)}. Please complete payment.`);
+        return;
+    }
+    
     const btn = document.getElementById('paymentBtn');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Confirming from Wallet...';
     
     fetch('{% url "bookings:confirm-wallet-only" booking.booking_id %}', {
         method: 'POST',
@@ -432,21 +401,30 @@ function confirmWalletOnlyBooking() {
     .then(res => res.json())
     .then(data => {
         if (data.status === 'success') {
-            showSuccess('✅ Booking confirmed! Redirecting...');
+            // Calculate new wallet balance
+            const newBalance = WALLET_BALANCE - WALLET_APPLIED;
+            
+            // Show success with wallet balance update
+            showSuccess(`✅ Booking Confirmed!<br>` +
+                       `💰 Wallet deducted: ₹${WALLET_APPLIED.toFixed(2)}<br>` +
+                       `💳 New balance: ₹${newBalance.toFixed(2)}<br>` +
+                       `Redirecting to confirmation...`);
+            
+            // Immediate redirect (500ms) - no gateway needed
             setTimeout(() => {
                 window.location.href = `{% url "bookings:booking-detail" booking.booking_id %}`;
-            }, 1500);
+            }, 500);
         } else {
             showError(data.message || 'Booking confirmation failed');
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking';
+            btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking (Wallet-Only)';
         }
     })
     .catch(err => {
         console.error(err);
         showError('Network error. Please try again.');
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking';
+        btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking (Wallet-Only)';
     });
 }
 
