@@ -89,6 +89,29 @@ def finalize_booking_payment(
             'booking_id': str(booking.booking_id),
             'new_status': 'expired'
         }
+
+    # ============================================
+    # STEP 1B: DATA INTEGRITY VALIDATION (HOTEL)
+    # ============================================
+    if booking.booking_type == 'hotel':
+        hotel_booking = getattr(booking, 'hotel_details', None) or getattr(booking, 'hotel_booking', None)
+        room_type = getattr(hotel_booking, 'room_type', None) if hotel_booking else None
+        hotel = getattr(room_type, 'hotel', None) if room_type else None
+
+        if not hotel_booking or not room_type or not hotel:
+            logger.error(
+                "[PAYMENT_FINALIZE_INTEGRITY_ERROR] booking=%s hotel_booking_present=%s room_type_present=%s hotel_present=%s",
+                booking.booking_id,
+                bool(hotel_booking),
+                bool(room_type),
+                bool(hotel)
+            )
+            return {
+                'status': 'error',
+                'message': 'Invalid hotel booking data. Cannot process payment.',
+                'booking_id': str(booking.booking_id),
+                'new_status': booking.status
+            }
     
     # ============================================
     # STEP 2: RECALCULATE PRICING (FRESH)
@@ -211,7 +234,6 @@ def finalize_booking_payment(
             # ============================================================
             
             booking.status = 'confirmed'
-            booking.payment_status = 'PAID'
             booking.confirmed_at = timezone.now()
             booking.total_amount = pricing['total_payable']  # Store final amount
             booking.paid_amount = total_paid
@@ -219,7 +241,6 @@ def finalize_booking_payment(
             
             booking.save(update_fields=[
                 'status',
-                'payment_status',
                 'confirmed_at',
                 'total_amount',
                 'paid_amount',
@@ -228,6 +249,25 @@ def finalize_booking_payment(
                 'wallet_balance_after',
                 'updated_at'
             ])
+            
+            # ============================================================
+            # CREATE PAYMENT RECORD
+            # ============================================================
+            from payments.models import Payment
+            
+            Payment.objects.create(
+                booking=booking,
+                amount=total_paid,
+                payment_method=payment_mode,
+                status='success',
+                transaction_id=booking.payment_reference,
+                transaction_date=timezone.now(),
+                gateway_response={
+                    'wallet_amount': float(wallet_applied),
+                    'gateway_amount': float(gateway_amount),
+                    'mode': payment_mode
+                }
+            )
             
             logger.info(
                 "[PAYMENT_FINALIZE_SUCCESS] booking=%s mode=%s user=%s status=confirmed amount=%.2f wallet=%.2f gateway=%.2f",

@@ -5,8 +5,10 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.http import JsonResponse
 from django.db.models import Q
+from django.db import transaction
 from .models import PropertyOwner, Property
-from .forms import PropertyOwnerRegistrationForm, PropertyRegistrationForm
+from .forms import PropertyOwnerRegistrationForm, PropertyRegistrationForm, RoomTypeInlineFormSet
+from hotels.models import RoomType
 
 
 def register_property_owner(request):
@@ -77,9 +79,10 @@ def property_owner_dashboard(request):
 @require_http_methods(["GET", "POST"])
 def create_property_draft(request):
     """
-    Create/edit property as DRAFT.
+    Create/edit property as DRAFT with inline room type collection.
     - Allows incomplete data for save-as-you-go experience
-    - Does NOT submit for approval
+    - MANDATORY: At least 1 room type required before approval
+    - Does NOT submit for approval without complete room data
     """
     try:
         owner = request.user.property_owner_profile
@@ -95,54 +98,66 @@ def create_property_draft(request):
         property_obj = get_object_or_404(Property, id=property_id, owner=owner, approval_status='draft')
     
     if request.method == 'POST':
-        # Get all form data to validate completeness
-        form_data = request.POST.copy()
+        form = PropertyRegistrationForm(request.POST, instance=property_obj)
+        formset = RoomTypeInlineFormSet(request.POST, request.FILES, instance=property_obj or Property())
         
-        if property_obj:
-            # Update existing draft
-            form = PropertyRegistrationForm(form_data, instance=property_obj)
-        else:
-            # Create new draft
-            form = PropertyRegistrationForm(form_data)
-        
-        if form.is_valid():
+        if form.is_valid() and formset.is_valid():
             # SUBMISSION VALIDATION - Check if user clicked "Submit for Approval"
             if 'submit_for_approval' in request.POST:
                 checks, is_complete = form.instance.has_required_fields()
                 
-                if not is_complete:
+                # Count valid rooms in formset
+                valid_rooms = sum(1 for form in formset.forms if form.cleaned_data and not form.cleaned_data.get('DELETE', False))
+                
+                if not is_complete or valid_rooms == 0:
                     # Incomplete - reject submission
                     missing = [k for k, v in checks.items() if not v]
-                    messages.error(request, f"Cannot submit incomplete property. Missing: {', '.join(missing)}")
-                    # Re-render form to show completion %
+                    if valid_rooms == 0:
+                        missing.append('At least 1 room type required')
+                    messages.error(request, f"Cannot submit. Missing: {', '.join(missing)}")
+                    
                     context = {
                         'form': form,
+                        'formset': formset,
                         'property': form.instance,
                         'page_title': 'Create Property',
                         'mode': 'draft',
-                        'completion_percentage': form.instance.completion_percentage,
+                        'completion_percentage': form.instance.completion_percentage if property_obj else 0,
                         'required_checks': checks,
+                        'valid_rooms': valid_rooms,
                     }
                     return render(request, 'property_owners/property_form.html', context)
                 
                 # Complete - submit for approval
-                property_obj = form.save(commit=False)
-                property_obj.owner = owner
-                property_obj.approval_status = 'pending_verification'
-                property_obj.submitted_at = timezone.now()
-                property_obj.save()
-                messages.success(request, "✅ Property submitted for verification! Admin will review and approve/reject soon.")
+                with transaction.atomic():
+                    property_obj = form.save(commit=False)
+                    property_obj.owner = owner
+                    property_obj.approval_status = 'pending_verification'
+                    property_obj.submitted_at = timezone.now()
+                    property_obj.save()
+                    
+                    # Save room types
+                    formset.instance = property_obj
+                    formset.save()
+                
+                messages.success(request, f"✅ Property submitted with {valid_rooms} room type(s)! Admin will review soon.")
                 return redirect('property_owners:property_detail', property_id=property_obj.id)
             
             else:
                 # Just saving draft (no submission)
-                property_obj = form.save(commit=False)
-                property_obj.owner = owner
-                property_obj.approval_status = 'draft'
-                property_obj.save()
+                with transaction.atomic():
+                    property_obj = form.save(commit=False)
+                    property_obj.owner = owner
+                    property_obj.approval_status = 'draft'
+                    property_obj.save()
+                    
+                    # Save room types
+                    formset.instance = property_obj
+                    formset.save()
                 
+                valid_rooms = sum(1 for form in formset.forms if form.cleaned_data and not form.cleaned_data.get('DELETE', False))
                 completion = property_obj.completion_percentage
-                messages.success(request, f"✅ Draft saved ({completion}% complete). Click 'Submit for Approval' when ready.")
+                messages.success(request, f"✅ Draft saved ({completion}% complete, {valid_rooms} room(s)). Add rooms & click 'Submit for Approval'.")
                 return redirect('property_owners:property_detail', property_id=property_obj.id)
         
         else:
@@ -153,23 +168,31 @@ def create_property_draft(request):
         # GET request - display form
         if property_obj:
             form = PropertyRegistrationForm(instance=property_obj)
+            formset = RoomTypeInlineFormSet(instance=property_obj)
         else:
+            # Create empty property for formset binding
             form = PropertyRegistrationForm()
+            formset = RoomTypeInlineFormSet(instance=Property())
     
     # Calculate completion if editing
     completion_percentage = 0
     required_checks = {}
+    valid_rooms = 0
+    
     if property_obj:
         completion_percentage = property_obj.completion_percentage
         required_checks, _ = property_obj.has_required_fields()
+        valid_rooms = property_obj.room_types.count()
     
     context = {
         'form': form,
+        'formset': formset,
         'property': property_obj,
         'page_title': 'Create/Edit Property',
         'mode': 'draft',
         'completion_percentage': completion_percentage,
         'required_checks': required_checks,
+        'valid_rooms': valid_rooms,
     }
     return render(request, 'property_owners/property_form.html', context)
 

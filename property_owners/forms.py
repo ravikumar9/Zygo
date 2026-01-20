@@ -1,5 +1,7 @@
 from django import forms
+from django.forms import inlineformset_factory
 from .models import PropertyOwner, Property
+from hotels.models import RoomType
 from core.models import City
 
 
@@ -307,3 +309,96 @@ class PropertyRegistrationForm(forms.ModelForm):
             instance.save()
         
         return instance
+
+class RoomTypeForm(forms.ModelForm):
+    """Form for creating room types during property registration"""
+    
+    class Meta:
+        model = RoomType
+        fields = ['name', 'room_type', 'description', 'max_occupancy', 'number_of_beds', 
+                  'base_price', 'total_rooms', 'has_balcony', 'has_tv', 'has_minibar', 
+                  'has_safe', 'image']
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g., Deluxe Room',
+                'required': True
+            }),
+            'room_type': forms.Select(attrs={
+                'class': 'form-select',
+                'required': True
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Room description, features, view...',
+                'required': True
+            }),
+            'max_occupancy': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '1',
+                'value': '2',
+                'required': True
+            }),
+            'number_of_beds': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '1',
+                'value': '1',
+                'required': True
+            }),
+            'base_price': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '1',
+                'placeholder': '2000.00',
+                'required': True
+            }),
+            'total_rooms': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '1',
+                'value': '1',
+                'required': True,
+                'help_text': 'Total number of this room type available'
+            }),
+            'has_balcony': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'has_tv': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'has_minibar': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'has_safe': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'image': forms.FileInput(attrs={
+                'class': 'form-control',
+                'accept': 'image/*'
+            }),
+        }
+    
+    def clean(self):
+        """Validate room type data"""
+        cleaned_data = super().clean()
+        
+        if not cleaned_data.get('name') or not cleaned_data['name'].strip():
+            self.add_error('name', 'Room name is required')
+        
+        if not cleaned_data.get('description') or not cleaned_data['description'].strip():
+            self.add_error('description', 'Room description is required')
+        
+        if cleaned_data.get('base_price', 0) <= 0:
+            self.add_error('base_price', 'Price must be greater than 0')
+        
+        if cleaned_data.get('total_rooms', 0) <= 0:
+            self.add_error('total_rooms', 'At least 1 room must be available')
+        
+        if cleaned_data.get('max_occupancy', 0) <= 0:
+            self.add_error('max_occupancy', 'Max occupancy must be at least 1')
+        
+        return cleaned_data
+
+
+# Django inline formset for room types (minimum 1 room required)
+RoomTypeInlineFormSet = inlineformset_factory(
+    Property,
+    RoomType,
+    form=RoomTypeForm,
+    extra=2,  # 2 empty forms for additional rooms
+    min_num=1,  # MANDATORY: Minimum 1 room type required
+    validate_min=True,
+    can_delete=True
+)

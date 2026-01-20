@@ -303,7 +303,8 @@
             </div>
             {% endif %}
 
-            <!-- Payment Methods -->
+            <!-- Payment Methods (CONDITIONAL: Only if gateway payment needed) -->
+            {% if gateway_payable > 0 %}
             <div class="payment-methods">
                 <label class="payment-method-option active">
                     <input type="radio" name="payment_method" value="razorpay" id="razorpayRadio" checked>
@@ -321,6 +322,7 @@
                     <p class="small text-muted mb-0">Direct bank transfer</p>
                 </label>
             </div>
+            {% endif %}
 
             <!-- Payment Button -->
             {% if gateway_payable > 0 %}

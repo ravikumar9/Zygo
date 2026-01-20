@@ -263,6 +263,11 @@ def payment_page(request, booking_id):
                 pricing['subtotal_after_promo'], pricing['gst_amount'], pricing['total_payable'],
                 wallet_balance, pricing['wallet_applied'], pricing['gateway_payable'], use_wallet)
 
+    # ASSERTION: Verify UI condition will be correct
+    logger.info("[PAYMENT_UI_ASSERT] booking=%s wallet_balance=%.2f wallet_applied=%.2f total=%.2f gateway_payable=%.2f WILL_SHOW_GATEWAY=%s",
+                booking.booking_id, wallet_balance, pricing['wallet_applied'], pricing['total_payable'],
+                pricing['gateway_payable'], pricing['gateway_payable'] > Decimal('0.01'))
+
     razorpay_key = settings.RAZORPAY_KEY_ID or 'rzp_test_dummy_key'
     order_id = f"order_{uuid.uuid4().hex[:20]}"
 
@@ -333,15 +338,11 @@ def cancel_booking(request, booking_id):
         return redirect('bookings:booking-detail', booking_id=booking.booking_id)
 
     # Check cancellation rules
-    check_in_date = None
-    if hasattr(booking, 'hotel_booking') and booking.hotel_booking:
-        check_in_date = booking.hotel_booking.check_in
+    hotel_booking = getattr(booking, 'hotel_details', None) or getattr(booking, 'hotel_booking', None)
+    check_in_date = hotel_booking.check_in if hotel_booking else None
+    hotel = hotel_booking.room_type.hotel if hotel_booking and hotel_booking.room_type else None
 
-    hotel = None
-    if check_in_date and hasattr(booking, 'hotel_booking') and booking.hotel_booking:
-        hotel = booking.hotel_booking.room_type.hotel
-
-    if not hotel or not check_in_date:
+    if not hotel_booking or not hotel or not check_in_date:
         messages.error(request, 'Unable to determine hotel or check-in date')
         return redirect('bookings:booking-detail', booking_id=booking.booking_id)
 
@@ -392,6 +393,10 @@ def cancel_booking(request, booking_id):
 
             # Release inventory regardless of status
             release_inventory_on_failure(booking)
+
+            # MANDATORY LOG: Prove state changed
+            logger.info("[BOOKING_CANCELLED] booking=%s old_status=%s new_status=cancelled refund_amount=%.2f refund_mode=%s inventory_released=true",
+                        booking.booking_id, booking.status, refund_amount, hotel.refund_mode)
 
         messages.success(request, f'Booking cancelled. Refund of ₹{refund_amount} processed to wallet.')
         return redirect('bookings:booking-detail', booking_id=booking.booking_id)

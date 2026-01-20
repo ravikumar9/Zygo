@@ -98,6 +98,11 @@ class Booking(TimeStampedModel):
         else:
             local = parts[0][0] + '*' * (len(parts[0]) - 2) + parts[0][-1]
         return f"{local}@{parts[1]}"
+
+    @property
+    def hotel_booking(self):
+        """Backward-compatible alias for hotel booking relation."""
+        return getattr(self, 'hotel_details', None)
     
     special_requests = models.TextField(blank=True)
     
