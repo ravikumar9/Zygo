@@ -5,7 +5,8 @@ Run with: python manage.py shell < seed_data_clean.py
 """
 
 from users.models import User, UserProfile
-from hotels.models import Hotel, RoomType
+from hotels.models import Hotel, RoomType, RoomAvailability, RoomMealPlan, MealPlan
+from property_owners.models import PropertyOwner
 from buses.models import BusOperator, Bus, BusRoute, BusSchedule, BoardingPoint, DroppingPoint
 from packages.models import Package
 from core.models import City, CorporateDiscount, CorporateAccount
@@ -85,6 +86,45 @@ profile2, _ = UserProfile.objects.get_or_create(user=user2)
 profile2.phone = '9876543211'
 profile2.save()
 print(f"  ✓ qa_both_verified (email + mobile verified)")
+
+# Admin user (superuser)
+admin_user, admin_created = User.objects.get_or_create(
+    username='admin',
+    defaults={'email': 'admin@goexplorer.com', 'first_name': 'Admin', 'last_name': 'User', 'is_staff': True, 'is_superuser': True}
+)
+if admin_created:
+    admin_user.set_password('Admin@123')
+    admin_user.save()
+    print(f"  ✓ Admin superuser: admin / Admin@123")
+else:
+    print(f"  ✓ Admin user already exists")
+
+# Property owner user + profile
+owner_user, owner_created = User.objects.get_or_create(
+    username='owner',
+    defaults={'email': 'owner@goexplorer.com', 'first_name': 'Property', 'last_name': 'Owner'}
+)
+if owner_created:
+    owner_user.set_password('Owner@123')
+owner_user.email_verified = True
+owner_user.email_verified_at = owner_user.email_verified_at or timezone.now()
+owner_user.save()
+owner_profile, _ = UserProfile.objects.get_or_create(user=owner_user, defaults={'phone': '9876543222'})
+owner_profile.phone = owner_profile.phone or '9876543222'
+owner_profile.save()
+property_owner, _ = PropertyOwner.objects.get_or_create(user=owner_user, defaults={'phone': owner_profile.phone})
+print(f"  ✓ Property Owner user: owner / Owner@123")
+
+# Meal plans (global)
+room_only, _ = MealPlan.objects.get_or_create(
+    name='Room Only',
+    defaults={'description': 'Stay without meals', 'is_refundable': True, 'display_order': 1}
+)
+breakfast, _ = MealPlan.objects.get_or_create(
+    name='Breakfast',
+    defaults={'description': 'Breakfast included', 'is_refundable': True, 'display_order': 2}
+)
+print("  ✓ Meal plans: Room Only (default), Breakfast")
 
 # ============================================================================
 # HOTELS WITH AMENITIES
@@ -166,6 +206,33 @@ for hotel_cfg in hotels_config:
                 }
             )
             print(f"    - {room_cfg['name']} (₹{room_cfg['price']})")
+
+            # Attach meal plans (Room Only default + Breakfast)
+            ro_plan, _ = RoomMealPlan.objects.get_or_create(
+                room_type=room,
+                meal_plan=room_only,
+                defaults={'price_delta': Decimal('0.00'), 'is_default': True, 'is_active': True, 'display_order': 1}
+            )
+            # Ensure only one default
+            RoomMealPlan.objects.filter(room_type=room).exclude(id=ro_plan.id).update(is_default=False)
+            RoomMealPlan.objects.get_or_create(
+                room_type=room,
+                meal_plan=breakfast,
+                defaults={'price_delta': Decimal('300.00'), 'is_default': False, 'is_active': True, 'display_order': 2}
+            )
+
+            # Seed availability for next 30 days
+            today = date.today()
+            availability_rows = []
+            for i in range(30):
+                day = today + timedelta(days=i)
+                availability_rows.append(RoomAvailability(
+                    room_type=room,
+                    date=day,
+                    available_rooms=10,
+                    price=Decimal(str(room.base_price))
+                ))
+            RoomAvailability.objects.bulk_create(availability_rows, ignore_conflicts=True)
 
 # ============================================================================
 # BUS INFRASTRUCTURE

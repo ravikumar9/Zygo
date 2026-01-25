@@ -1,0 +1,257 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Availability Calendar - {{ room.name }} - GoExplorer{% endblock %}
+
+{% block extra_css %}
+<style>
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+    margin-top: 20px;
+}
+.calendar-day {
+    aspect-ratio: 1;
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+    background: white;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.calendar-day.header {
+    background: #f8f9fa;
+    font-weight: 600;
+    cursor: default;
+}
+.calendar-day.other-month {
+    color: #ccc;
+    background: #f9f9f9;
+}
+.calendar-day.blocked {
+    background: #ffe6e6;
+    border-color: #ff4444;
+}
+.calendar-day.booked {
+    background: #fff3cd;
+    border-color: #ffc107;
+    cursor: not-allowed;
+}
+.calendar-day.today {
+    border: 2px solid #007bff;
+}
+.calendar-day:not(.header):not(.other-month):not(.booked):hover {
+    background: #e3f2fd;
+    border-color: #2196F3;
+}
+.block-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.block-item {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    background: #fff;
+}
+.block-item.expired {
+    opacity: 0.6;
+    background: #f9f9f9;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'property_owners:owner-dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'property_owners:property-details' hotel.id %}">{{ hotel.name }}</a></li>
+            <li class="breadcrumb-item active">{{ room.name }} Calendar</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-alt"></i> {{ month_name }} {{ year }}
+                    </h5>
+                    <div>
+                        <a href="?year={{ prev_month.year }}&month={{ prev_month.month }}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-chevron-left"></i> Prev
+                        </a>
+                        <a href="?year={{ next_month.year }}&month={{ next_month.month }}" class="btn btn-sm btn-outline-primary">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <span class="badge bg-light text-dark me-2"><i class="fas fa-square text-white"></i> Available</span>
+                        <span class="badge bg-light text-dark me-2"><i class="fas fa-square" style="color: #ffe6e6;"></i> Blocked</span>
+                        <span class="badge bg-light text-dark"><i class="fas fa-square" style="color: #fff3cd;"></i> Booked</span>
+                    </div>
+
+                    <div class="calendar-grid">
+                        <div class="calendar-day header">Sun</div>
+                        <div class="calendar-day header">Mon</div>
+                        <div class="calendar-day header">Tue</div>
+                        <div class="calendar-day header">Wed</div>
+                        <div class="calendar-day header">Thu</div>
+                        <div class="calendar-day header">Fri</div>
+                        <div class="calendar-day header">Sat</div>
+
+                        {% for week in month_days %}
+                            {% for day in week %}
+                                {% if day.month == month %}
+                                    <div class="calendar-day 
+                                        {% if day in blocked_dates %}blocked{% endif %}
+                                        {% if day in booked_dates %}booked{% endif %}
+                                        {% if day == today %}today{% endif %}"
+                                        data-date="{{ day|date:'Y-m-d' }}"
+                                        {% if day not in booked_dates %}onclick="selectDate('{{ day|date:'Y-m-d' }}')"{% endif %}>
+                                        {{ day.day }}
+                                        {% if day in booked_dates %}
+                                            <small class="d-block text-muted" style="font-size: 10px;">Booked</small>
+                                        {% elif day in blocked_dates %}
+                                            <small class="d-block text-danger" style="font-size: 10px;">Blocked</small>
+                                        {% endif %}
+                                    </div>
+                                {% else %}
+                                    <div class="calendar-day other-month">{{ day.day }}</div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Block Dates Form -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-ban"></i> Block Dates</h6>
+                </div>
+                <div class="card-body">
+                    <form id="blockForm" method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label">From Date</label>
+                            <input type="date" class="form-control" name="blocked_from" id="fromDate" required min="{{ today|date:'Y-m-d' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">To Date</label>
+                            <input type="date" class="form-control" name="blocked_to" id="toDate" required min="{{ today|date:'Y-m-d' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Reason (Optional)</label>
+                            <input type="text" class="form-control" name="reason" placeholder="e.g., Maintenance">
+                        </div>
+                        <button type="submit" class="btn btn-danger btn-sm w-100">
+                            <i class="fas fa-ban"></i> Block Dates
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Active Blocks -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-list"></i> Active Blocks ({{ blocks.count }})</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="block-list p-3">
+                        {% for block in blocks %}
+                        <div class="block-item {% if block.blocked_to < today %}expired{% endif %}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>{{ block.blocked_from|date:'M d' }} - {{ block.blocked_to|date:'M d, Y' }}</strong>
+                                    {% if block.reason %}
+                                        <br><small class="text-muted">{{ block.reason }}</small>
+                                    {% endif %}
+                                </div>
+                                {% if block.blocked_to >= today %}
+                                <button class="btn btn-sm btn-outline-danger" onclick="unblockDates({{ block.id }})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% empty %}
+                        <p class="text-muted text-center">No active blocks</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selectedDates = [];
+
+function selectDate(dateStr) {
+    // Simple single-date selection for now
+    document.getElementById('fromDate').value = dateStr;
+    document.getElementById('toDate').value = dateStr;
+}
+
+document.getElementById('blockForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch("{% url 'property_owners:block-dates' room.id %}", {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to block dates');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred');
+    });
+});
+
+function unblockDates(blockId) {
+    if (!confirm('Remove this block?')) return;
+    
+    fetch("{% url 'property_owners:unblock-dates' 0 %}".replace('0', blockId), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to remove block');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred');
+    });
+}
+</script>
+{% endblock %}

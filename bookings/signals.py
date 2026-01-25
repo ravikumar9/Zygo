@@ -20,8 +20,9 @@ def set_reserved_at_timestamp(sender, instance, **kwargs):
     # Only set reserved_at if it's a new booking in RESERVED state
     if instance.pk is None and instance.status == 'reserved':
         instance.reserved_at = timezone.now()
+        user_email = instance.user.email if instance.user else instance.customer_email
         logger.info("[BOOKING_RESERVED] booking=%s user=%s reserved_at=%s", 
-                   instance.booking_id, instance.user.email, instance.reserved_at)
+                   instance.booking_id, user_email, instance.reserved_at)
     
     # Set confirmed_at when status transitions to CONFIRMED (if not already set)
     if instance.pk is not None:
@@ -31,8 +32,9 @@ def set_reserved_at_timestamp(sender, instance, **kwargs):
             # Status changed to CONFIRMED and confirmed_at not yet set
             if old_instance.status != 'confirmed' and instance.status == 'confirmed' and not instance.confirmed_at:
                 instance.confirmed_at = timezone.now()
+                user_email = instance.user.email if instance.user else instance.customer_email
                 logger.info("[BOOKING_CONFIRMED] booking=%s user=%s confirmed_at=%s", 
-                           instance.booking_id, instance.user.email, instance.confirmed_at)
+                           instance.booking_id, user_email, instance.confirmed_at)
             
             # Set expires_at based on reserved_at (10 MINUTES from reservation - CRITICAL for inventory locking)
             if instance.status == 'reserved' and instance.reserved_at and not instance.expires_at:
@@ -52,5 +54,6 @@ def log_booking_state_transition(sender, instance, created, **kwargs):
     """
     if created:
         # Log new booking with inventory lock info
+        user_email = instance.user.email if instance.user else instance.customer_email
         logger.info("[BOOKING_CREATED] booking=%s user=%s type=%s status=%s expires_at=%s", 
-                   instance.booking_id, instance.user.email, instance.booking_type, instance.status, instance.expires_at)
+                   instance.booking_id, user_email, instance.booking_type, instance.status, instance.expires_at)

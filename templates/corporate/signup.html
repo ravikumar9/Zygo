@@ -6,20 +6,63 @@
 {% block content %}
 <div class="container my-5">
     <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card shadow">
-                <div class="card-header bg-primary text-white">
-                    <h3 class="mb-0"><i class="fas fa-building"></i> Corporate Account Signup</h3>
+        <div class="col-md-10">
+            <!-- BENEFITS BANNER -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 2.5rem; border-radius: 12px; margin-bottom: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div class="row align-items-center">
+                    <div class="col-md-7">
+                        <h2 style="margin-bottom: 1rem; font-weight: 700;">
+                            <i class="fas fa-building"></i> Corporate Travel Solutions
+                        </h2>
+                        <p style="font-size: 1.1rem; margin-bottom: 1.5rem; opacity: 0.95;">
+                            Streamline your organization's travel with exclusive benefits designed for businesses
+                        </p>
+                        <div class="row">
+                            <div class="col-sm-6 mb-3">
+                                <div style="background: rgba(255,255,255,0.15); padding: 1rem; border-radius: 8px;">
+                                    <i class="fas fa-percentage" style="font-size: 1.5rem; margin-bottom: 0.5rem;"></i>
+                                    <h5 style="margin-bottom: 0.25rem;">10% Auto Discount</h5>
+                                    <small>Up to ₹1,000 per booking</small>
+                                </div>
+                            </div>
+                            <div class="col-sm-6 mb-3">
+                                <div style="background: rgba(255,255,255,0.15); padding: 1rem; border-radius: 8px;">
+                                    <i class="fas fa-wallet" style="font-size: 1.5rem; margin-bottom: 0.5rem;"></i>
+                                    <h5 style="margin-bottom: 0.25rem;">Wallet Top-up</h5>
+                                    <small>Prepaid for employees</small>
+                                </div>
+                            </div>
+                            <div class="col-sm-6 mb-3">
+                                <div style="background: rgba(255,255,255,0.15); padding: 1rem; border-radius: 8px;">
+                                    <i class="fas fa-file-invoice" style="font-size: 1.5rem; margin-bottom: 0.5rem;"></i>
+                                    <h5 style="margin-bottom: 0.25rem;">Centralized Billing</h5>
+                                    <small>Single invoice for all bookings</small>
+                                </div>
+                            </div>
+                            <div class="col-sm-6 mb-3">
+                                <div style="background: rgba(255,255,255,0.15); padding: 1rem; border-radius: 8px;">
+                                    <i class="fas fa-headset" style="font-size: 1.5rem; margin-bottom: 0.5rem;"></i>
+                                    <h5 style="margin-bottom: 0.25rem;">Priority Support</h5>
+                                    <small>Dedicated account manager</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-5 text-center">
+                        <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 12px; border: 2px dashed rgba(255,255,255,0.3);">
+                            <i class="fas fa-rocket" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.9;"></i>
+                            <h4 style="margin-bottom: 0.5rem;">Join 200+ Companies</h4>
+                            <p style="opacity: 0.9; margin: 0;">Already saving on corporate travel</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <p class="lead">Sign up your organization to get exclusive corporate benefits:</p>
-                    <ul class="mb-4">
-                        <li><strong>10% Automatic Discount</strong> on all bookings (max ₹1,000)</li>
-                        <li><strong>Wallet Top-up</strong> for employees</li>
-                        <li><strong>Centralized Billing</strong> and reporting</li>
-                        <li><strong>Priority Support</strong></li>
-                    </ul>
+            </div>
 
+            <div class="card shadow">
+                <div class="card-header" style="background-color: #667eea; color: white; padding: 1.5rem;">
+                    <h3 class="mb-0"><i class="fas fa-clipboard-check"></i> Register Your Organization</h3>
+                </div>
+                <div class="card-body" style="padding: 2rem;">
                     {% if messages %}
                         {% for message in messages %}
                         <div class="alert alert-{{ message.tags }}">{{ message }}</div>

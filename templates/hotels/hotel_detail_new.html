@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ hotel.name }} - GoExplorer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hotel-header {
+        background: linear-gradient(135deg, #FF6B35, #004E89);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+    }
+    
+    .hotel-header h1 {
+        margin-bottom: 0.5rem;
+        color: white;
+    }
+    
+    .hotel-header p {
+        margin-bottom: 0;
+        opacity: 0.9;
+    }
+    
+    .booking-widget {
+        position: sticky;
+        top: 100px;
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    @media (max-width: 768px) {
+        .booking-widget {
+            position: static;
+            margin-top: 2rem;
+        }
+    }
+    
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        color: #333;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="margin-top: 0; padding-top: 0;">
+    
+    <!-- ====================================================================
+         HOTEL HEADER SECTION
+         ==================================================================== -->
+    <div class="hotel-header">
+        <div class="container">
+            <h1>{{ hotel.name }}</h1>
+            <p>
+                <i class="fas fa-map-marker-alt"></i>
+                {% if hotel.city %}
+                    {{ hotel.city.name }}
+                {% endif %}
+                {% if hotel.location %}
+                    • {{ hotel.location }}
+                {% endif %}
+            </p>
+        </div>
+    </div>
+    
+    <!-- ====================================================================
+         MAIN CONTENT LAYOUT
+         ==================================================================== -->
+    <div class="row">
+        
+        <!-- LEFT COLUMN: Main Content (8 cols) -->
+        <div class="col-md-8">
+            
+            <!-- SECTION: Images Gallery -->
+            {% if hotel.images.all %}
+            <div class="mb-4">
+                <div id="hotel-images-carousel" class="carousel slide" data-ride="carousel">
+                    <div class="carousel-inner">
+                        {% for image in hotel.images.all %}
+                        <div class="carousel-item {% if forloop.first %}active{% endif %}">
+                            <img src="{{ image.image.url }}" 
+                                 alt="{{ hotel.name }}" 
+                                 class="d-block w-100" 
+                                 style="height: 400px; object-fit: cover; border-radius: 8px;">
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Carousel Controls -->
+                    <a class="carousel-control-prev" 
+                       href="#hotel-images-carousel" 
+                       role="button" 
+                       data-slide="prev"
+                       style="background-color: rgba(0,0,0,0.2); border-radius: 4px; left: 10px;">
+                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    </a>
+                    <a class="carousel-control-next" 
+                       href="#hotel-images-carousel" 
+                       role="button" 
+                       data-slide="next"
+                       style="background-color: rgba(0,0,0,0.2); border-radius: 4px; right: 10px;">
+                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- SECTION: About -->
+            <section class="mb-4">
+                <h2 class="section-title">About</h2>
+                <p style="color: #666; line-height: 1.6;">
+                    {% if hotel.description %}
+                        {{ hotel.description|safe }}
+                    {% else %}
+                        {{ hotel.name }} is a premier accommodation offering exceptional service and comfort.
+                    {% endif %}
+                </p>
+                
+                <!-- Cancellation Policy Component -->
+                {% include "hotels/includes/cancellation-policy.html" %}
+            </section>
+            
+            <!-- SECTION: Amenities -->
+            {% if hotel.amenities.all %}
+            <section class="mb-4">
+                <h2 class="section-title">Amenities</h2>
+                <div class="row">
+                    {% for amenity in hotel.amenities.all %}
+                    <div class="col-md-6 mb-2">
+                        <span style="color: #666;">
+                            <i class="fas fa-check-circle" style="color: #28a745;"></i>
+                            {{ amenity.name }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+            
+            <!-- SECTION: Available Rooms -->
+            <section class="mb-4">
+                <h2 class="section-title">Available Rooms</h2>
+                
+                <!-- Meal Plans Data Component (JSON for JavaScript) -->
+                {% include "hotels/includes/meal-plans-data.html" %}
+                
+                <!-- Room Cards Component -->
+                {% include "hotels/includes/room-card.html" %}
+            </section>
+            
+        </div>
+        
+        <!-- RIGHT COLUMN: Booking Widget (4 cols) -->
+        <div class="col-md-4">
+            <div class="booking-widget">
+                <h3 style="margin-bottom: 1.5rem; color: #333; font-weight: 600;">
+                    <i class="fas fa-calendar-check"></i> Book Your Stay
+                </h3>
+                
+                <!-- Pricing Calculator Component -->
+                {% include "hotels/includes/pricing-calculator.html" %}
+                
+                <!-- Booking Form Component -->
+                {% include "hotels/includes/booking-form.html" %}
+            </div>
+        </div>
+        
+    </div>
+    
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Bootstrap carousel auto-slide (optional)
+    document.addEventListener('DOMContentLoaded', function() {
+        // Carousel is initialized automatically by Bootstrap
+    });
+</script>
+{% endblock %}

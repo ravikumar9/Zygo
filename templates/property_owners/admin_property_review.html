@@ -1,0 +1,345 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Review Property — Admin{% endblock %}
+
+{% block extra_css %}
+<style>
+    .review-container {
+        max-width: 1000px;
+        margin: 40px auto;
+        padding: 0 15px;
+    }
+    
+    .review-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #e0e0e0;
+    }
+    
+    .review-title h1 {
+        margin: 0;
+        font-size: 28px;
+        color: #333;
+    }
+    
+    .review-status {
+        display: inline-block;
+        padding: 8px 16px;
+        background: #fff3cd;
+        color: #856404;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 14px;
+    }
+    
+    .section {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 20px;
+    }
+    
+    .section-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #f0f0f0;
+    }
+    
+    .section-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+    }
+    
+    .field {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .field-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #999;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+    }
+    
+    .field-value {
+        font-size: 15px;
+        color: #333;
+        word-break: break-word;
+    }
+    
+    .field-full {
+        grid-column: 1 / -1;
+    }
+    
+    .checklist {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .checklist-item {
+        display: flex;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .checklist-item:last-child {
+        border-bottom: none;
+    }
+    
+    .checklist-icon {
+        font-size: 18px;
+        margin-right: 10px;
+        min-width: 24px;
+    }
+    
+    .checklist-complete .checklist-icon {
+        color: #28A745;
+    }
+    
+    .checklist-incomplete .checklist-icon {
+        color: #DC3545;
+    }
+    
+    .rooms-list {
+        display: grid;
+        gap: 15px;
+    }
+    
+    .room-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 15px;
+        background: #f8f9fa;
+    }
+    
+    .room-name {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 10px;
+    }
+    
+    .room-info {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        font-size: 13px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 2px solid #e0e0e0;
+    }
+    
+    .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 5px;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-approve {
+        background: #28A745;
+        color: white;
+    }
+    
+    .btn-approve:hover {
+        background: #218838;
+    }
+    
+    .btn-approve:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+    
+    .btn-reject {
+        background: #DC3545;
+        color: white;
+    }
+    
+    .btn-reject:hover {
+        background: #c82333;
+    }
+    
+    .btn-back {
+        background: #6C757D;
+        color: white;
+    }
+    
+    .btn-back:hover {
+        background: #5A6268;
+    }
+    
+    .warning-box {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        color: #856404;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .warning-box strong {
+        display: block;
+        margin-bottom: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="review-container">
+    <!-- Header -->
+    <div class="review-header">
+        <div class="review-title">
+            <h1>{{ property.name }}</h1>
+            <div style="color: #666; margin-top: 5px;">Review submitted by {{ property.owner.business_name }}</div>
+        </div>
+        <div class="review-status">🔄 {{ property.get_status_display }}</div>
+    </div>
+    
+    <!-- Completeness Check -->
+    {% if not is_complete %}
+    <div class="warning-box">
+        <strong>⚠️ Property Incomplete — Cannot Approve</strong>
+        Missing required information. Review below.
+    </div>
+    {% endif %}
+    
+    <!-- Property Details -->
+    <div class="section">
+        <div class="section-title">📋 Property Details</div>
+        <div class="section-grid">
+            <div class="field">
+                <div class="field-label">Name</div>
+                <div class="field-value">{{ property.name }}</div>
+            </div>
+            <div class="field">
+                <div class="field-label">Type</div>
+                <div class="field-value">{{ property.property_type.name|default:"—" }}</div>
+            </div>
+            <div class="field">
+                <div class="field-label">City</div>
+                <div class="field-value">{{ property.city.name|default:"—" }}</div>
+            </div>
+            <div class="field">
+                <div class="field-label">Address</div>
+                <div class="field-value">{{ property.address|default:"—" }}</div>
+            </div>
+            <div class="field field-full">
+                <div class="field-label">Description</div>
+                <div class="field-value">{{ property.description|default:"—" }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Contact & Rules -->
+    <div class="section">
+        <div class="section-title">☎️ Contact & Policies</div>
+        <div class="section-grid">
+            <div class="field">
+                <div class="field-label">Contact Phone</div>
+                <div class="field-value">{{ property.contact_phone|default:"—" }}</div>
+            </div>
+            <div class="field">
+                <div class="field-label">Contact Email</div>
+                <div class="field-value">{{ property.contact_email|default:"—" }}</div>
+            </div>
+            <div class="field">
+                <div class="field-label">Check-in Time</div>
+                <div class="field-value">{{ property.checkin_time|default:"—" }}</div>
+            </div>
+            <div class="field">
+                <div class="field-label">Check-out Time</div>
+                <div class="field-value">{{ property.checkout_time|default:"—" }}</div>
+            </div>
+            <div class="field field-full">
+                <div class="field-label">Property Rules</div>
+                <div class="field-value">{{ property.property_rules|default:"—"|truncatewords:50 }}</div>
+            </div>
+            <div class="field field-full">
+                <div class="field-label">Cancellation Policy</div>
+                <div class="field-value">{{ property.cancellation_policy|default:"—"|truncatewords:50 }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Room Types -->
+    <div class="section">
+        <div class="section-title">🛏️ Room Types ({{ rooms.count }})</div>
+        {% if rooms %}
+        <div class="rooms-list">
+            {% for room in rooms %}
+            <div class="room-card">
+                <div class="room-name">{{ room.name }} ({{ room.room_type }})</div>
+                <div class="room-info">
+                    <div><strong>Capacity:</strong> {{ room.max_occupancy }} guest(s)</div>
+                    <div><strong>Beds:</strong> {{ room.number_of_beds }}</div>
+                    <div><strong>Price:</strong> ₹{{ room.base_price }}</div>
+                    <div><strong>Status:</strong> {{ room.get_status_display }}</div>
+                    <div><strong>Images:</strong> {{ room.images.count }}</div>
+                    <div><strong>Meal Plans:</strong> {{ room.meal_plans|length }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="color: #999; text-align: center; padding: 20px;">No room types added</div>
+        {% endif %}
+    </div>
+    
+    <!-- Completion Checklist -->
+    <div class="section">
+        <div class="section-title">✓ Submission Checklist</div>
+        <ul class="checklist">
+            {% for field, complete in completion_checks.items %}
+            <li class="checklist-item {% if complete %}checklist-complete{% else %}checklist-incomplete{% endif %}">
+                <span class="checklist-icon">{% if complete %}✅{% else %}❌{% endif %}</span>
+                <span>{{ field|title|replace:"_":" " }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="section" style="background: #f8f9fa; border: none;">
+        <div class="action-buttons">
+            <a href="{% url 'property_owners:admin-pending-list' %}" class="btn btn-back">
+                ← Back to Pending List
+            </a>
+            {% if can_approve %}
+            <form method="POST" action="{% url 'property_owners:admin-property-approve' property.id %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-approve">
+                    ✅ Approve & Go Live
+                </button>
+            </form>
+            {% endif %}
+            {% if can_reject %}
+            <a href="{% url 'property_owners:admin-property-reject' property.id %}" class="btn btn-reject">
+                ❌ Reject
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

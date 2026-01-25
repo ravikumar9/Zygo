@@ -56,6 +56,7 @@ class Command(BaseCommand):
             "Pune": {"state": "Maharashtra", "code": "PNQ"},
             "Delhi": {"state": "Delhi", "code": "DEL"},
             "Jaipur": {"state": "Rajasthan", "code": "JAI"},
+            "Hyderabad": {"state": "Telangana", "code": "HYD"},
         }
         city_map = {}
         for name, spec in cities_spec.items():
@@ -148,6 +149,17 @@ class Command(BaseCommand):
                 "duration_hours": Decimal("8.0"),
                 "distance_km": Decimal("350.0"),
                 "base_fare": Decimal("899.00"),
+            },
+            {
+                "bus_number": "KA-01-AB-1234",
+                "route_name": "Bangalore to Hyderabad",
+                "source": "Bangalore",
+                "destination": "Hyderabad",
+                "depart": time(21, 0),
+                "arrive": time(5, 30),
+                "duration_hours": Decimal("8.5"),
+                "distance_km": Decimal("570.0"),
+                "base_fare": Decimal("1200.00"),
             },
             {
                 "bus_number": "MH-12-XY-5678",

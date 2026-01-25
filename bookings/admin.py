@@ -5,11 +5,44 @@ from django.utils import timezone
 from django.db.models import Q, Count
 from datetime import date
 from django.http import HttpResponse
+from django import forms
+from django.core.exceptions import ValidationError
 import csv
 from .models import (
     Booking, HotelBooking, BusBooking, BusBookingSeat,
     PackageBooking, PackageBookingTraveler, Review, BookingAuditLog
 )
+from .pricing_utils import validate_service_fee
+
+
+from .pricing_utils import validate_service_fee
+
+
+class BookingAdminForm(forms.ModelForm):
+    """
+    PRICING GOVERNANCE: Admin form with service fee validation.
+    Enforces hard cap even for admins.
+    """
+    class Meta:
+        model = Booking
+        fields = '__all__'
+    
+    def clean_total_amount(self):
+        """
+        Validate that service fee component doesn't exceed ₹500.
+        Note: total_amount may include base + service_fee + GST, so we extract and validate.
+        """
+        total = self.cleaned_data.get('total_amount')
+        
+        # If metadata contains service_fee, validate it
+        if hasattr(self.instance, 'metadata') and isinstance(self.instance.metadata, dict):
+            service_fee = self.instance.metadata.get('service_fee')
+            if service_fee:
+                is_valid, error_msg = validate_service_fee(service_fee)
+                if not is_valid:
+                    raise ValidationError(error_msg)
+        
+        return total
 
 
 class BusBookingSeatInline(admin.TabularInline):
@@ -93,6 +126,7 @@ def get_status_badge(status):
 
 @admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
+    form = BookingAdminForm  # PRICING GOVERNANCE: Enforce service fee cap
     list_display = (
         'booking_id_short', 'customer_name', 'customer_phone',
         'booking_type_badge', 'channel_badge', 'status_badge', 'total_amount',

@@ -14,8 +14,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config("SECRET_KEY", default="dev-secret-key-change-later")
 DEBUG = config("DEBUG", default=True, cast=bool)
+PLAYWRIGHT_MODE = config("PLAYWRIGHT_MODE", default=False, cast=bool)
+PLAYWRIGHT_HOLD_MINUTES = 2 if PLAYWRIGHT_MODE else 10
 
-ALLOWED_HOSTS = ['goexplorer-dev.cloud','www.goexplorer-dev.cloud','srv1247591.hstgr.cloud','localhost','127.0.0.1','testserver']
+ALLOWED_HOSTS = ['goexplorer-dev.cloud','www.goexplorer-dev.cloud','srv1247591.hstgr.cloud','localhost','127.0.0.1','0.0.0.0','testserver','*']
 
 # --------------------------------------------------
 # Applications
@@ -48,6 +50,7 @@ INSTALLED_APPS = [
     "dashboard",
     "audit_logs",
     "reviews",  # Phase 3: Reviews moderation
+    "finance",  # Phase 3: Finance & admin dashboards
 ]
 
 # --------------------------------------------------
@@ -121,6 +124,10 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 AUTH_USER_MODEL = "users.User"
+
+# OTP/Verification toggles (DEV defaults)
+REQUIRE_EMAIL_VERIFICATION = config("REQUIRE_EMAIL_VERIFICATION", default=False, cast=bool)
+REQUIRE_MOBILE_VERIFICATION = config("REQUIRE_MOBILE_VERIFICATION", default=False, cast=bool)
 
 # --------------------------------------------------
 # I18N
@@ -309,6 +316,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
 }
 
@@ -330,6 +338,19 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 # --------------------------------------------------
+# PRICING GOVERNANCE - MANDATORY RULES (DO NOT MODIFY)
+# --------------------------------------------------
+MAX_SERVICE_FEE = 500  # Hard cap - system enforced
+SERVICE_FEE_RATE = 0.05  # 5% of base amount
+GST_RATE = 0.18  # 18% on service fee only
+
+# --------------------------------------------------
+# Cancellation Policy Defaults
+# --------------------------------------------------
+# Hours before the check-in datetime when free/partial cancellation is allowed
+CANCELLATION_FREE_HOURS_DEFAULT = 48
+
+# --------------------------------------------------
 # Production security (ignored in DEV)
 # --------------------------------------------------
 if not DEBUG:
@@ -342,3 +363,10 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'SAMEORIGIN'
+
+# --------------------------------------------------
+# PHASE C: Authentication URLs (Fix 404)
+# --------------------------------------------------
+LOGIN_URL = '/users/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'

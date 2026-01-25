@@ -1,0 +1,37 @@
+<!-- 
+COMPONENT: Meal Plans Data Provider
+PURPOSE: Single source of truth for meal plans JSON
+DEFENSIVE: Checks for empty room_types, handles missing meal_plans, prevents JSON injection
+
+CONTRACT:
+- Input: hotel (with prefetch_related('room_types__meal_plans'))
+- Output: JSON script tag id="meal-plans-data"
+- Fallback: Empty JSON {} if no rooms or meals
+
+USAGE IN JAVASCRIPT:
+  var mealPlansData = JSON.parse(document.getElementById('meal-plans-data').textContent);
+  mealPlansData[roomTypeId] // => [{"id": ..., "name": ..., "price": ..., "type": ...}]
+-->
+
+{% if hotel.room_types.all %}
+<script type="application/json" id="meal-plans-data">
+{
+    {% for room in hotel.room_types.all %}
+    "{{ room.id }}": [
+        {% for plan in room.meal_plans.all %}
+        {
+            "id": {{ plan.id }},
+            "name": "{{ plan.meal_plan.name|escapejs }}",
+            "price": {{ plan.get_total_price_per_night }},
+            "type": "{{ plan.meal_plan.plan_type|escapejs }}"
+        }{% if not forloop.last %},{% endif %}
+        {% empty %}
+        {% endfor %}
+    ]{% if not forloop.last %},{% endif %}
+    {% endfor %}
+}
+</script>
+{% else %}
+<!-- DEFENSIVE: No room types available - return empty JSON -->
+<script type="application/json" id="meal-plans-data">{}</script>
+{% endif %}

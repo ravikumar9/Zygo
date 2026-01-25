@@ -341,6 +341,18 @@ def process_wallet_payment(request):
         booking.cancelled_at = timezone.now()
         booking.save(update_fields=['status', 'cancelled_at', 'updated_at'])
         release_inventory_on_failure(booking)
+        try:
+            from bookings.inventory_utils import restore_inventory
+            hotel_booking = getattr(booking, 'hotel_details', None)
+            if hotel_booking:
+                restore_inventory(
+                    room_type=hotel_booking.room_type,
+                    check_in=hotel_booking.check_in,
+                    check_out=hotel_booking.check_out,
+                    num_rooms=hotel_booking.number_of_rooms or 1,
+                )
+        except Exception:
+            pass
 
         # Attempt to record a refund for any wallet txn if created (best-effort)
         try:

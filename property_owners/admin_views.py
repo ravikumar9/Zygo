@@ -15,7 +15,12 @@ from property_owners.models import (
 
 
 def is_admin(user):
-    """Check if user is platform admin"""
+    """Check if user has admin role via group or user_role."""
+    if user.is_superuser:
+        return True
+    groups = set(user.groups.values_list('name', flat=True)) if user.is_authenticated else set()
+    if 'SUPER ADMIN' in groups or 'PROPERTY ADMIN' in groups:
+        return True
     return hasattr(user, 'user_role') and user.user_role.role == 'admin'
 
 
@@ -135,3 +140,70 @@ def view_approval_history(request):
         'logs': logs[:100],
         'total': logs.count(),
     })
+
+
+# Sprint-1: Admin Payout Approval Views
+@login_required
+@user_passes_test(is_admin)
+def admin_payout_requests(request):
+    """Admin dashboard for payout requests"""
+    from payments.models import PayoutRequest
+    
+    status = request.GET.get('status', 'requested')
+    payouts = PayoutRequest.objects.all()
+    
+    if status in ['requested', 'processing', 'completed', 'failed']:
+        payouts = payouts.filter(status=status)
+    
+    payouts = payouts.order_by('-created_at')
+    
+    context = {
+        'payouts': payouts[:50],
+        'requested_count': PayoutRequest.objects.filter(status='requested').count(),
+        'processing_count': PayoutRequest.objects.filter(status='processing').count(),
+        'completed_count': PayoutRequest.objects.filter(status='completed').count(),
+        'failed_count': PayoutRequest.objects.filter(status='failed').count(),
+        'current_status': status,
+    }
+    
+    return render(request, 'property_owners/admin_payouts.html', context)
+
+
+@login_required
+@user_passes_test(is_admin)
+def approve_payout(request, payout_id):
+    """Admin approves and processes payout"""
+    from payments.models import PayoutRequest
+    
+    payout = get_object_or_404(PayoutRequest, pk=payout_id)
+    
+    if request.method == 'POST':
+        transaction_id = request.POST.get('transaction_id', '')
+        
+        try:
+            payout.approve_and_complete(request.user, transaction_id)
+            messages.success(request, f"Payout #{payout.id} approved and completed")
+        except Exception as e:
+            messages.error(request, f"Failed to approve payout: {str(e)}")
+    
+    return redirect('property_owners:admin-payouts')
+
+
+@login_required
+@user_passes_test(is_admin)
+def reject_payout(request, payout_id):
+    """Admin rejects payout - refund to wallet"""
+    from payments.models import PayoutRequest
+    
+    payout = get_object_or_404(PayoutRequest, pk=payout_id)
+    
+    if request.method == 'POST':
+        reason = request.POST.get('reason', 'Rejected by admin')
+        
+        try:
+            payout.reject(request.user, reason)
+            messages.success(request, f"Payout #{payout.id} rejected and refunded")
+        except Exception as e:
+            messages.error(request, f"Failed to reject payout: {str(e)}")
+    
+    return redirect('property_owners:admin-payouts')

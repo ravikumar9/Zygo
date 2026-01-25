@@ -281,6 +281,9 @@
                                 <p class="text-muted small mb-3">
                                     <i class="fas fa-map-marker-alt"></i> {{ property.city.name }}
                                 </p>
+                                <p class="text-muted small mb-3">
+                                    🛏️ {{ property.room_types.count }} type(s) / {{ property.total_room_inventory }} room(s)
+                                </p>
                                 <div class="property-actions">
                                     <a href="{% url 'property_owners:property_detail' property.id %}" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-eye"></i> View
@@ -318,6 +321,9 @@
                                 <span class="property-type">{{ property.get_property_type_display }}</span>
                                 <p class="text-muted small mb-3">
                                     <i class="fas fa-map-marker-alt"></i> {{ property.city.name }}
+                                </p>
+                                <p class="text-muted small mb-3">
+                                    🛏️ {{ property.room_types.count }} type(s) / {{ property.total_room_inventory }} room(s)
                                 </p>
                                 <p style="font-size: 12px; color: #666;">
                                     Submitted: {{ property.submitted_at|date:"M d, Y H:i" }}
@@ -359,6 +365,9 @@
                                     <strong>Reason:</strong> {{ property.rejection_reason|truncatewords:20 }}
                                 </p>
                                 {% endif %}
+                                <p class="text-muted small mb-3">
+                                    🛏️ {{ property.room_types.count }} type(s) / {{ property.total_room_inventory }} room(s)
+                                </p>
                                 <div class="property-actions">
                                     <a href="{% url 'property_owners:property_detail' property.id %}" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-eye"></i> View
@@ -398,8 +407,11 @@
                                     📊 {{ property.completion_percentage }}% Complete
                                 </p>
                                 <div style="background: #f0f0f0; border-radius: 3px; height: 4px; margin-bottom: 10px; overflow: hidden;">
-                                    <div style="background: #6C757D; height: 100%; width: {{ property.completion_percentage }}%;"></div>
+                                    <div style="background: #6C757D; height: 100%;" data-percentage="{{ property.completion_percentage }}"></div>
                                 </div>
+                                <p class="text-muted small mb-3">
+                                    🛏️ {{ property.room_types.count }} type(s) / {{ property.total_room_inventory }} room(s)
+                                </p>
                                 <div class="property-actions">
                                     <a href="{% url 'property_owners:property_detail' property.id %}" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-eye"></i> View
@@ -425,20 +437,6 @@
                     <i class="fas fa-plus"></i> Register First Property
                 </a>
             </div>
-            {% endif %}
-            {% else %}
-                <div class="empty-state">
-                    <i class="fas fa-inbox"></i>
-                    <h4>No Properties Listed Yet</h4>
-                    <p class="text-muted mb-3">Start listing your properties to attract travelers and boost your earnings.</p>
-                    {% if property_owner.verification_status == 'verified' %}
-                        <a href="{% url 'property_owners:add_property' %}" class="btn btn-primary">
-                            <i class="fas fa-plus"></i> Add Your First Property
-                        </a>
-                    {% else %}
-                        <p class="text-muted small">Complete your account verification to start listing properties.</p>
-                    {% endif %}
-                </div>
             {% endif %}
         </div>
     </div>
@@ -503,7 +501,7 @@
         <div class="col-md-12">
             <hr>
             <p class="text-muted text-center">
-                <a href="{% url 'property_owners:account_settings' %}">Account Settings</a> |
+                <a href="#">Account Settings</a> |
                 <a href="#">Support</a> |
                 <a href="#">Documentation</a>
             </p>

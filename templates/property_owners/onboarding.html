@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Owner Onboarding{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 980px; margin-top: 2rem; margin-bottom: 3rem;">
+  <h1 style="margin-bottom: 1rem;">Welcome, Property Owner</h1>
+  <p style="color:#555;">Complete these steps to start receiving bookings.</p>
+
+  <div class="card" style="margin-top: 1rem;">
+    <div class="card-body">
+      <h5 class="card-title">Setup Checklist</h5>
+      <ul class="list-unstyled" style="margin:0;">
+        <li class="d-flex align-items-center py-2">
+          <i class="fas fa-hotel mr-2" style="color:#FF6B35; width:22px;"></i>
+          <div>
+            <strong>1. Create your property</strong><br>
+            {% if has_property %}
+              <span class="text-success">✓ Property created</span>
+            {% else %}
+              <a class="btn btn-sm btn-primary" href="{% url 'property_owners:create_property' %}">Add Property</a>
+            {% endif %}
+          </div>
+        </li>
+        <li class="d-flex align-items-center py-2">
+          <i class="fas fa-door-open mr-2" style="color:#FF6B35; width:22px;"></i>
+          <div>
+            <strong>2. Add room types</strong><br>
+            {% if has_property and rooms_count > 0 %}
+              <span class="text-success">✓ {{ rooms_count }} room type(s) added</span>
+            {% elif has_property %}
+              <a class="btn btn-sm btn-primary" href="{% url 'property_owners:room-list' first_hotel.id %}">Add Room Type</a>
+            {% else %}
+              <span class="text-muted">Add a property first</span>
+            {% endif %}
+          </div>
+        </li>
+        <li class="d-flex align-items-center py-2">
+          <i class="fas fa-images mr-2" style="color:#FF6B35; width:22px;"></i>
+          <div>
+            <strong>3. Upload images</strong><br>
+            {% if has_any_images %}
+              <span class="text-success">✓ Images uploaded</span>
+            {% elif has_property and rooms_count > 0 %}
+              <a class="btn btn-sm btn-primary" href="{% url 'property_owners:room-list' first_hotel.id %}">Upload Room Images</a>
+            {% else %}
+              <span class="text-muted">Add a room type first</span>
+            {% endif %}
+          </div>
+        </li>
+        <li class="d-flex align-items-center py-2">
+          <i class="fas fa-rupee-sign mr-2" style="color:#FF6B35; width:22px;"></i>
+          <div>
+            <strong>4. Set pricing & availability</strong><br>
+            {% if has_property and rooms_count > 0 %}
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'property_owners:room-list' first_hotel.id %}">Manage</a>
+            {% else %}
+              <span class="text-muted">Add a room type first</span>
+            {% endif %}
+          </div>
+        </li>
+        <li class="d-flex align-items-center py-2">
+          <i class="fas fa-file-contract mr-2" style="color:#FF6B35; width:22px;"></i>
+          <div>
+            <strong>5. Add amenities & policies</strong><br>
+            {% if has_property %}
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'property_owners:property-details' first_hotel.id %}">Open Property</a>
+            {% else %}
+              <span class="text-muted">Add a property first</span>
+            {% endif %}
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="alert alert-info mt-3" role="alert">
+    Once all steps are complete, submit for admin verification from your property page.
+  </div>
+</div>
+{% endblock %}

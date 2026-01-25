@@ -1,13 +1,14 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
 from core.models import TimeStampedModel
-from hotels.models import Hotel, RoomType
+from hotels.models import Hotel, RoomType, RoomCancellationPolicy
 from buses.models import BusSchedule, SeatLayout, BusRoute
 from packages.models import PackageDeparture
 import uuid
 import json
-from datetime import timedelta
+from datetime import timedelta, datetime, time
 
 
 class Booking(TimeStampedModel):
@@ -36,7 +37,7 @@ class Booking(TimeStampedModel):
     ]
     
     booking_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings', null=True, blank=True)
     
     # Channel / External integration fields
     external_booking_id = models.CharField(max_length=200, null=True, blank=True, db_index=True)
@@ -167,6 +168,29 @@ class Booking(TimeStampedModel):
             self.expires_at = deadline
             self.save(update_fields=['status', 'expires_at'])
             self.release_inventory_lock()
+            # Restore nightly inventory for expired reservations
+            hotel_booking = getattr(self, 'hotel_details', None)
+            if hotel_booking:
+                try:
+                    from bookings.inventory_utils import restore_inventory
+                    restore_inventory(
+                        room_type=hotel_booking.room_type,
+                        check_in=hotel_booking.check_in,
+                        check_out=hotel_booking.check_out,
+                        num_rooms=hotel_booking.number_of_rooms or 1,
+                    )
+                except Exception:
+                    pass
+            try:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info("[BOOKING_EXPIRED] booking=%s status=expired deadline=%s", self.booking_id, deadline)
+                payload = {'booking_id': str(self.booking_id), 'event': 'booking_expired'}
+                logger.info("[NOTIFICATION_EMAIL] payload=%s", payload)
+                logger.info("[NOTIFICATION_SMS] payload=%s", payload)
+                logger.info("[NOTIFICATION_WHATSAPP] payload=%s", payload)
+            except Exception:
+                pass
             return True
         return False
 
@@ -182,6 +206,8 @@ class Booking(TimeStampedModel):
     @property
     def reservation_seconds_left(self):
         """Seconds remaining before the reservation expires (0 if expired)."""
+        if self.status != 'reserved':
+            return None
         deadline = self.reservation_deadline
         if not deadline:
             return None
@@ -216,7 +242,33 @@ class HotelBooking(TimeStampedModel):
     """Hotel booking details"""
     booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='hotel_details')
     room_type = models.ForeignKey(RoomType, on_delete=models.PROTECT)
-    meal_plan = models.ForeignKey('hotels.RoomMealPlan', on_delete=models.PROTECT, related_name='bookings')
+    meal_plan = models.ForeignKey('hotels.RoomMealPlan', on_delete=models.PROTECT, related_name='bookings', null=True, blank=True)
+    cancellation_policy = models.ForeignKey(
+        RoomCancellationPolicy,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='bookings'
+    )
+    
+    # SNAPSHOT FIELDS (RULE D): Freeze room/pricing data at booking time (prevents legal issues if admin edits room)
+    room_snapshot = models.JSONField(null=True, blank=True, help_text="Frozen room specifications at booking time")
+    price_snapshot = models.JSONField(null=True, blank=True, help_text="Frozen pricing breakdown at booking time")
+
+    POLICY_TYPES = [
+        ('FREE', 'Free Cancellation'),
+        ('PARTIAL', 'Partial Refund'),
+        ('NON_REFUNDABLE', 'Non-Refundable'),
+    ]
+    policy_type = models.CharField(max_length=20, choices=POLICY_TYPES, default='NON_REFUNDABLE')
+    policy_free_cancel_until = models.DateTimeField(null=True, blank=True)
+    policy_refund_percentage = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    policy_text = models.TextField(blank=True)
+    policy_locked_at = models.DateTimeField(null=True, blank=True)
     
     check_in = models.DateField()
     check_out = models.DateField()
@@ -226,6 +278,38 @@ class HotelBooking(TimeStampedModel):
     number_of_children = models.IntegerField(default=0)
     
     total_nights = models.IntegerField()
+    
+    def lock_cancellation_policy(self, policy: RoomCancellationPolicy):
+        """Freeze cancellation policy snapshot on the booking if not already locked."""
+        if self.policy_locked_at or not policy:
+            return
+
+        self.cancellation_policy = policy
+        self.policy_type = policy.policy_type
+        self.policy_free_cancel_until = policy.free_cancel_until
+        self.policy_refund_percentage = policy.refund_percentage
+        self.policy_text = policy.policy_text or ''
+        self.policy_locked_at = timezone.now()
+        self.save(
+            update_fields=[
+                'cancellation_policy',
+                'policy_type',
+                'policy_free_cancel_until',
+                'policy_refund_percentage',
+                'policy_text',
+                'policy_locked_at',
+                'updated_at',
+            ]
+        )
+    
+    def get_cancellation_deadline(self):
+        """Calculate cancellation deadline as 2 PM on check-in date."""
+        from datetime import time
+        return datetime.combine(
+            self.check_in,
+            time(14, 0),  # 2 PM
+            tzinfo=timezone.get_current_timezone()
+        )
     
     def __str__(self):
         return f"Hotel Booking - {self.booking.booking_id}"
@@ -241,13 +325,20 @@ class BusBooking(TimeStampedModel):
     boarding_point = models.CharField(max_length=200, blank=True)
     dropping_point = models.CharField(max_length=200, blank=True)
     
+    # Snapshot fields (data contract compliance - immutable booking data)
+    operator_name = models.CharField(max_length=200, blank=True, help_text="Operator name at booking time")
+    bus_name = models.CharField(max_length=100, blank=True, help_text="Bus number/name at booking time")
+    route_name = models.CharField(max_length=200, blank=True, help_text="Route description at booking time")
+    contact_phone = models.CharField(max_length=20, blank=True, help_text="Contact phone at booking time")
+    departure_time_snapshot = models.CharField(max_length=20, blank=True, help_text="Departure time at booking time")
+    
     def __str__(self):
         return f"Bus Booking - {self.booking.booking_id}"
     
     @property
-    def bus_name(self):
-        """Get bus name/number"""
-        return self.bus_schedule.route.bus.bus_number if self.bus_schedule else ""
+    def bus_number(self):
+        """Get bus number from schedule (live data, not snapshot)"""
+        return self.bus_schedule.route.bus.bus_number if self.bus_schedule else self.bus_name
     
     @property
     def total_seats_booked(self):

@@ -119,12 +119,12 @@
                 <strong>₹{{ booking.base_fare|default:"0" }}</strong>
             </div>
             <div class="invoice-line">
-                <span>GST (18%)</span>
-                <strong>₹{{ booking.gst_amount|default:"0" }}</strong>
+                <span>Taxes &amp; Fees <span class="fees-hint" title="GST 18% plus any applicable convenience fee. Platform fee not applicable for this booking type.">ℹ</span></span>
+                <strong>₹{{ booking.taxes_and_fees|default:booking.gst_amount|default:"0" }}</strong>
             </div>
-            <div class="invoice-line">
-                <span>Convenience Fee</span>
-                <strong>₹{{ booking.convenience_fee|default:"0" }}</strong>
+            <div class="invoice-line text-muted" style="font-size: 0.9rem;">
+                <span>Breakdown</span>
+                <strong>GST: ₹{{ booking.gst_amount|default:"0" }} | Convenience: ₹{{ booking.convenience_fee|default:"0" }}</strong>
             </div>
             {% if booking.levy_amount %}
             <div class="invoice-line">

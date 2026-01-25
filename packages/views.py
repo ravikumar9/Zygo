@@ -14,6 +14,7 @@ from .models import Package, PackageDeparture
 from core.models import CorporateDiscount
 from bookings.models import Booking
 from .serializers import PackageListSerializer, PackageDetailSerializer
+from core.utils import update_recent_search, get_recent_searches
 
 
 def package_list(request):
@@ -44,11 +45,23 @@ def package_list(request):
         except ValueError:
             pass
     
+    if search_destination or min_price or max_price:
+        update_recent_search(
+            request.session,
+            'packages',
+            {
+                'destination': search_destination,
+                'min_price': min_price,
+                'max_price': max_price,
+            },
+        )
+
     context = {
         'packages': packages.order_by('-created_at'),
         'search_destination': search_destination,
         'min_price': min_price,
         'max_price': max_price,
+        'recent_searches': get_recent_searches(request.session),
     }
     return render(request, 'packages/package_list.html', context)
 
@@ -192,4 +205,15 @@ class PackageSearchView(generics.ListAPIView):
         if duration:
             queryset = queryset.filter(duration_days=duration)
         
+        update_recent_search(
+            self.request.session,
+            'packages',
+            {
+                'package_type': package_type,
+                'min_price': min_price,
+                'max_price': max_price,
+                'duration': duration,
+            },
+        )
+
         return queryset

@@ -59,7 +59,7 @@ def corporate_signup(request):
         messages.success(request, 
             f'Corporate account submitted successfully! '
             f'Your application is under review. You will be notified once approved.')
-        return redirect('corporate:dashboard')
+        return redirect('core:corporate-dashboard')
     
     # Pre-fill with user data
     context = {
@@ -79,7 +79,7 @@ def corporate_dashboard(request):
     
     if not corporate_account:
         messages.warning(request, 'You are not part of any corporate account. Sign up to get corporate benefits!')
-        return redirect('corporate:signup')
+        return redirect('corporate:register')
     
     # Get wallet
     wallet, _ = Wallet.objects.get_or_create(user=request.user)
@@ -138,7 +138,7 @@ def corporate_status(request):
     corporate_account = CorporateAccount.objects.filter(email_domain=domain).first() if domain else None
     
     if not corporate_account:
-        return redirect('corporate:signup')
+        return redirect('corporate:register')
     
     return render(request, 'corporate/status.html', {
         'corporate_account': corporate_account

@@ -12,6 +12,7 @@ from decimal import Decimal
 import json
 from .models import Bus, BusRoute, BusSchedule, BusOperator
 from core.models import CorporateDiscount
+from core.utils import update_recent_search, get_recent_searches
 from bookings.models import Booking
 from .serializers import BusRouteSerializer, BusScheduleSerializer
 from hotels.models import City
@@ -28,10 +29,21 @@ def bus_list(request):
     ).select_related('operator')
     
     # Search by source and destination cities
+    def _resolve_city(value):
+        if not value:
+            return None
+        try:
+            return City.objects.filter(id=int(value)).first()
+        except (ValueError, TypeError):
+            return City.objects.filter(name__iexact=value).first()
+
     # Accept both legacy and current query param keys
     source_city = request.GET.get('source_city') or request.GET.get('source')
     destination_city = request.GET.get('dest_city') or request.GET.get('destination')
     travel_date = request.GET.get('travel_date')
+
+    source_city_obj = _resolve_city(source_city)
+    destination_city_obj = _resolve_city(destination_city)
     
     # Additional filters
     bus_type = request.GET.get('bus_type')
@@ -46,18 +58,16 @@ def bus_list(request):
     # Filter buses by routes if search parameters provided
     if source_city or destination_city:
         routes = BusRoute.objects.all()
-        if source_city:
-            try:
-                scid = int(source_city)
-                routes = routes.filter(source_city_id=scid)
-            except (ValueError, TypeError):
-                routes = routes.filter(source_city__name__iexact=source_city)
-        if destination_city:
-            try:
-                dcid = int(destination_city)
-                routes = routes.filter(destination_city_id=dcid)
-            except (ValueError, TypeError):
-                routes = routes.filter(destination_city__name__iexact=destination_city)
+        if source_city_obj:
+            routes = routes.filter(source_city=source_city_obj)
+        elif source_city:
+            routes = routes.filter(source_city__name__iexact=source_city)
+
+        if destination_city_obj:
+            routes = routes.filter(destination_city=destination_city_obj)
+        elif destination_city:
+            routes = routes.filter(destination_city__name__iexact=destination_city)
+
         bus_ids = routes.values_list('bus_id', flat=True)
         buses = buses.filter(id__in=bus_ids)
     
@@ -97,7 +107,13 @@ def bus_list(request):
     route_map = {}
     for bus in buses:
         route = None
-        if source_city and destination_city:
+        if source_city_obj and destination_city_obj:
+            route = bus.routes.filter(source_city=source_city_obj, destination_city=destination_city_obj).first()
+        elif source_city_obj and destination_city:
+            route = bus.routes.filter(source_city=source_city_obj, destination_city__name__iexact=destination_city).first()
+        elif destination_city_obj and source_city:
+            route = bus.routes.filter(source_city__name__iexact=source_city, destination_city=destination_city_obj).first()
+        elif source_city and destination_city:
             # Accept either numeric IDs or city names
             try:
                 scid = int(source_city)
@@ -111,6 +127,21 @@ def bus_list(request):
             route_map[bus.id] = route
             bus.selected_route = route
     
+    if has_search:
+        update_recent_search(
+            request.session,
+            'buses',
+            {
+                'source_id': source_city_obj.id if source_city_obj else source_city,
+                'source_name': source_city_obj.name if source_city_obj else source_city,
+                'destination_id': destination_city_obj.id if destination_city_obj else destination_city,
+                'destination_name': destination_city_obj.name if destination_city_obj else destination_city,
+                'date': travel_date,
+            },
+        )
+
+    recent_searches = get_recent_searches(request.session)
+
     context = {
         'buses': buses,
         'cities': cities,
@@ -127,6 +158,7 @@ def bus_list(request):
         'route_map': route_map,
         'has_search': has_search,
         'show_empty_message': has_search and len(buses) == 0,
+        'recent_searches': recent_searches,
     }
     return render(request, 'buses/bus_list.html', context)
 
@@ -350,6 +382,12 @@ def book_bus(request, bus_id):
                 journey_date=date_obj,
                 boarding_point=boarding_point_text,
                 dropping_point=dropping_point_text,
+                # Snapshot fields for data contract compliance
+                operator_name=schedule.route.bus.operator.name if schedule.route.bus.operator else '',
+                bus_name=schedule.route.bus.bus_number,
+                route_name=f"{route.origin_city.name} to {route.destination_city.name}",
+                contact_phone=schedule.route.bus.operator.contact_phone if schedule.route.bus.operator else '',
+                departure_time_snapshot=route.departure_time.strftime('%H:%M') if route.departure_time else '',
             )
             
             # Create seat bookings
@@ -459,6 +497,21 @@ class BusSearchView(generics.ListAPIView):
                         'tv': schedule.route.bus.has_tv,
                     }
                 })
+
+        # Persist recent bus search for home recents widget
+        src_city_obj = City.objects.filter(id=request.query_params.get('source')).first()
+        dest_city_obj = City.objects.filter(id=request.query_params.get('destination')).first()
+        update_recent_search(
+            request.session,
+            'buses',
+            {
+                'source_id': request.query_params.get('source'),
+                'source_name': src_city_obj.name if src_city_obj else request.query_params.get('source'),
+                'destination_id': request.query_params.get('destination'),
+                'destination_name': dest_city_obj.name if dest_city_obj else request.query_params.get('destination'),
+                'date': request.query_params.get('date'),
+            },
+        )
         
         return Response({
             'count': len(results),

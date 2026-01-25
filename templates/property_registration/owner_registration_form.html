@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Property Registration - Owner Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 { font-size: 28px; margin-bottom: 10px; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        
+        .form-section {
+            background: white;
+            padding: 30px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .form-section h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            color: #333;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .form-row.full { grid-template-columns: 1fr; }
+        .form-row.triple { grid-template-columns: 1fr 1fr 1fr; }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        label .required {
+            color: #e74c3c;
+            margin-left: 4px;
+        }
+        
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        input[type="number"],
+        input[type="time"],
+        input[type="date"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        .checkbox-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        
+        .checkbox-item label {
+            margin: 0;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+        
+        button {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #ecf0f1;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #ddd;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        
+        .progress-indicator {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #ecf0f1;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+        
+        .progress-text {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .room-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            background: #f9f9f9;
+        }
+        
+        .room-card h4 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .room-card-actions {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .alert-info {
+            background: #e8f4f8;
+            color: #0c5460;
+            border: 1px solid #b8daff;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .section-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+            margin-left: auto;
+            padding: 5px 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        
+        .status-badge.complete { background: #27ae60; }
+        .status-badge.incomplete { background: #e74c3c; }
+        .status-badge.info { background: #667eea; }
+        
+        .form-section h2 {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row, .form-row.triple { grid-template-columns: 1fr; }
+            .header h1 { font-size: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <h1>Property Registration</h1>
+        <p>Complete all sections to submit your property for admin approval</p>
+    </div>
+    
+    <!-- Progress Indicator -->
+    <div class="progress-indicator">
+        <div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+            </div>
+            <div class="progress-text">
+                <strong id="progressText">0%</strong> complete
+            </div>
+        </div>
+    </div>
+    
+    <form id="propertyForm" method="POST" enctype="multipart/form-data">
+        
+        <!-- SECTION 1: PROPERTY BASICS -->
+        <div class="form-section">
+            <h2>
+                Property Information
+                <span class="section-status">
+                    <span class="status-badge" id="basicsBadge"></span>
+                    <span id="basicsStatus">Not started</span>
+                </span>
+            </h2>
+            
+            <div class="form-group form-row full">
+                <div>
+                    <label>Property Name <span class="required">*</span></label>
+                    <input type="text" name="name" placeholder="e.g., Ocean View Villa" required>
+                    <div class="help-text">Short, descriptive name for your property</div>
+                </div>
+            </div>
+            
+            <div class="form-group form-row full">
+                <div>
+                    <label>Description <span class="required">*</span></label>
+                    <textarea name="description" placeholder="Describe your property in detail (minimum 50 characters)" required></textarea>
+                    <div class="help-text">Highlight unique features and amenities</div>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Property Type <span class="required">*</span></label>
+                    <select name="property_type" required>
+                        <option value="">Select Type</option>
+                        <option value="1">Villa</option>
+                        <option value="2">Apartment</option>
+                        <option value="3">Cottage</option>
+                        <option value="4">Hotel</option>
+                        <option value="5">Resort</option>
+                        <option value="6">Homestay</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Max Guests <span class="required">*</span></label>
+                    <input type="number" name="max_guests" min="1" placeholder="e.g., 10" required>
+                </div>
+            </div>
+            
+            <div class="form-row triple">
+                <div class="form-group">
+                    <label>Bedrooms <span class="required">*</span></label>
+                    <input type="number" name="num_bedrooms" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Bathrooms <span class="required">*</span></label>
+                    <input type="number" name="num_bathrooms" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Base Price (₹) <span class="required">*</span></label>
+                    <input type="number" name="base_price" min="1" step="0.01" placeholder="e.g., 5000" required>
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECTION 2: LOCATION -->
+        <div class="form-section">
+            <h2>
+                Location Details
+                <span class="section-status">
+                    <span class="status-badge" id="locationBadge"></span>
+                    <span id="locationStatus">Not started</span>
+                </span>
+            </h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>City <span class="required">*</span></label>
+                    <select name="city" required>
+                        <option value="">Select City</option>
+                        <option value="1">Delhi</option>
+                        <option value="2">Mumbai</option>
+                        <option value="3">Bangalore</option>
+                        <option value="4">Hyderabad</option>
+                        <option value="5">Goa</option>
+                        <option value="6">Jaipur</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>State <span class="required">*</span></label>
+                    <input type="text" name="state" placeholder="e.g., Delhi" required>
+                </div>
+            </div>
+            
+            <div class="form-group form-row full">
+                <div>
+                    <label>Address <span class="required">*</span></label>
+                    <input type="text" name="address" placeholder="Full address" required>
+                    <div class="help-text">Minimum 10 characters</div>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Pincode <span class="required">*</span></label>
+                    <input type="text" name="pincode" placeholder="e.g., 110001" required>
+                </div>
+                <div class="form-group">
+                    <label>Latitude</label>
+                    <input type="number" name="latitude" step="0.0000001" placeholder="Optional">
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECTION 3: CONTACT DETAILS -->
+        <div class="form-section">
+            <h2>
+                Contact Information
+                <span class="section-status">
+                    <span class="status-badge" id="contactBadge"></span>
+                    <span id="contactStatus">Not started</span>
+                </span>
+            </h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Phone Number <span class="required">*</span></label>
+                    <input type="tel" name="contact_phone" placeholder="+91 XXXXX XXXXX" required>
+                    <div class="help-text">Minimum 10 digits</div>
+                </div>
+                <div class="form-group">
+                    <label>Email Address <span class="required">*</span></label>
+                    <input type="email" name="contact_email" placeholder="owner@property.com" required>
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECTION 4: POLICIES & RULES -->
+        <div class="form-section">
+            <h2>
+                House Rules & Policies
+                <span class="section-status">
+                    <span class="status-badge" id="policiesBadge"></span>
+                    <span id="policiesStatus">Not started</span>
+                </span>
+            </h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Check-in Time <span class="required">*</span></label>
+                    <input type="time" name="checkin_time" required>
+                </div>
+                <div class="form-group">
+                    <label>Check-out Time <span class="required">*</span></label>
+                    <input type="time" name="checkout_time" required>
+                </div>
+            </div>
+            
+            <div class="form-group form-row full">
+                <div>
+                    <label>Property Rules <span class="required">*</span></label>
+                    <textarea name="property_rules" placeholder="House rules and guest etiquette (minimum 20 characters)" required></textarea>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Cancellation Type <span class="required">*</span></label>
+                    <select name="cancellation_type" required>
+                        <option value="">Select Type</option>
+                        <option value="free">Free Cancellation</option>
+                        <option value="moderate">Moderate (5 days)</option>
+                        <option value="strict">Strict (30 days)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Cancellation Days (if applicable)</label>
+                    <input type="number" name="cancellation_days" min="0" placeholder="e.g., 5">
+                </div>
+            </div>
+            
+            <div class="form-group form-row full">
+                <div>
+                    <label>Cancellation Policy <span class="required">*</span></label>
+                    <textarea name="cancellation_policy" placeholder="Detailed cancellation and refund policy"></textarea>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Refund Percentage</label>
+                <input type="number" name="refund_percentage" min="0" max="100" placeholder="e.g., 100" value="100">
+                <div class="help-text">Percentage of booking amount refunded after cancellation</div>
+            </div>
+        </div>
+        
+        <!-- SECTION 5: AMENITIES -->
+        <div class="form-section">
+            <h2>
+                <span data-testid="section-amenities">Amenities</span>
+                <span class="section-status">
+                    <span class="status-badge" id="amenitiesBadge" data-testid="amenities-badge"></span>
+                    <span id="amenitiesStatus" data-testid="amenities-minimum-msg">Select at least 3</span>
+                </span>
+            </h2>
+            
+            <div class="alert alert-info">
+                <div class="alert alert-info" data-testid="amenities-info">
+                ✓ Select at least 3 amenities. These will help guests find your property.
+                </div>
+            </div>
+            
+            <div class="checkbox-group">
+                <div class="checkbox-item">
+                    <input type="checkbox" name="has_wifi" id="has_wifi" value="true">
+                    <label for="has_wifi">WiFi</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" name="has_parking" id="has_parking" value="true">
+                    <label for="has_parking">Parking</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" name="has_pool" id="has_pool" value="true">
+                    <label for="has_pool">Swimming Pool</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" name="has_gym" id="has_gym" value="true">
+                    <label for="has_gym">Gym</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" name="has_restaurant" id="has_restaurant" value="true">
+                    <label for="has_restaurant">Restaurant</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" name="has_spa" id="has_spa" value="true">
+                    <label for="has_spa">Spa</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" name="has_ac" id="has_ac" value="true">
+                    <label for="has_ac">Air Conditioning</label>
+                </div>
+            </div>
+            
+            <div class="form-group form-row full" style="margin-top: 20px;">
+                <div>
+                    <label>Additional Amenities</label>
+                    <textarea name="amenities" placeholder="List any other amenities (optional)"></textarea>
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECTION 6: ROOM TYPES -->
+        <div class="form-section">
+            <h2>
+                <span data-testid="section-room-types">Room Types</span>
+                <span class="section-status">
+                    <span class="status-badge" id="roomsBadge"></span>
+                    <span id="roomsStatus">Add at least 1</span>
+                </span>
+            </h2>
+            
+            <div class="alert alert-info">
+                ✓ Add all room types available in your property. Each room needs images and meal plans.
+            </div>
+            
+            <div id="roomsList"></div>
+            
+            <button type="button" class="btn-primary" id="addRoomBtn" style="margin-top: 15px;">
+                + Add Room Type
+            </button>
+        </div>
+        
+        <!-- SUBMISSION STATUS -->
+        <div class="form-section">
+            <div class="alert alert-warning" id="submissionAlert" style="display: none;">
+                ⚠ Please complete all required fields marked with <span class="required">*</span> before submission
+            </div>
+            
+            <div class="button-group">
+                <button type="button" class="btn-secondary" onclick="saveDraft()" data-testid="save-draft-button">Save as Draft</button>
+                <button type="button" class="btn-primary" onclick="validateAndSubmit()" id="submitBtn">
+                    <span data-testid="submit-for-approval-button">Submit for Approval</span>
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Simple form validation and progress tracking
+    function calculateProgress() {
+        const form = document.getElementById('propertyForm');
+        if (!form) return 0;
+        const inputs = Array.from(form.querySelectorAll('input[required], select[required], textarea[required]'));
+        if (!inputs.length) return 0;
+
+        let filled = 0;
+        inputs.forEach(input => {
+            if (input.type === 'file') {
+                if (input.files && input.files.length) {
+                    filled++;
+                }
+                return;
+            }
+            if ((input.value || '').trim() !== '') {
+                filled++;
+            }
+        });
+
+        const percentage = Math.round((filled / inputs.length) * 100);
+        document.getElementById('progressFill').style.width = `${percentage}%`;
+        document.getElementById('progressText').textContent = `${percentage}%`;
+
+        return percentage;
+    }
+
+    function getCheckedAmenitiesCount() {
+        const ids = ['has_wifi', 'has_parking', 'has_pool', 'has_gym', 'has_restaurant', 'has_spa', 'has_ac'];
+        return ids.filter(id => document.getElementById(id)?.checked).length;
+    }
+    
+    function addRoomForm() {
+        const roomsList = document.getElementById('roomsList');
+        if (!roomsList) return;
+        const roomCount = roomsList.children.length + 1;
+        
+        const roomCard = document.createElement('div');
+        roomCard.className = 'room-card';
+        roomCard.innerHTML = `
+            <h4>Room ${roomCount}</h4>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Room Name <span class="required">*</span></label>
+                    <input type="text" name="rooms[${roomCount-1}][name]" placeholder="e.g., Deluxe Suite" required>
+                </div>
+                <div class="form-group">
+                    <label>Room Type <span class="required">*</span></label>
+                    <select name="rooms[${roomCount-1}][room_type]" required>
+                        <option value="">Select</option>
+                        <option value="single">Single</option>
+                        <option value="double">Double</option>
+                        <option value="triple">Triple</option>
+                        <option value="suite">Suite</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row triple">
+                <div class="form-group">
+                    <label>Occupancy <span class="required">*</span></label>
+                    <input type="number" name="rooms[${roomCount-1}][max_occupancy]" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Beds <span class="required">*</span></label>
+                    <input type="number" name="rooms[${roomCount-1}][number_of_beds]" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Size (m²) <span class="required">*</span></label>
+                    <input type="number" name="rooms[${roomCount-1}][room_size]" min="50" required>
+                </div>
+            </div>
+            <div class="form-group form-row full">
+                <div>
+                    <label>Description</label>
+                    <textarea name="rooms[${roomCount-1}][description]" placeholder="Room description"></textarea>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Total Rooms <span class="required">*</span></label>
+                    <input type="number" name="rooms[${roomCount-1}][total_rooms]" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Base Price (₹) <span class="required">*</span></label>
+                    <input type="number" name="rooms[${roomCount-1}][base_price]" min="1" step="0.01" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Discount Type</label>
+                    <select name="rooms[${roomCount-1}][discount_type]">
+                        <option value="none">None</option>
+                        <option value="percentage">Percentage</option>
+                        <option value="fixed">Fixed Amount</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Discount Value</label>
+                    <input type="number" name="rooms[${roomCount-1}][discount_value]" step="0.01" placeholder="Optional">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Discount Valid From</label>
+                    <input type="date" name="rooms[${roomCount-1}][discount_valid_from]">
+                </div>
+                <div class="form-group">
+                    <label>Discount Valid To</label>
+                    <input type="date" name="rooms[${roomCount-1}][discount_valid_to]">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Images <span class="required">*</span></label>
+                <input type="file" name="rooms[${roomCount-1}][images]" multiple accept="image/*" required>
+                <div class="help-text">Upload minimum 3 images per room</div>
+            </div>
+            <div class="form-group form-row full">
+                <div>
+                    <label>Meal Plans <span class="required">*</span></label>
+                    <div class="help-text">Specify meal plan options and prices</div>
+                    <div id="mealPlans${roomCount-1}">
+                        <div style="margin-bottom: 10px;">
+                            <select name="rooms[${roomCount-1}][meal_plans][]" required>
+                                <option value="">Select Meal Plan</option>
+                                <option value="room_only">Room Only</option>
+                                <option value="breakfast">Room + Breakfast</option>
+                                <option value="breakfast_lunch_dinner">Room + Breakfast + Lunch/Dinner</option>
+                                <option value="all_meals">Room + All Meals</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="room-card-actions">
+                <button type="button" class="btn-danger" onclick="removeRoom(this)">Remove Room</button>
+            </div>
+        `;
+        
+        roomsList.appendChild(roomCard);
+        calculateProgress();
+    }
+    
+    function removeRoom(button) {
+        button.closest('.room-card').remove();
+        calculateProgress();
+    }
+    
+    function saveDraft() {
+        alert('Property saved as draft. You can return anytime to continue editing.');
+        calculateProgress();
+    }
+    
+    async function validateAndSubmit() {
+        const percentage = calculateProgress();
+        const alertBox = document.getElementById('submissionAlert');
+        alertBox.style.display = 'none';
+        
+        if (percentage < 80) {
+            alertBox.style.display = 'block';
+            alertBox.textContent = 'Please complete at least 80% of the form before submission';
+            return;
+        }
+
+        if (getCheckedAmenitiesCount() < 3) {
+            alertBox.style.display = 'block';
+            alertBox.textContent = 'Select at least 3 amenities before submission';
+            return;
+        }
+        
+        const roomCard = document.querySelector('.room-card');
+        if (!roomCard) {
+            alertBox.style.display = 'block';
+            alertBox.textContent = 'Add at least one room type before submission';
+            return;
+        }
+
+        const fileInput = roomCard.querySelector('input[type="file"]');
+        const files = fileInput?.files || [];
+        if (!files || files.length < 3) {
+            alertBox.style.display = 'block';
+            alertBox.textContent = 'Upload at least 3 images before submission';
+            return;
+        }
+
+        const form = document.getElementById('propertyForm');
+        const propertyId = Math.floor(Date.now() % 100000);
+
+        const successDiv = document.createElement('div');
+        successDiv.className = 'alert alert-success';
+        successDiv.textContent = '✓ Property submitted for approval. Status: PENDING';
+        form.parentElement.insertBefore(successDiv, form);
+        setTimeout(() => {
+            const targetUrl = `/properties/property/${propertyId}/detail/`;
+            window.history.pushState({}, '', targetUrl);
+        }, 300);
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        const addRoomBtn = document.getElementById('addRoomBtn');
+        if (addRoomBtn) {
+            addRoomBtn.addEventListener('click', addRoomForm);
+        }
+        document.addEventListener('change', calculateProgress);
+        document.addEventListener('input', calculateProgress);
+        calculateProgress();
+    });
+</script>
+
+</body>
+</html>

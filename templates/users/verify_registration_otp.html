@@ -589,24 +589,30 @@
     }
 
     // Auto-focus and auto-send OTP on page load
+    const otpVerifyData = {
+        emailVerified: {% if email_verified %}true{% else %}false{% endif %},
+        mobileVerified: {% if mobile_verified %}true{% else %}false{% endif %},
+        mobileOptional: {% if mobile_optional %}true{% else %}false{% endif %}
+    };
+
     window.addEventListener('load', function() {
         try {
-            {% if not email_verified %}
-            const emailInput = document.getElementById('email-otp-input');
-            if (emailInput) emailInput.focus();
-            // Auto-send email OTP (email verification is mandatory)
-            sendOTP('{% url "users:verify-registration-otp" %}?action=send_email_otp', 'resend-email-btn');
-            {% endif %}
+            if (!otpVerifyData.emailVerified) {
+                const emailInput = document.getElementById('email-otp-input');
+                if (emailInput) emailInput.focus();
+                // Auto-send email OTP (email verification is mandatory)
+                sendOTP('{% url "users:verify-registration-otp" %}?action=send_email_otp', 'resend-email-btn');
+            }
             
             // Mobile OTP is deferred (not auto-sent when optional)
-            {% if mobile_optional and not mobile_verified %}
-            console.log('Mobile OTP is optional and coming soon - skipping auto-send');
-            {% elif not mobile_verified %}
-            const mobileInput = document.getElementById('mobile-otp-input');
-            if (mobileInput) mobileInput.focus();
-            // Auto-send mobile OTP
-            sendOTP('{% url "users:verify-registration-otp" %}?action=send_mobile_otp', 'resend-mobile-btn');
-            {% endif %}
+            if (otpVerifyData.mobileOptional && !otpVerifyData.mobileVerified) {
+                console.log('Mobile OTP is optional and coming soon - skipping auto-send');
+            } else if (!otpVerifyData.mobileVerified) {
+                const mobileInput = document.getElementById('mobile-otp-input');
+                if (mobileInput) mobileInput.focus();
+                // Auto-send mobile OTP
+                sendOTP('{% url "users:verify-registration-otp" %}?action=send_mobile_otp', 'resend-mobile-btn');
+            }
         } catch (e) {
             console.error('Error during OTP initialization:', e);
             showError('Failed to initialize OTP page. Please refresh.', 'complete');

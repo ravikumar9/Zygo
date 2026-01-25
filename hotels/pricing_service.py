@@ -6,6 +6,8 @@ Handles complex pricing calculations with taxes, discounts, and surcharges
 from decimal import Decimal
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple
+
+from bookings.utils.pricing import calculate_total_pricing
 from .models import RoomAvailability, HotelDiscount, Hotel
 
 
@@ -43,70 +45,84 @@ class PricingCalculator:
         check_in: date,
         check_out: date,
         num_rooms: int = 1,
-        discount_code: Optional[str] = None
+        discount_code: Optional[str] = None,
+        meal_plan=None,
+        stay_type: str = 'overnight',
+        hourly_hours: Optional[int] = None,
     ) -> Dict:
         """
-        Calculate total price with all taxes, discounts and fees
-        
-        Returns:
-            {
-                'base_price': float,          # Per night base price
-                'num_nights': int,
-                'subtotal': float,            # Base price * nights * rooms
-                'discount_amount': float,
-                'subtotal_after_discount': float,
-                'gst_amount': float,
-                'total_amount': float,
-                'tax_breakdown': {},
-                'discount_details': {},
-                'currency': 'INR'
-            }
+        Calculate total price with tiered GST + capped service fee.
+
+        The calculation delegates to bookings.utils.pricing.calculate_total_pricing
+        to guarantee budget/premium slabs and the ₹500 service-fee cap.
         """
-        nights = (check_out - check_in).days
+
+        # Nights calculation (hourly stays treated as a single billing unit)
+        nights = 1 if stay_type == 'hourly' else (check_out - check_in).days
         if nights <= 0:
             raise ValueError("Check-out date must be after check-in date")
-        
-        # Get base price per night
-        base_price = self.get_room_price(room_type, check_in, check_out)
-        
-        # Calculate subtotal
-        subtotal = base_price * Decimal(str(num_rooms)) * Decimal(str(nights))
-        
-        # Apply discount
+
+        # Base rate per unit
+        if stay_type == 'hourly' and getattr(self.hotel, 'hourly_stays_enabled', False):
+            base_rate = room_type.get_hourly_price(hourly_hours or 0)
+        else:
+            base_rate = self.get_room_price(room_type, check_in, check_out)
+
+        meal_plan_delta = Decimal('0.00')
+        meal_plan_meta = None
+        if meal_plan:
+            meal_plan_delta = Decimal(str(getattr(meal_plan, 'price_delta', 0) or 0))
+            try:
+                meal_plan_meta = {
+                    'id': meal_plan.id,
+                    'name': meal_plan.meal_plan.name if getattr(meal_plan, 'meal_plan', None) else str(meal_plan),
+                    'plan_type': meal_plan.meal_plan.plan_type if getattr(meal_plan, 'meal_plan', None) else None,
+                    'price_delta': float(meal_plan_delta),
+                }
+            except Exception:
+                meal_plan_meta = None
+
+        subtotal = (Decimal(base_rate) + meal_plan_delta) * Decimal(str(num_rooms)) * Decimal(str(nights))
+
+        # Apply hotel discount code (affects base only)
         discount_info = {}
         discount_amount = Decimal('0.00')
-        
         if discount_code:
-            discount_amount, discount_info = self._apply_discount(
-                discount_code, subtotal
-            )
-        
-        subtotal_after_discount = subtotal - discount_amount
-        
-        # Calculate GST (on final amount after discount)
-        gst_amount = subtotal_after_discount * self.gst_rate
-        
-        # Total amount
-        total_amount = subtotal_after_discount + gst_amount
-        
+            discount_amount, discount_info = self._apply_discount(discount_code, subtotal)
+
+        # Delegate to unified pricing (budget/premium GST + capped service fee)
+        pricing = calculate_total_pricing(
+            base_amount=subtotal,
+            promo_discount=discount_amount,
+            booking_type='hotel'
+        )
+
         return {
-            'base_price': float(base_price),
+            'base_price': float(base_rate),
+            'meal_plan_delta': float(meal_plan_delta),
+            'meal_plan': meal_plan_meta,
             'num_nights': nights,
             'num_rooms': num_rooms,
             'subtotal': float(subtotal),
             'discount_amount': float(discount_amount),
-            'subtotal_after_discount': float(subtotal_after_discount),
-            'gst_amount': float(gst_amount),
-            'gst_percentage': float(self.hotel.gst_percentage),
-            'total_amount': float(total_amount),
+            'subtotal_after_discount': float(pricing['discounted_base']),
+            'service_fee': pricing['service_fee'],
+            'gst_amount': pricing['gst_amount'],
+            'gst_rate_percent': pricing['gst_rate_percent'],
+            'gst_hidden': True,  # UI must not show GST % explicitly
+            'taxes_total': pricing['taxes_total'],
+            'total_amount': pricing['total_payable'],
             'discount_details': discount_info,
             'currency': 'INR',
             'breakdown': {
-                'base_price_per_night': float(base_price),
-                'base_price_x_nights': float(base_price * Decimal(str(nights))),
+                'base_price_per_unit': float(base_rate + meal_plan_delta),
+                'base_price_x_nights': float((Decimal(base_rate) + meal_plan_delta) * Decimal(str(nights))),
                 'base_price_x_nights_x_rooms': float(subtotal),
                 'discount': float(discount_amount),
-                'gst': float(gst_amount),
+                'service_fee': pricing['service_fee'],
+                'gst': pricing['gst_amount'],
+                'taxes_total': pricing['taxes_total'],
+                'gst_rate_percent': pricing['gst_rate_percent'],
             }
         }
     

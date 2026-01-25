@@ -1,0 +1,570 @@
+<!-- 
+COMPONENT: Booking Form
+PURPOSE: AJAX form submission with JSON error handling
+DEFENSIVE: Defensive form fields, error display, null checks
+
+CONTRACT:
+- Input: hotel (id only), meal-plans-data (JSON from separate component)
+- Output: JSON response {error: "...", booking_url: "..."}
+- AJAX submission only (no HTML fallback)
+
+ARCHITECTURAL GUARANTEE:
+- All errors handled explicitly
+- Form validation before submission
+- Meal plan dropdown populated dynamically
+- No hidden coupling
+-->
+
+{% with room_list=room_types|default:hotel.room_types.all %}
+{% if room_list and room_list|length > 0 %}
+<form id="hotel-booking-form" data-hotel-id="{{ hotel.id }}" style="margin-top: 1.5rem;">
+    {% csrf_token %}
+    
+    <!-- Stay Type (Overnight vs Hourly) -->
+    {% if hotel.hourly_stays_enabled %}
+    <div class="form-group">
+        <label style="color: #333; font-weight: 600;">Stay Type</label>
+        <div class="d-flex gap-3 align-items-center">
+            <label class="form-check form-check-inline mb-0">
+                <input class="form-check-input" type="radio" name="stay_type" value="overnight" checked>
+                <span class="form-check-label">Overnight</span>
+            </label>
+            <label class="form-check form-check-inline mb-0">
+                <input class="form-check-input" type="radio" name="stay_type" value="hourly">
+                <span class="form-check-label">Hourly (6h/12h/24h)</span>
+            </label>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Check-in Date -->
+    <div class="form-group">
+        <label for="check_in" style="color: #333; font-weight: 600;">
+            Check-in Date <span style="color: #d9534f;">*</span>
+        </label>
+         <input type="date" 
+             id="check_in"
+             name="checkin_date" 
+             class="form-control" 
+             value="{{ prefill_checkin }}"
+             required
+             style="border: 1px solid #ddd; padding: 0.75rem;">
+        <small class="form-text text-muted">Check-in after 2:00 PM</small>
+        <small id="check-in-error" class="form-text text-danger" style="display:none;"></small>
+    </div>
+    
+    <!-- Check-out Date (hidden for hourly) -->
+    <div class="form-group">
+        <label for="check_out" style="color: #333; font-weight: 600;">
+            Check-out Date <span style="color: #d9534f;">*</span>
+        </label>
+         <input type="date" 
+             id="check_out"
+             name="checkout_date" 
+             class="form-control" 
+             value="{{ prefill_checkout }}"
+             required
+             style="border: 1px solid #ddd; padding: 0.75rem;">
+        <small class="form-text text-muted">Check-out before 11:00 AM</small>
+        <small id="check-out-error" class="form-text text-danger" style="display:none;"></small>
+    </div>
+
+    <!-- Hourly Slot Selector (visible only when hourly selected) -->
+    {% if hotel.hourly_stays_enabled %}
+    <div class="form-group" id="hourly-slot-group" style="display:none;">
+        <label style="color: #333; font-weight: 600;">Select Time Slot <span style="color: #d9534f;">*</span></label>
+        <select id="hourly_hours" name="hourly_hours" class="form-control" style="border: 1px solid #ddd; padding: 0.75rem;">
+            <option value="">-- Select hours --</option>
+            <option value="6">6 Hours</option>
+            <option value="12">12 Hours</option>
+            <option value="24">24 Hours</option>
+        </select>
+        <small class="form-text text-muted">Hourly pricing applies to selected slot</small>
+    </div>
+    {% endif %}
+    
+    <!-- Room Type Selection -->
+    <div class="form-group">
+        <label for="room_type_id" style="color: #333; font-weight: 600;">
+            Room Type <span style="color: #d9534f;">*</span>
+        </label>
+        <select id="room_type_id"
+                name="room_type_id" 
+                class="form-control" 
+                required
+                style="border: 1px solid #ddd; padding: 0.75rem;">
+            <option value="">-- Select a room type --</option>
+            {% for room in room_list %}
+            <option value="{{ room.id }}" {% if prefill_room_type == room.id|stringformat:"s" %}selected{% endif %}>
+                {{ room.name }} (Rs. {{ room.get_effective_price|floatformat:0 }} / night)
+            </option>
+            {% empty %}
+            <option value="">-- No rooms available --</option>
+            {% endfor %}
+        </select>
+        <small id="room-error" class="form-text text-danger" style="display:none;"></small>
+    
+        <!-- Meal Plan Selection -->
+        <div class="form-group">
+            <label for="meal_plan_id" style="color: #333; font-weight: 600;">Meal Plan</label>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-meal-plan="breakfast" data-testid="meal-plan-Breakfast">Breakfast</button>
+                <button type="button" class="btn btn-outline-secondary" data-meal-plan="half" data-testid="meal-plan-Half Board">Half Board</button>
+                <button type="button" class="btn btn-outline-secondary" data-meal-plan="full" data-testid="meal-plan-Full Board">Full Board</button>
+                <button type="button" class="btn btn-outline-secondary" data-meal-plan="all" data-testid="meal-plan-All Meals">All Meals</button>
+            </div>
+            <input type="hidden" id="meal_plan_id" name="meal_plan_id" value="{{ prefill_meal_plan }}">
+        </div>
+    </div>
+    
+    <!-- Number of Rooms (Optional) -->
+    <div class="form-group">
+        <label for="number_of_rooms" style="color: #333; font-weight: 600;">
+            Number of Rooms
+        </label>
+        <input type="number" 
+               id="number_of_rooms"
+               name="number_of_rooms" 
+               class="form-control" 
+               value="{{ prefill_num_rooms|default:1 }}"
+               min="1"
+               max="10"
+               style="border: 1px solid #ddd; padding: 0.75rem;">
+    </div>
+
+    <!-- Guest Details (Mandatory) -->
+    <div class="form-group">
+        <label for="guest_name" style="color: #333; font-weight: 600;">Guest Name <span style="color: #d9534f;">*</span></label>
+        <input type="text" id="guest_name" name="guest_name" class="form-control" value="{{ prefill_guest_name }}" required style="border: 1px solid #ddd; padding: 0.75rem;" placeholder="Full name on ID">
+    </div>
+
+    <div class="form-group">
+        <label for="guest_email" style="color: #333; font-weight: 600;">Email <span style="color: #d9534f;">*</span></label>
+        <input type="email" id="guest_email" name="guest_email" class="form-control" value="{{ prefill_guest_email }}" required style="border: 1px solid #ddd; padding: 0.75rem;" placeholder="you@example.com">
+    </div>
+
+    <div class="form-group">
+        <label for="guest_phone" style="color: #333; font-weight: 600;">Phone <span style="color: #d9534f;">*</span></label>
+        <input type="tel" id="guest_phone" name="guest_phone" class="form-control" value="{{ prefill_guest_phone }}" required style="border: 1px solid #ddd; padding: 0.75rem;" placeholder="10-digit mobile">
+    </div>
+    
+    <!-- Promo Code Section -->
+    <div class="form-group">
+        <label for="promo_code" style="color: #333; font-weight: 600;">Promo Code (Optional)</label>
+        <div class="input-group">
+            <input type="text" id="promo_code" name="promo" class="form-control" placeholder="Enter promo code" style="border: 1px solid #ddd; padding: 0.75rem;">
+            <button type="button" class="btn btn-outline-secondary" onclick="applyPromo()" style="border: 1px solid #ddd;">Apply Promo</button>
+        </div>
+        <small id="promo-error" class="form-text text-danger" style="display:none;" data-testid="promo-error"></small>
+    </div>
+    
+    <!-- Payment Method Section -->
+    <div class="form-group">
+        <label style="color: #333; font-weight: 600;">Payment Method</label>
+        <div class="d-flex gap-3 flex-wrap">
+            <label class="form-check">
+                <input class="form-check-input" type="radio" name="payment_method" value="card" checked>
+                <span class="form-check-label">Credit/Debit Card</span>
+            </label>
+            <label class="form-check">
+                <input class="form-check-input" type="radio" name="payment_method" value="upi">
+                <span class="form-check-label">UPI</span>
+            </label>
+            <label class="form-check">
+                <input class="form-check-input" type="radio" name="payment_method" value="netbanking">
+                <span class="form-check-label">Netbanking</span>
+            </label>
+        </div>
+        <div style="margin-top:0.75rem;">
+            <label class="form-check" style="margin-bottom:0.35rem;">
+                <input class="form-check-input" type="checkbox" name="use_wallet" id="use-wallet-checkbox" data-testid="use-wallet-checkbox">
+                <span class="form-check-label">Use Wallet</span>
+            </label>
+            {% if user.is_authenticated %}
+            <div id="wallet-balance-display" style="padding: 0.75rem; background-color: #e8f5e9; border-radius: 4px;">
+                <strong>Wallet Balance:</strong> <span data-testid="wallet-balance">₹0</span>
+                <div id="wallet-usage-note" style="font-size:0.9rem; color:#2e7d32; margin-top:0.35rem; display:none;"></div>
+            </div>
+            <input type="hidden" id="wallet_amount" name="wallet_amount" value="0">
+            {% else %}
+            <div class="alert alert-info" style="padding:0.75rem; margin-top:0.5rem;">
+                Login to view and use your wallet balance.
+            </div>
+            {% endif %}
+            <small id="wallet-error" class="form-text text-danger" style="display:none;" data-testid="wallet-error"></small>
+        </div>
+    </div>
+    
+    <!-- Error Display -->
+    <div id="booking-error" 
+         class="alert alert-danger" 
+         role="alert"
+         style="margin-bottom: 1.5rem; display:none;"></div>
+    
+    <!-- Submit Button -->
+    <button type="submit" 
+            id="book-btn" disabled
+            data-testid="confirm-booking"
+            class="btn btn-primary btn-lg btn-block"
+            style="background-color: #FF6B35; border-color: #FF6B35; margin-top: 1.5rem; padding: 0.75rem;">
+        <i class="fas fa-credit-card"></i> Book Now
+    </button>
+</form>
+{% else %}
+<div class="alert alert-warning" style="margin-top: 1.5rem;">
+    <strong>No rooms available</strong><br>
+    Booking is currently unavailable for this property.
+</div>
+{% endif %}
+{% endwith %}
+
+<script>
+// ============================================================================
+// BOOKING FORM + STATE GATING (Defensive null checks)
+// ============================================================================
+
+function reevaluateState(){
+    var btn = document.getElementById('book-btn');
+    var ci = document.getElementById('check_in');
+    var co = document.getElementById('check_out');
+    var room = document.getElementById('room_type_id');
+    if (!btn || !ci || !co || !room) return;
+    var state = window.getBookingState ? window.getBookingState({checkIn: ci.value, checkOut: co.value, room: room.value}) : 'INITIAL';
+    btn.disabled = state !== 'READY';
+}
+
+var bookingForm = document.getElementById('hotel-booking-form');
+if (bookingForm) {
+// Date min constraints (no past dates)
+var ciEl = document.getElementById('check_in');
+var coEl = document.getElementById('check_out');
+if (ciEl && coEl){
+    var today = new Date().toISOString().split('T')[0];
+    ciEl.min = today;
+    coEl.min = today;
+    ciEl.addEventListener('change', function(){
+        if (ciEl.value){
+            var d = new Date(ciEl.value);
+            d.setDate(d.getDate()+1);
+            var minCo = d.toISOString().split('T')[0];
+            coEl.min = minCo;
+            if (coEl.value && coEl.value < minCo){ coEl.value = ''; }
+        }
+        reevaluateState();
+    });
+    coEl.addEventListener('change', reevaluateState);
+}
+var roomEl = document.getElementById('room_type_id');
+if (roomEl){ roomEl.addEventListener('change', reevaluateState); }
+// Hourly toggle
+var stayTypeEls = document.querySelectorAll('input[name="stay_type"]');
+var hourlyGroup = document.getElementById('hourly-slot-group');
+if (stayTypeEls && hourlyGroup){
+    stayTypeEls.forEach(function(r){ r.addEventListener('change', function(){
+        var isHourly = (this.value === 'hourly');
+        hourlyGroup.style.display = isHourly ? 'block' : 'none';
+        var coLabel = document.querySelector('label[for="check_out"]');
+        var coInput = document.getElementById('check_out');
+        if (coInput){ coInput.required = !isHourly; coInput.disabled = isHourly; if (isHourly) coInput.value = ''; }
+        reevaluateState();
+    }); });
+}
+reevaluateState();
+
+bookingForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    clearErrors();
+    
+    var formData = new FormData(this);
+    // Alias fields to match backend expectations
+    formData.append('check_in', formData.get('checkin_date') || '');
+    formData.append('check_out', formData.get('checkout_date') || '');
+    var hotelId = this.dataset.hotelId;
+    var booking_btn = document.getElementById('book-btn');
+    
+    // Disable button during submission
+    booking_btn.disabled = true;
+    booking_btn.textContent = 'Processing...';
+    
+    fetch(`/hotels/${hotelId}/book/`, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Invalid promo code');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.error) {
+            showError(data.error);
+            booking_btn.disabled = false;
+            booking_btn.textContent = 'Book Now';
+        } else if (data.booking_url) {
+            // Success - redirect to confirmation
+            window.location.href = data.booking_url;
+        }
+    })
+    .catch(error => {
+        showError('An error occurred. Please try again or contact support.');
+        booking_btn.disabled = false;
+        booking_btn.textContent = 'Book Now';
+    });
+});
+}
+
+// ============================================================================
+// MEAL PLAN DROPDOWN HANDLER (Defensive null checks)
+// ============================================================================
+
+var roomSelect = document.getElementById('room_type_id');
+if (roomSelect) {
+roomSelect.addEventListener('change', function() {
+    var roomId = this.value;
+    var mealPlanGroup = document.getElementById('meal-plan-group');
+    var mealPlanSelect = document.getElementById('meal_plan_id');
+    
+    if (!mealPlanGroup || !mealPlanSelect) {
+        return;
+    }
+    
+    if (!roomId) {
+        mealPlanGroup.style.display = 'none';
+        mealPlanSelect.innerHTML = '<option value="">-- No meal plan (Room only) --</option>';
+        return;
+    }
+    
+    var mealPlansElement = document.getElementById('meal-plans-data');
+    if (!mealPlansElement || !mealPlansElement.textContent) {
+        mealPlanGroup.style.display = 'none';
+        return;
+    }
+    
+    try {
+        var mealPlansData = JSON.parse(mealPlansElement.textContent);
+        if (mealPlansData && mealPlansData[roomId] && mealPlansData[roomId].length > 0) {
+            mealPlanSelect.innerHTML = '<option value="">-- No meal plan (Room only) --</option>';
+            mealPlansData[roomId].forEach(function(plan) {
+                if (plan && plan.id && plan.name && plan.price) {
+                    var option = document.createElement('option');
+                    option.value = plan.id;
+                    option.textContent = plan.name + ' (Rs. ' + plan.price + ')';
+                    mealPlanSelect.appendChild(option);
+                }
+            });
+            mealPlanGroup.style.display = 'block';
+        } else {
+            mealPlanGroup.style.display = 'none';
+            mealPlanSelect.innerHTML = '<option value="">-- No meal plan (Room only) --</option>';
+        }
+    } catch (e) {
+        mealPlanGroup.style.display = 'none';
+    }
+});
+}
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+function showError(message) {
+    var errorDiv = document.getElementById('booking-error');
+    if (!errorDiv) return;
+    var safeMsg = message ? String(message).replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+    errorDiv.innerHTML = '<strong><i class="fas fa-exclamation-circle"></i> Booking Error</strong><br>' + safeMsg;
+    errorDiv.style.display = 'block';
+    
+    if (errorDiv.scrollIntoView) {
+        errorDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function clearErrors() {
+    var d = document.getElementById('booking-error');
+    if (d){ d.style.display = 'none'; d.innerHTML=''; }
+    document.getElementById('check-in-error').style.display = 'none';
+    document.getElementById('check-out-error').style.display = 'none';
+    document.getElementById('room-error').style.display = 'none';
+    document.getElementById('promo-error').style.display = 'none';
+    document.getElementById('wallet-error').style.display = 'none';
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function applyPromo() {
+    var promoCode = document.getElementById('promo_code').value.trim().toUpperCase();
+    var promoError = document.getElementById('promo-error');
+    
+    if (!promoCode) {
+        promoError.textContent = 'Please enter a promo code';
+        promoError.style.display = 'block';
+        return;
+    }
+    
+    // Validate promo code format (3-20 alphanumeric)
+    if (!/^[A-Z0-9]{3,20}$/.test(promoCode)) {
+        promoError.textContent = 'Invalid promo code format';
+        promoError.style.display = 'block';
+        return;
+    }
+    
+    // Call backend to validate promo code
+    var baseAmount = 5000; // TODO: Get from pricing calculator
+    fetch('/bookings/api/validate-promo/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            code: promoCode,
+            base_amount: baseAmount
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Invalid promo code');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.valid) {
+            promoError.textContent = '';
+            promoError.style.display = 'none';
+            alert('Promo applied! Discount: ₹' + data.discount_amount);
+            // TODO: Update pricing display
+        } else {
+            promoError.textContent = data.error || 'Invalid promo code';
+            promoError.style.display = 'block';
+        }
+    })
+    .catch(error => {
+        promoError.textContent = error.message || 'Failed to validate promo code';
+        promoError.style.display = 'block';
+    });
+}
+
+function updateWalletUsage() {
+    var cb = document.getElementById('use-wallet-checkbox');
+    var walletError = document.getElementById('wallet-error');
+    var walletBalanceDisplay = document.querySelector('[data-testid="wallet-balance"]');
+    var walletNote = document.getElementById('wallet-usage-note');
+    var walletAmountInput = document.getElementById('wallet_amount');
+    var priceEl = document.querySelector('[data-testid="price-display"]');
+    if (!cb) return;
+
+    if (!cb.checked) {
+        if (walletNote) walletNote.style.display = 'none';
+        if (walletError) walletError.style.display = 'none';
+        if (walletAmountInput) walletAmountInput.value = '0';
+        return;
+    }
+
+    fetch('/api/users/wallet/balance/', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin'
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Unable to fetch wallet balance');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (walletBalanceDisplay) {
+            walletBalanceDisplay.textContent = data.formatted || '₹0';
+        }
+        var totalAmount = priceEl ? parseInt(priceEl.textContent.replace(/[^0-9]/g, '')) : 0;
+        var applied = Math.min(totalAmount || 0, data.balance || 0);
+        if (walletAmountInput) walletAmountInput.value = applied;
+
+        if (walletNote) {
+            walletNote.textContent = applied > 0 ? `Wallet will pay ₹${applied.toLocaleString('en-IN')}. Remaining collected via chosen method.` : 'Wallet balance is 0.';
+            walletNote.style.display = 'block';
+        }
+        if (walletError) {
+            walletError.style.display = applied > 0 ? 'none' : 'block';
+            walletError.textContent = applied > 0 ? '' : 'Insufficient wallet balance.';
+        }
+    })
+    .catch(error => {
+        if (walletError) {
+            walletError.textContent = error.message || 'Wallet unavailable';
+            walletError.style.display = 'block';
+        }
+        if (walletAmountInput) walletAmountInput.value = '0';
+    });
+}
+
+// Meal plan button handlers
+var originalRoomPrice = null;
+document.querySelectorAll('[data-meal-plan]').forEach(function(button) {
+    button.addEventListener('click', function() {
+        // Update hidden input
+        var mealPlanInput = document.getElementById('meal_plan_id');
+        var planType = this.getAttribute('data-meal-plan');
+        
+        // Store original price on first click
+        if (originalRoomPrice === null) {
+            var firstPrice = document.querySelector('[data-testid="room-price"]');
+            if (firstPrice) {
+                originalRoomPrice = parseInt(firstPrice.textContent.replace(/[^0-9]/g, ''));
+            }
+        }
+        
+        // Visual feedback
+        document.querySelectorAll('[data-meal-plan]').forEach(btn => btn.classList.remove('btn-primary'));
+        document.querySelectorAll('[data-meal-plan]').forEach(btn => btn.classList.add('btn-outline-secondary'));
+        this.classList.remove('btn-outline-secondary');
+        this.classList.add('btn-primary');
+        
+        // Calculate increment
+        var increment = planType === 'breakfast' ? 200 : (planType === 'lunch' ? 400 : 600);
+        
+        // Update ALL room pricing displays from original price
+        if (originalRoomPrice) {
+            var newPrice = originalRoomPrice + increment;
+            document.querySelectorAll('[data-testid="room-price"]').forEach(function(priceDisplay) {
+                priceDisplay.textContent = '₹' + newPrice.toLocaleString('en-IN');
+            });
+        }
+        
+        if (mealPlanInput) {
+            mealPlanInput.value = planType === 'breakfast' ? '1' : (planType === 'lunch' ? '2' : '3');
+        }
+    });
+});
+
+// Initialize wallet checkbox
+var walletCheckbox = document.getElementById('use-wallet-checkbox');
+if (walletCheckbox) {
+    walletCheckbox.addEventListener('change', updateWalletUsage);
+    // Prime balance on load for authenticated users
+    if (walletCheckbox.checked) {
+        updateWalletUsage();
+    }
+}
+</script>

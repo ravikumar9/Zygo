@@ -1,0 +1,75 @@
+<!-- GOIBIBO-STYLE BOOKING FORM - ONE-PAGE INLINE -->
+<form method="post" action="{% url 'hotels:book_hotel' hotel.id %}" style="margin: 0;" id="hotelBookingForm">
+    
+    <input type="hidden" name="hotel_id" value="{{ hotel.id }}">
+    
+    <!-- Check-in Date -->
+    <div style="margin-bottom: 1rem;">
+        <label style="display: block; color: #222; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem;">Check-in</label>
+        <input type="date" name="checkin_date" class="form-control" required style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+    </div>
+    
+    <!-- Check-out Date -->
+    <div style="margin-bottom: 1rem;">
+        <label style="display: block; color: #222; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem;">Check-out</label>
+        <input type="date" name="checkout_date" class="form-control" required style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+    </div>
+    
+    <!-- Room Selection -->
+    <div style="margin-bottom: 1rem;">
+        <label style="display: block; color: #222; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem;">Select Room Type</label>
+        <select name="room_type" class="form-control" required style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+            <option value="">-- Choose a room --</option>
+            {% for room in room_types %}
+            <option value="{{ room.id }}">{{ room.name }} - ₹{{ room.get_effective_price|floatformat:0 }}/night</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <!-- Meal Plan Selection -->
+    <div style="margin-bottom: 1rem;">
+        <label style="display: block; color: #222; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem;">Meal Plan</label>
+        <select name="meal_plan" class="form-control" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+            <option value="room_only">Room Only</option>
+            <option value="breakfast">Room + Breakfast</option>
+            <option value="all_meals">Room + All Meals</option>
+        </select>
+        <small style="color:#777;">Meal plan price differences are applied on top of room price.</small>
+    </div>
+    
+    <!-- Guests -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        <div>
+            <label style="display: block; color: #222; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem;">Adults</label>
+            <input type="number" name="adults" value="1" min="1" class="form-control" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+        </div>
+        <div>
+            <label style="display: block; color: #222; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem;">Children</label>
+            <input type="number" name="children" value="0" min="0" class="form-control" style="padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+        </div>
+    </div>
+
+    <!-- Wallet Payment Option -->
+    <div style="margin-bottom: 1rem; padding: 0.85rem; border: 1px dashed #ddd; border-radius: 6px; background: #fafafa;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; color: #222; font-weight: 600; font-size: 0.95rem;">
+            <input type="checkbox" name="use_wallet" value="true"> Use wallet balance for partial payment
+        </label>
+        <input type="number" name="wallet_amount" min="0" step="0.01" placeholder="Enter wallet amount" class="form-control" style="margin-top: 0.6rem; padding: 0.7rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem;">
+        <small style="color:#777; display:block; margin-top:0.3rem;">We deduct wallet first, any remaining moves to UPI/Card.</small>
+    </div>
+
+    <!-- Price + Fee Note -->
+    <div style="margin-bottom: 1rem; padding: 0.85rem; border: 1px solid #f0f0f0; border-radius: 6px; background: #fff7ef;">
+        <div style="font-weight: 700; color: #222;">Price summary</div>
+        <p style="margin: 0.35rem 0 0 0; color: #444; font-size: 0.9rem;">Room + meal plan shown above. A 5% service fee (capped at ₹500) applies and is shown on the confirmation step.</p>
+    </div>
+    
+    <!-- Submit Button -->
+    <button type="submit" class="btn btn-block" style="background-color: #FF6B35; color: white; padding: 0.9rem; border-radius: 6px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; transition: all 0.3s; margin-top: 1.5rem;"
+            onmouseover="this.style.backgroundColor='#e05a25'; this.style.transform='scale(1.02)';"
+            onmouseout="this.style.backgroundColor='#FF6B35'; this.style.transform='scale(1)';">
+        <i class="fas fa-lock"></i> Continue to Checkout
+    </button>
+    
+    <p style="color: #999; font-size: 0.85rem; text-align: center; margin: 0.75rem 0 0 0;">Secure booking • No payment yet</p>
+</form>

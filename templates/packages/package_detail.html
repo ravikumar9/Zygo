@@ -248,7 +248,7 @@
 
                     <div class="alert alert-info small">
                         <div class="d-flex justify-content-between"><span>Base Price</span><span>₹<span id="basePrice">{{ package.starting_price|floatformat:"0" }}</span></span></div>
-                        <div class="d-flex justify-content-between"><span>GST (5%)</span><span>₹<span id="gstAmount">0</span></span></div>
+                        <div class="d-flex justify-content-between"><span>Taxes &amp; Fees <span class="fees-hint" title="GST 5% composite (no ITC). No platform fee for packages. Per India GST rules for tour packages.">ℹ</span></span><span>₹<span id="gstAmount">0</span></span></div>
                         <hr class="my-2">
                         <div class="d-flex justify-content-between fw-bold"><span>Total</span><span class="price-display">₹<span id="totalPrice">{{ package.starting_price|floatformat:"0" }}</span></span></div>
                         <div class="small text-muted mt-2">per traveler</div>
@@ -281,7 +281,7 @@
         const gstEl = document.getElementById('gstAmount');
         const totalEl = document.getElementById('totalPrice');
         const basePer = parseFloat('{{ package.starting_price }}') || 0;
-        const GST = 0.05; // 5%
+        const GST = 0.05; // 5% composite GST (no ITC) per India GST rules for tour packages
 
         const calc = () => {
             const n = parseInt(numTravelers.value) || 1;

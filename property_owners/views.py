@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.http import JsonResponse
 from django.db.models import Q
 from django.db import transaction
-from .models import PropertyOwner, Property, PropertyRoomType
+from .models import PropertyOwner, Property, PropertyRoomType, PropertyRoomImage
 from .forms import PropertyOwnerRegistrationForm, PropertyRegistrationForm, PropertyRoomTypeInlineFormSet
 
 
@@ -64,6 +64,7 @@ def property_owner_dashboard(request):
     
     context = {
         'owner': owner,
+        'property_owner': owner,
         'approved_properties': approved,
         'pending_properties': pending,
         'rejected_properties': rejected,
@@ -95,8 +96,31 @@ def create_property_draft(request):
     if property_id:
         property_obj = get_object_or_404(Property, id=property_id, owner=owner, status='DRAFT')
     
+    def _save_room_images(formset):
+        """Persist extra_images uploaded for each room form.
+
+        Picks the first uploaded image as primary if no primary exists.
+        """
+        for form in formset.forms:
+            room_instance = getattr(form, 'instance', None)
+            if not room_instance or not getattr(room_instance, 'id', None):
+                continue
+            files = form.files.getlist(f"{form.prefix}-extra_images") or []
+            if not files:
+                continue
+            existing_primary = room_instance.images.filter(is_primary=True).exists()
+            for idx, img_file in enumerate(files):
+                PropertyRoomImage.objects.create(
+                    room_type=room_instance,
+                    image=img_file,
+                    is_primary=existing_primary is False and idx == 0,
+                    display_order=idx
+                )
+                if not existing_primary:
+                    existing_primary = True
+
     if request.method == 'POST':
-        form = PropertyRegistrationForm(request.POST, instance=property_obj)
+        form = PropertyRegistrationForm(request.POST, request.FILES, instance=property_obj)
         formset = PropertyRoomTypeInlineFormSet(request.POST, request.FILES, instance=property_obj or Property())
         
         if form.is_valid() and formset.is_valid():
@@ -106,12 +130,30 @@ def create_property_draft(request):
             # SUBMISSION VALIDATION - Check if user clicked "Submit for Approval"
             if 'submit_for_approval' in request.POST:
                 checks, is_complete = form.instance.has_required_fields()
+                checks['rooms'] = valid_rooms > 0
+                
+                # Additional Step-2 validation: Each room must have at least 1 image
+                rooms_have_images = True
+                for rf in formset.forms:
+                    if rf.cleaned_data.get('DELETE'):
+                        continue
+                    room_inst = getattr(rf, 'instance', None)
+                    primary_img = bool(getattr(room_inst, 'image', None))
+                    uploaded_files = rf.files.getlist(f"{rf.prefix}-extra_images") if hasattr(rf, 'files') else []
+                    gallery_has = (room_inst and room_inst.images.exists()) or (uploaded_files and len(uploaded_files) > 0)
+                    if not (primary_img or gallery_has):
+                        rooms_have_images = False
+                        break
+                checks['room_images'] = rooms_have_images
+                is_complete = all(checks.values())
                 
                 if not is_complete or valid_rooms == 0:
                     # Incomplete - reject submission
                     missing = [k for k, v in checks.items() if not v]
                     if valid_rooms == 0:
                         missing.append('At least 1 room type required')
+                    if not rooms_have_images:
+                        missing.append('Each room must have at least 1 image')
                     messages.error(request, f"Cannot submit. Missing: {', '.join(missing)}")
                     
                     context = {
@@ -134,9 +176,10 @@ def create_property_draft(request):
                     property_obj.submitted_at = timezone.now()
                     property_obj.save()
                     
-                    # Save room types
+                    # Save room types and images
                     formset.instance = property_obj
                     formset.save()
+                    _save_room_images(formset)
                 
                 messages.success(request, f"✅ Property submitted with {valid_rooms} room type(s)! Admin will review soon.")
                 return redirect('property_owners:property_detail', property_id=property_obj.id)
@@ -149,9 +192,10 @@ def create_property_draft(request):
                     property_obj.status = 'DRAFT'
                     property_obj.save()
                     
-                    # Save room types
+                    # Save room types and images
                     formset.instance = property_obj
                     formset.save()
+                    _save_room_images(formset)
                 
                 completion = property_obj.completion_percentage
                 messages.success(request, f"✅ Draft saved ({completion}% complete, {valid_rooms} room(s)).")
@@ -281,3 +325,88 @@ def admin_reject_property(request, property_id):
     except AssertionError as e:
         messages.error(request, str(e))
     return redirect('property_owners:admin-pending')
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def edit_room_after_approval(request, property_id, room_id):
+    """
+    Edit room pricing, discounts, and inventory AFTER approval.
+    No re-approval required.
+    
+    GET: display form
+    POST: save changes immediately
+    """
+    try:
+        owner = request.user.property_owner_profile
+    except PropertyOwner.DoesNotExist:
+        messages.error(request, "Please register as a property owner first.")
+        return redirect('property_owners:register')
+    
+    property_obj = get_object_or_404(Property, id=property_id, owner=owner)
+    room = get_object_or_404(PropertyRoomType, id=room_id, property=property_obj)
+    
+    # Only approved properties can be edited (not drafts or pending)
+    if property_obj.status != 'APPROVED':
+        messages.error(request, "Only approved properties can be edited. Current status: {property_obj.status}")
+        return redirect('property_owners:property_detail', property_id=property_id)
+    
+    if request.method == 'POST':
+        # Parse incoming data
+        base_price = request.POST.get('base_price')
+        discount_type = request.POST.get('discount_type', 'none')
+        discount_value = request.POST.get('discount_value', 0)
+        discount_valid_from = request.POST.get('discount_valid_from')
+        discount_valid_to = request.POST.get('discount_valid_to')
+        discount_is_active = request.POST.get('discount_is_active') == 'on'
+        total_rooms = request.POST.get('total_rooms')
+        
+        # Validate & update
+        try:
+            if base_price:
+                room.base_price = float(base_price)
+            if discount_type in ['percentage', 'fixed']:
+                room.discount_type = discount_type
+                room.discount_value = float(discount_value) if discount_value else 0
+                room.discount_valid_from = discount_valid_from or None
+                room.discount_valid_to = discount_valid_to or None
+                room.discount_is_active = discount_is_active
+            else:
+                # Reset discount if set to 'none'
+                room.discount_type = 'none'
+                room.discount_value = 0
+                room.discount_valid_from = None
+                room.discount_valid_to = None
+                room.discount_is_active = False
+            if total_rooms:
+                room.total_rooms = int(total_rooms)
+            
+            room.save()
+            messages.success(request, f"✅ {room.name} updated! Changes live on hotel detail page.")
+            return redirect('property_owners:property_detail', property_id=property_id)
+        except (ValueError, TypeError) as e:
+            messages.error(request, f"Invalid input: {str(e)}")
+    
+    # GET: show form
+    context = {
+        'property': property_obj,
+        'room': room,
+        'discount_types': PropertyRoomType.DISCOUNT_TYPES,
+    }
+    return render(request, 'property_owners/edit_room_live.html', context)
+
+
+# ====== PHASE 1: PROPERTY REGISTRATION HTML FORMS ======
+
+def property_registration_form(request):
+    """Owner property registration form (HTML UI)"""
+    return render(request, 'property_registration/owner_registration_form.html')
+
+
+@login_required
+def admin_approval_dashboard(request):
+    """Admin approval dashboard (HTML UI)"""
+    if not request.user.is_staff:
+        messages.error(request, "Admin access required")
+        return redirect('home')
+    return render(request, 'admin_approval/approval_dashboard.html')

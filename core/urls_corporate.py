@@ -5,7 +5,10 @@ from . import views_corporate
 app_name = 'corporate'
 
 urlpatterns = [
-    path('signup/', views_corporate.corporate_signup, name='signup'),
+    # Preferred routes
+    path('register/', views_corporate.corporate_signup, name='register'),
     path('dashboard/', views_corporate.corporate_dashboard, name='dashboard'),
     path('dashboard/status/', views_corporate.corporate_status, name='status'),
+    # Backwards-compatible alias
+    path('signup/', views_corporate.corporate_signup, name='signup'),
 ]

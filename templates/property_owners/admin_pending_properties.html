@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Pending Properties — Admin{% endblock %}
+
+{% block extra_css %}
+<style>
+    .admin-container {
+        max-width: 1200px;
+        margin: 40px auto;
+        padding: 0 15px;
+    }
+    
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+    
+    .stat-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+    }
+    
+    .stat-number {
+        font-size: 32px;
+        font-weight: 700;
+        color: #00BCD4;
+    }
+    
+    .stat-label {
+        font-size: 14px;
+        color: #666;
+        margin-top: 5px;
+    }
+    
+    .filter-tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #f0f0f0;
+        padding-bottom: 10px;
+    }
+    
+    .filter-tab {
+        padding: 10px 20px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-weight: 500;
+        color: #666;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s ease;
+    }
+    
+    .filter-tab.active {
+        color: #00BCD4;
+        border-bottom-color: #00BCD4;
+    }
+    
+    .properties-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .properties-table thead th {
+        background: #f8f9fa;
+        padding: 15px;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid #e0e0e0;
+        color: #333;
+    }
+    
+    .properties-table tbody td {
+        padding: 15px;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .properties-table tbody tr:hover {
+        background: #f8f9fa;
+    }
+    
+    .property-name {
+        font-weight: 600;
+        color: #00BCD4;
+    }
+    
+    .owner-name {
+        font-size: 14px;
+        color: #666;
+        margin-top: 4px;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    
+    .status-pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .status-approved {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .status-rejected {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .btn-review {
+        padding: 8px 16px;
+        background: #00BCD4;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 500;
+        text-decoration: none;
+        transition: background 0.3s ease;
+    }
+    
+    .btn-review:hover {
+        background: #0097a7;
+    }
+    
+    .submitted-date {
+        font-size: 13px;
+        color: #999;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #666;
+    }
+    
+    .empty-state h3 {
+        color: #333;
+        margin-bottom: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <h1 style="margin-bottom: 30px;">🏢 Property Approval Dashboard</h1>
+    
+    <!-- Statistics -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-number">{{ stats.pending_count }}</div>
+            <div class="stat-label">Pending Review</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ stats.approved_count }}</div>
+            <div class="stat-label">Approved (Live)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ stats.rejected_count }}</div>
+            <div class="stat-label">Rejected</div>
+        </div>
+    </div>
+    
+    <!-- Filter Tabs -->
+    <div class="filter-tabs">
+        <a href="?status=pending" class="filter-tab {% if filter_status == 'pending' %}active{% endif %}">
+            Pending ({{ stats.pending_count }})
+        </a>
+        <a href="?status=approved" class="filter-tab {% if filter_status == 'approved' %}active{% endif %}">
+            Approved ({{ stats.approved_count }})
+        </a>
+        <a href="?status=rejected" class="filter-tab {% if filter_status == 'rejected' %}active{% endif %}">
+            Rejected ({{ stats.rejected_count }})
+        </a>
+    </div>
+    
+    <!-- Properties List -->
+    {% if properties %}
+    <table class="properties-table">
+        <thead>
+            <tr>
+                <th>Property Name</th>
+                <th>Owner</th>
+                <th>Location</th>
+                <th>Rooms</th>
+                <th>Status</th>
+                <th>Submitted</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for prop in properties %}
+            <tr>
+                <td>
+                    <div class="property-name">{{ prop.name }}</div>
+                    <div class="owner-name">{{ prop.owner.business_name }}</div>
+                </td>
+                <td>{{ prop.owner.owner_name }}</td>
+                <td>
+                    {% if prop.city %}{{ prop.city.name }}{% endif %}<br>
+                    <small style="color: #999;">{{ prop.address|truncatewords:5 }}</small>
+                </td>
+                <td>{{ prop.room_types.count }} room(s)</td>
+                <td>
+                    <span class="status-badge status-{{ prop.status|lower }}">
+                        {{ prop.get_status_display }}
+                    </span>
+                </td>
+                <td class="submitted-date">
+                    {% if prop.submitted_at %}
+                        {{ prop.submitted_at|date:"M d, Y H:i" }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="action-buttons">
+                        <a href="{% url 'property_owners:admin-property-review' prop.id %}" class="btn-review">
+                            Review
+                        </a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <h3>No properties to review</h3>
+        <p>All properties have been processed.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

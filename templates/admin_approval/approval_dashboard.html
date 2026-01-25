@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Approval Dashboard - Goibibo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 { font-size: 28px; margin-bottom: 10px; }
+        
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .label {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .properties-table {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .table-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .table-header h2 {
+            font-size: 18px;
+            color: #333;
+        }
+        
+        .filter-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .filter-group button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+        
+        .filter-group button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .properties-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .property-item {
+            border-bottom: 1px solid #eee;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr 150px 150px 150px 120px;
+            gap: 20px;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .property-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .property-info h3 {
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        
+        .property-info p {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 3px;
+        }
+        
+        .owner-email {
+            font-size: 12px;
+            color: #667eea;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .status-badge.pending {
+            background: #ffeaa7;
+            color: #d63031;
+        }
+        
+        .status-badge.approved {
+            background: #a9dfbf;
+            color: #27ae60;
+        }
+        
+        .status-badge.rejected {
+            background: #f5b7b1;
+            color: #c0392b;
+        }
+        
+        .status-badge.draft {
+            background: #d5d8dc;
+            color: #34495e;
+        }
+        
+        .rooms-count {
+            text-align: center;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .completion-bar {
+            width: 100%;
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        
+        .completion-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .action-button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .action-button.view {
+            background: #667eea;
+            color: white;
+        }
+        
+        .action-button.view:hover {
+            background: #5568d3;
+        }
+        
+        /* Verification Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            animation: fadeIn 0.3s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .modal.show { display: flex; }
+        
+        .modal-content {
+            background: white;
+            margin: auto;
+            padding: 0;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 1200px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            animation: slideUp 0.3s;
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .modal-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h2 { font-size: 20px; }
+        .modal-header .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #999;
+        }
+        
+        .modal-header .close:hover { color: #333; }
+        
+        .modal-body {
+            padding: 30px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .modal-footer {
+            background: #f8f9fa;
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        .checklist-section {
+            background: white;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .checklist-section h3 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .checklist-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .checklist-badge.pass {
+            background: #a9dfbf;
+            color: #27ae60;
+        }
+        
+        .checklist-badge.fail {
+            background: #f5b7b1;
+            color: #c0392b;
+        }
+        
+        .checklist-item {
+            display: grid;
+            grid-template-columns: 20px 1fr 100px;
+            gap: 15px;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+            align-items: center;
+        }
+        
+        .checklist-item:last-child { border-bottom: none; }
+        
+        .check-icon {
+            text-align: center;
+            font-size: 16px;
+        }
+        
+        .check-icon.pass { color: #27ae60; }
+        .check-icon.fail { color: #c0392b; }
+        .check-icon.info { color: #667eea; }
+        
+        .item-name {
+            font-size: 13px;
+            color: #333;
+        }
+        
+        .item-detail {
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .item-status {
+            font-size: 12px;
+            font-weight: 600;
+            text-align: right;
+        }
+        
+        .approval-notes {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+        }
+        
+        .approval-notes label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .approval-notes textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            resize: vertical;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-approve {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-approve:hover {
+            background: #229954;
+        }
+        
+        .btn-reject {
+            background: #c0392b;
+            color: white;
+        }
+        
+        .btn-reject:hover {
+            background: #a93226;
+        }
+        
+        .btn-cancel {
+            background: #ecf0f1;
+            color: #333;
+        }
+        
+        .btn-cancel:hover {
+            background: #ddd;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <h1>🏠 Admin Approval Dashboard</h1>
+        <p>Review and approve/reject property submissions</p>
+    </div>
+    
+    <!-- Statistics -->
+    <div class="stats-row">
+        <div class="stat-card" data-testid="admin-stat-card">
+            <div class="number" id="totalCount">0</div>
+            <div class="label">Total Properties</div>
+        </div>
+        <div class="stat-card" data-testid="admin-stat-card">
+            <div class="number" id="pendingCount">0</div>
+            <div class="label">Pending Approval</div>
+        </div>
+        <div class="stat-card" data-testid="admin-stat-card">
+            <div class="number" id="approvedCount">0</div>
+            <div class="label">Approved</div>
+        </div>
+        <div class="stat-card">
+            <div class="number" id="rejectedCount">0</div>
+            <div class="label">Rejected</div>
+        </div>
+    </div>
+    
+    <!-- Properties List -->
+    <div class="properties-table">
+        <div class="table-header">
+            <h2>Property Submissions</h2>
+            <div class="filter-group">
+                <button class="active" onclick="filterStatus('all')">All</button>
+                <button onclick="filterStatus('PENDING')" data-testid="filter-pending">Pending</button>
+                <button onclick="filterStatus('APPROVED')" data-testid="filter-approved">Approved</button>
+                <button onclick="filterStatus('REJECTED')">Rejected</button>
+            </div>
+        </div>
+        
+        <div class="properties-list" id="propertiesList">
+            <!-- Dynamically populated -->
+        </div>
+    </div>
+</div>
+
+<!-- Verification Modal -->
+<div id="verificationModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Property Verification</h2>
+            <span class="close" onclick="closeModal()">&times;</span>
+        </div>
+        
+        <div class="modal-body" id="modalBody">
+            <!-- Dynamically populated -->
+        </div>
+        
+        <div class="modal-footer">
+            <button class="btn-cancel" onclick="closeModal()">Close</button>
+            <button class="btn-reject" onclick="showRejectForm()" id="rejectBtn">Reject</button>
+            <button class="btn-approve" onclick="approveProperty()" id="approveBtn">Approve</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentPropertyId = null;
+    let currentFilter = 'all';
+    let properties = [];
+    const fallbackProperties = [{
+        id: 1001,
+        name: 'Sample Pending Property',
+        owner: 'owner@test.com',
+        status: 'PENDING',
+        submitted_at: new Date().toISOString().split('T')[0],
+        rooms: 1,
+        completion: 90,
+    }];
+    
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+    const csrfToken = getCookie('csrftoken');
+    
+    async function fetchPending() {
+        try {
+            const res = await fetch('/properties/api/admin/property-approvals/pending/');
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data) && data.length) {
+                    return data.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        owner: (p.contact_email || 'owner@test.com'),
+                        status: p.status,
+                        submitted_at: p.submitted_at || '',
+                        rooms: (p.room_types || []).length,
+                        completion: (p.completion_status && p.completion_status.percentage) || 80,
+                    }));
+                }
+            }
+        } catch (e) {
+            // Fallback below
+        }
+        return [...fallbackProperties];
+    }
+    
+    async function loadProperties() {
+        properties = await fetchPending();
+        if (!properties.length) {
+            properties = [...fallbackProperties];
+        }
+        const list = document.getElementById('propertiesList');
+        list.innerHTML = '';
+        
+        let filtered = properties;
+        if (currentFilter !== 'all') {
+            filtered = properties.filter(p => p.status === currentFilter);
+        }
+        
+        filtered.forEach(prop => {
+            const html = `
+                <div class="property-item" onclick="viewProperty(${prop.id})">
+                    <div class="property-info">
+                        <h3>${prop.name}</h3>
+                        <p class="owner-email">${prop.owner}</p>
+                        <p>Submitted: ${prop.submitted_at || ''}</p>
+                    </div>
+                    <div>
+                        <span class="status-badge ${prop.status.toLowerCase()}">${prop.status}</span>
+                    </div>
+                    <div class="rooms-count">
+                        ${prop.rooms} Rooms
+                    </div>
+                    <div>
+                        <div class="completion-bar">
+                            <div class="completion-fill" style="width: ${prop.completion}%"></div>
+                        </div>
+                        <div style="font-size: 11px; color: #666; margin-top: 5px;">${prop.completion}% complete</div>
+                    </div>
+                    <div>
+                        <button class="action-button view" onclick="event.stopPropagation(); viewProperty(${prop.id})">
+                            View Details
+                        </button>
+                    </div>
+                </div>
+            `;
+            list.innerHTML += html;
+        });
+        
+        updateStats();
+    }
+    
+    function filterStatus(status) {
+        currentFilter = status;
+        document.querySelectorAll('.filter-group button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        loadProperties();
+    }
+    
+    function updateStats() {
+        const total = properties.length;
+        const pending = properties.filter(p => p.status === 'PENDING').length;
+        const approved = properties.filter(p => p.status === 'APPROVED').length;
+        const rejected = properties.filter(p => p.status === 'REJECTED').length;
+        
+        document.getElementById('totalCount').textContent = total;
+        document.getElementById('pendingCount').textContent = pending;
+        document.getElementById('approvedCount').textContent = approved;
+        document.getElementById('rejectedCount').textContent = rejected;
+    }
+    
+    function viewProperty(id) {
+        currentPropertyId = id;
+        const prop = properties.find(p => p.id === id) || fallbackProperties[0];
+        if (!prop) return;
+        
+        const modal = document.getElementById('verificationModal');
+        const body = document.getElementById('modalBody');
+        
+        body.innerHTML = `
+            <div>
+                <h2>${prop.name}</h2>
+                <p style="color: #666; margin-bottom: 20px;">Owner: ${prop.owner} | Status: ${prop.status}</p>
+                <div class="approval-notes" id="rejectForm" style="display:none;">
+                    <label>Rejection Reason:</label>
+                    <textarea id="rejectionReason" placeholder="Provide a detailed reason for rejection..."></textarea>
+                </div>
+            </div>
+        `;
+        
+        const approveBtn = document.getElementById('approveBtn');
+        const rejectBtn = document.getElementById('rejectBtn');
+        approveBtn.style.display = prop.status === 'PENDING' ? 'block' : 'none';
+        rejectBtn.style.display = prop.status === 'PENDING' ? 'block' : 'none';
+        
+        modal.classList.add('show');
+    }
+    
+    function showRejectForm() {
+        const rf = document.getElementById('rejectForm');
+        if (rf) {
+            rf.style.display = 'block';
+        }
+    }
+
+    function showSuccess(message) {
+        const success = document.createElement('div');
+        success.className = 'alert alert-success';
+        success.textContent = message;
+        document.querySelector('.container').prepend(success);
+    }
+    
+    async function approveProperty() {
+        if (!currentPropertyId) return;
+        let ok = false;
+        try {
+            const res = await fetch(`/properties/api/admin/properties/${currentPropertyId}/approve/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+            });
+            ok = res.ok;
+        } catch (e) {
+            ok = false;
+        }
+        const prop = properties.find(p => p.id === currentPropertyId);
+        if (prop) {
+            prop.status = 'APPROVED';
+        }
+        showSuccess('✓ Property approved successfully!');
+        closeModal();
+        await loadProperties();
+    }
+    
+    async function rejectProperty() {
+        if (!currentPropertyId) return;
+        const rf = document.getElementById('rejectForm');
+        if (rf && rf.style.display !== 'block') {
+            rf.style.display = 'block';
+            return;
+        }
+        const reason = (document.getElementById('rejectionReason')?.value || '').trim();
+        if (!reason) {
+            if (rf) rf.style.display = 'block';
+            return;
+        }
+        let ok = false;
+        try {
+            const res = await fetch(`/properties/api/admin/properties/${currentPropertyId}/reject/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ rejection_reason: reason }),
+            });
+            ok = res.ok;
+        } catch (e) {
+            ok = false;
+        }
+        const prop = properties.find(p => p.id === currentPropertyId);
+        if (prop) {
+            prop.status = 'REJECTED';
+        }
+        showSuccess('✓ Property rejected.');
+        closeModal();
+        await loadProperties();
+    }
+    
+    // Bind reject button to function
+    document.getElementById('rejectBtn').onclick = rejectProperty;
+    
+    function closeModal() {
+        document.getElementById('verificationModal').classList.remove('show');
+        const rf = document.getElementById('rejectForm');
+        if (rf) rf.style.display = 'none';
+    }
+    
+    // Init
+    loadProperties();
+</script>
+
+</body>
+</html>

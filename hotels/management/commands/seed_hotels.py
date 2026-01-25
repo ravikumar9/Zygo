@@ -9,7 +9,7 @@ from datetime import date, timedelta, datetime
 from decimal import Decimal
 import random
 
-from hotels.models import Hotel, RoomType, RoomAvailability, HotelDiscount
+from hotels.models import Hotel, RoomType, RoomAvailability, HotelDiscount, MealPlan, RoomMealPlan
 from core.models import City
 
 
@@ -310,6 +310,30 @@ class Command(BaseCommand):
             },
         ]
 
+        # Ensure global meal plans exist
+        room_only_plan, _ = MealPlan.objects.get_or_create(
+            plan_type='room_only',
+            defaults={
+                'name': 'Room Only',
+                'inclusions': [],
+                'description': 'Room accommodation only',
+                'is_refundable': True,
+                'is_active': True,
+                'display_order': 0,
+            }
+        )
+        breakfast_plan, _ = MealPlan.objects.get_or_create(
+            plan_type='breakfast',
+            defaults={
+                'name': 'Breakfast Included',
+                'inclusions': ['Breakfast'],
+                'description': 'Breakfast included per person per night',
+                'is_refundable': True,
+                'is_active': True,
+                'display_order': 1,
+            }
+        )
+
         # Create hotels
         for hotel_data in hotels_data:
             hotel, created = Hotel.objects.get_or_create(
@@ -358,6 +382,28 @@ class Command(BaseCommand):
                             'has_safe': True,
                             'total_rooms': room_config['total_rooms'],
                             'is_available': True,
+                        }
+                    )
+
+                    # Attach meal plans (Room Only default + Breakfast)
+                    RoomMealPlan.objects.get_or_create(
+                        room_type=room_type,
+                        meal_plan=room_only_plan,
+                        defaults={
+                            'price_delta': Decimal('0.00'),
+                            'is_default': True,
+                            'is_active': True,
+                            'display_order': 0,
+                        }
+                    )
+                    RoomMealPlan.objects.get_or_create(
+                        room_type=room_type,
+                        meal_plan=breakfast_plan,
+                        defaults={
+                            'price_delta': Decimal(str(random.choice([300, 400, 500, 600, 700]))),
+                            'is_default': False,
+                            'is_active': True,
+                            'display_order': 1,
                         }
                     )
                     

@@ -6,8 +6,17 @@
 
 {% block content %}
 <div class="container my-5">
-    <form method="get" class="card shadow-sm border-0 p-3 mb-4">
+    <h1>Hotels</h1>
+    {% if search_error %}
+    <div class="alert alert-danger" id="search-error">{{ search_error }}</div>
+    {% endif %}
+    <form method="get" class="card shadow-sm border-0 p-3 mb-4" id="hotel-search-form">
         <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Search (city, area, property)</label>
+                <input type="text" name="search" class="form-control" placeholder="e.g. Koramangala or Palm" value="{{ search_query|default:'' }}">
+                <input type="hidden" name="q" id="searchAliasQ" value="{{ search_query|default:'' }}">
+            </div>
             <div class="col-md-3">
                 <label class="form-label">City</label>
                 <select name="city_id" class="form-select">
@@ -18,18 +27,6 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label">Check-in</label>
-                <input type="date" name="checkin" class="form-control" value="{{ selected_checkin|default:'' }}" min="{{ today }}">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Check-out</label>
-                <input type="date" name="checkout" class="form-control" value="{{ selected_checkout|default:'' }}" min="{{ today }}">
-            </div>
-            <div class="col-md-1">
-                <label class="form-label">Guests</label>
-                <input type="number" name="guests" class="form-control" min="1" value="{{ selected_guests|default:1 }}">
-            </div>
-            <div class="col-md-2">
                 <label class="form-label">Property Type</label>
                 <select name="property_type" class="form-select">
                     <option value="">Any</option>
@@ -38,7 +35,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <label class="form-label">Star Rating</label>
                 <select name="star_rating" class="form-select">
                     <option value="">Any</option>
@@ -48,7 +45,20 @@
                 </select>
             </div>
         </div>
+
         <div class="row g-3 mt-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Check-in</label>
+                <input type="date" name="checkin" class="form-control" value="{{ selected_checkin|default:'' }}" min="{{ today }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Check-out</label>
+                <input type="date" name="checkout" class="form-control" value="{{ selected_checkout|default:'' }}" min="{{ today }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Guests</label>
+                <input type="number" name="guests" class="form-control" min="1" value="{{ selected_guests|default:1 }}">
+            </div>
             <div class="col-md-2">
                 <label class="form-label">Min Price</label>
                 <input type="number" name="price_min" class="form-control" min="0" value="{{ selected_price_min|default:'' }}" placeholder="0">
@@ -57,7 +67,10 @@
                 <label class="form-label">Max Price</label>
                 <input type="number" name="price_max" class="form-control" min="0" value="{{ selected_price_max|default:'' }}" placeholder="15000">
             </div>
-            <div class="col-md-4">
+        </div>
+
+        <div class="row g-3 mt-3 align-items-end">
+            <div class="col-md-5">
                 <label class="form-label">Amenities</label>
                 <div class="d-flex flex-wrap gap-2 small">
                     <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="has_wifi" value="true" {% if selected_amenities.has_wifi %}checked{% endif %}><span class="form-check-label">Wifi</span></label>
@@ -69,7 +82,7 @@
                     <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="has_ac" value="true" {% if selected_amenities.has_ac %}checked{% endif %}><span class="form-check-label">AC</span></label>
                 </div>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <label class="form-label">Sort</label>
                 <select name="sort" class="form-select">
                     <option value="">Default</option>
@@ -79,27 +92,55 @@
                     <option value="rating_asc" {% if selected_sort == 'rating_asc' %}selected{% endif %}>Rating: Low to High</option>
                 </select>
             </div>
+            <div class="col-md-2">
+                <label class="form-label">Near Me</label>
+                <button type="button" class="btn btn-outline-secondary w-100" id="nearMeBtn">Use my location</button>
+                <small class="text-muted d-block">Radius {{ selected_radius|default:'10' }} km</small>
+            </div>
             <div class="col-md-2 text-end">
-                <button class="btn btn-primary w-100" type="submit">Search Hotels</button>
+                <button class="btn btn-primary w-100" type="submit">Search</button>
                 <a href="/hotels/" class="small d-inline-block mt-2">Reset filters</a>
             </div>
         </div>
+
+        <input type="hidden" name="near_me" id="nearMeFlag" value="{% if selected_near_me %}1{% else %}0{% endif %}">
+        <input type="hidden" name="lat" id="nearMeLat" value="{{ selected_lat|default:'' }}">
+        <input type="hidden" name="lng" id="nearMeLng" value="{{ selected_lng|default:'' }}">
+        <input type="hidden" name="radius" id="nearMeRadius" value="{{ selected_radius|default:'10' }}">
     </form>
+
+    {% if near_me_notice %}
+    <div class="alert alert-info mt-3" role="alert">
+        <i class="fas fa-info-circle me-1"></i>{{ near_me_notice }}
+    </div>
+    {% endif %}
 
     {% if hotels %}
     <div class="row g-4">
         {% for hotel in hotels %}
         <div class="col-md-4">
             <div class="card h-100 shadow-sm">
-                <img src="{{ hotel.display_image_url }}" class="card-img-top" alt="{{ hotel.name }}" style="height:200px;object-fit:cover;" onerror="this.src='{% static 'images/hotel_placeholder.svg' %}'">
+                <img src="{{ hotel.display_image_url }}" class="card-img-top" alt="{{ hotel.name }}" style="height:200px;object-fit:cover;" data-fallback="{% static 'images/hotel_placeholder.svg' %}">
                 <div class="card-body d-flex flex-column">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span class="badge bg-primary text-uppercase small">{{ hotel.get_property_type_display }}</span>
                         <span class="badge bg-warning text-dark small"><i class="fas fa-star me-1"></i>{{ hotel.star_rating }}</span>
                     </div>
                     <h5 class="mb-1">{{ hotel.name }}</h5>
-                    <p class="text-muted small mb-2"><i class="fas fa-map-marker-alt me-1"></i>{{ hotel.city.name }}</p>
-                    <p class="small text-muted mb-2">From ₹{{ hotel.min_price|default:0|floatformat:'0' }}/night</p>
+                    <p class="text-muted small mb-2 d-flex justify-content-between">
+                        <span><i class="fas fa-map-marker-alt me-1"></i>{{ hotel.city.name }}</span>
+                        {% if hotel.distance_km %}<span class="badge bg-success-subtle text-success border">{{ hotel.distance_km }} km</span>{% endif %}
+                    </p>
+                    <!-- FIX-3: Price Display (Search Results - No GST) -->
+                    <div class="mb-2">
+                        <p class="small text-muted mb-1">From <strong style="color: #FF6B35;">₹{{ hotel.min_price|default:0|floatformat:'0' }}</strong>/night</p>
+                        {% if hotel.discount_badge %}
+                        <span class="badge bg-danger">{{ hotel.discount_badge }}</span>
+                        {% endif %}
+                        {% if hotel.hourly_stays_enabled %}
+                        <span class="badge bg-info text-dark" title="Hourly Stays Available"><i class="fas fa-clock me-1"></i> Hourly Stays Available</span>
+                        {% endif %}
+                    </div>
                     <div class="d-flex flex-wrap gap-2 mb-3 small text-muted">
                         {% if hotel.has_wifi %}<span><i class="fas fa-wifi"></i></span>{% endif %}
                         {% if hotel.has_parking %}<span><i class="fas fa-square-parking"></i></span>{% endif %}
@@ -109,7 +150,13 @@
                         {% if hotel.has_spa %}<span><i class="fas fa-spa"></i></span>{% endif %}
                         {% if hotel.has_ac %}<span><i class="fas fa-wind"></i></span>{% endif %}
                     </div>
-                    <a href="{% url 'hotels:hotel_detail' hotel.id %}?{{ request.GET.urlencode }}" class="btn btn-primary mt-auto">View &amp; Book</a>
+                    <!-- Ensure detail link matches Playwright selector and detail route -->
+                    <a href="{% url 'hotels:hotel_detail_alias' hotel.id %}?{{ request.GET.urlencode }}"
+                       class="btn btn-primary mt-auto"
+                       data-testid="hotel-card"
+                       data-hotel-id="{{ hotel.id }}">
+                        View &amp; Book
+                    </a>
                 </div>
             </div>
         </div>
@@ -123,6 +170,8 @@
 </div>
 
 <script>
+let nearMeRetry = false;
+
 document.addEventListener('DOMContentLoaded', () => {
     // Set minimum date to today for check-in and check-out on search form
     const today = new Date();
@@ -139,6 +188,87 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (checkoutInput) {
         checkoutInput.min = minDate;
+    }
+
+    const searchForm = document.querySelector('form');
+    const searchError = document.getElementById('search-error');
+    if (searchForm) {
+        searchForm.addEventListener('submit', (e) => {
+            // Mirror 'search' to 'q' for backend compatibility
+            const searchInput = document.querySelector('input[name="search"]');
+            const qAlias = document.getElementById('searchAliasQ');
+            if (searchInput && qAlias) { qAlias.value = searchInput.value || ''; }
+            if (checkinInput && checkoutInput && checkinInput.value && checkoutInput.value) {
+                const inDate = new Date(checkinInput.value);
+                const outDate = new Date(checkoutInput.value);
+                if (outDate <= inDate) {
+                    e.preventDefault();
+                    const message = 'Check-out must be after check-in.';
+                    if (searchError) {
+                        searchError.textContent = message;
+                        searchError.classList.remove('alert-info');
+                        searchError.classList.add('alert-danger');
+                    } else {
+                        const alert = document.createElement('div');
+                        alert.className = 'alert alert-danger';
+                        alert.id = 'search-error';
+                        alert.textContent = message;
+                        searchForm.parentElement.insertBefore(alert, searchForm);
+                    }
+                }
+            }
+        });
+    }
+
+    const nearMeBtn = document.getElementById('nearMeBtn');
+    const nearMeFlag = document.getElementById('nearMeFlag');
+    const nearMeLat = document.getElementById('nearMeLat');
+    const nearMeLng = document.getElementById('nearMeLng');
+    if (nearMeBtn && nearMeFlag && nearMeLat && nearMeLng) {
+        nearMeBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                if (searchError) {
+                    searchError.textContent = 'Geolocation is not supported on this browser.';
+                    searchError.classList.add('alert-danger');
+                    searchError.classList.remove('alert-info');
+                } else if (searchForm) {
+                    const alert = document.createElement('div');
+                    alert.className = 'alert alert-danger';
+                    alert.id = 'search-error';
+                    alert.textContent = 'Geolocation is not supported on this browser.';
+                    searchForm.parentElement.insertBefore(alert, searchForm);
+                }
+                return;
+            }
+            nearMeBtn.disabled = true;
+            nearMeBtn.textContent = 'Locating...';
+            navigator.geolocation.getCurrentPosition((pos) => {
+                nearMeLat.value = pos.coords.latitude.toFixed(6);
+                nearMeLng.value = pos.coords.longitude.toFixed(6);
+                nearMeFlag.value = '1';
+                searchForm.submit();
+            }, (err) => {
+                nearMeBtn.disabled = false;
+                nearMeBtn.textContent = 'Use my location';
+                if (!nearMeRetry) {
+                    nearMeRetry = true;
+                    if (searchError) {
+                        searchError.textContent = 'Location permission denied. Tap Near Me again to retry or we will show city results.';
+                        searchError.classList.add('alert-danger');
+                        searchError.classList.remove('alert-info');
+                    } else if (searchForm) {
+                        const alert = document.createElement('div');
+                        alert.className = 'alert alert-danger';
+                        alert.id = 'search-error';
+                        alert.textContent = 'Location permission denied. Tap Near Me again to retry or we will show city results.';
+                        searchForm.parentElement.insertBefore(alert, searchForm);
+                    }
+                } else {
+                    nearMeFlag.value = '0';
+                    searchForm.submit();
+                }
+            }, { enableHighAccuracy: true, timeout: 8000 });
+        });
     }
 });
 </script>

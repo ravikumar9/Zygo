@@ -5,54 +5,47 @@
 
 {% block extra_css %}
 <style>
-    /* ===== HORIZONTAL LAYOUT: Single-screen payment (no vertical scroll) ===== */
+    /* ===== Responsive Layout: Grid-first with fluid width ===== */
     .payment-container {
-        max-width: 1200px;
+        width: min(1100px, 100% - 2.5rem);
         margin: 2rem auto;
-        padding: 0 15px;
     }
 
     .payment-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 2rem;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.5rem;
         align-items: start;
     }
 
-    @media (max-width: 992px) {
-        .payment-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-
     .payment-card {
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 2rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1.5rem;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.06);
         background: white;
     }
 
     .payment-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        margin-bottom: 2rem;
+        padding: 1.25rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
         text-align: center;
     }
 
     .payment-amount {
-        font-size: 2rem;
+        font-size: clamp(1.6rem, 2vw, 2.2rem);
         font-weight: 700;
         color: white;
     }
 
     .booking-details {
         background: #f8f9fa;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 1.5rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1.25rem;
     }
 
     .booking-details h5 {
@@ -72,40 +65,44 @@
 
     .price-breakdown {
         background: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 8px;
-        margin-bottom: 1.5rem;
+        padding: 1.25rem;
+        border-radius: 10px;
+        margin-bottom: 1.25rem;
+        border: 1px solid #e2e8f0;
     }
 
     .price-row {
         display: flex;
         justify-content: space-between;
-        margin-bottom: 0.75rem;
+        margin-bottom: 0.65rem;
         font-size: 0.95rem;
+        gap: 0.75rem;
+        flex-wrap: wrap;
     }
 
     .price-total {
         display: flex;
         justify-content: space-between;
-        font-size: 1.2rem;
+        font-size: 1.1rem;
         font-weight: 700;
         color: #667eea;
-        border-top: 2px solid #ddd;
-        padding-top: 1rem;
+        border-top: 2px solid #e2e8f0;
+        padding-top: 0.85rem;
         margin-top: 0.75rem;
     }
 
     .payment-methods {
-        margin-bottom: 1.5rem;
+        margin-bottom: 1.25rem;
+        display: grid;
+        gap: 0.75rem;
     }
 
     .payment-method-option {
-        border: 2px solid #ddd;
-        border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 1rem;
+        border: 1px solid #d9e2ec;
+        border-radius: 10px;
+        padding: 0.9rem 1rem;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all 0.25s ease;
     }
 
     .payment-method-option:hover {
@@ -122,17 +119,35 @@
         margin-right: 0.5rem;
     }
 
+    /* FIX-3: Collapsible tax breakdown */
+    .price-row[data-bs-toggle="collapse"] {
+        transition: background-color 0.15s ease;
+    }
+
+    .price-row[data-bs-toggle="collapse"]:hover {
+        background-color: #f0f0f0;
+        border-radius: 4px;
+    }
+
+    .price-row[data-bs-toggle="collapse"] i {
+        transition: transform 0.2s ease;
+    }
+
+    .price-row[data-bs-toggle="collapse"][aria-expanded="true"] i {
+        transform: rotate(180deg);
+    }
+
     .razorpay-button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         border: none;
-        padding: 1rem 2rem;
-        font-size: 1.1rem;
+        padding: 1rem 1.5rem;
+        font-size: 1.05rem;
         font-weight: 600;
-        border-radius: 8px;
+        border-radius: 10px;
         width: 100%;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all 0.25s ease;
     }
 
     .razorpay-button:hover:not(:disabled) {
@@ -176,11 +191,33 @@
     }
 
     .wallet-checkbox-section {
-        margin-top: 1rem;
+        margin-top: 0.5rem;
         padding: 1rem;
         background: #f0f8ff;
-        border-radius: 8px;
-        margin-bottom: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+    }
+
+    .fees-hint {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        font-size: 0.75rem;
+        border-radius: 50%;
+        background: #eef2ff;
+        color: #4c51bf;
+        margin-left: 6px;
+        cursor: help;
+    }
+
+    .countdown-warning { color: #d97706; }
+    .countdown-expired { color: #b91c1c; }
+
+    @media (max-width: 640px) {
+        .payment-container { width: 100%; padding: 0 1rem; }
+        .payment-card { padding: 1rem; }
     }
 </style>
 {% endblock %}
@@ -192,10 +229,10 @@
         <h2>Secure Payment</h2>
         <div class="payment-amount">₹{{ gateway_payable|default:total_payable|floatformat:"2" }}</div>
         <p class="mb-0">Complete your booking</p>
-        {% if booking.status == 'reserved' and booking.reservation_seconds_left %}
+        {% if reservation_seconds_left and booking.status in 'reserved payment_pending' %}
         <div class="mt-2" style="font-size: 0.9rem;">
             <i class="fas fa-clock"></i> 
-            <strong>Time remaining: <span id="payment-countdown" data-seconds="{{ booking.reservation_seconds_left }}"></span></strong>
+            <strong>Time remaining: <span id="payment-countdown" data-seconds="{{ reservation_seconds_left }}"></span></strong>
         </div>
         {% endif %}
     </div>
@@ -256,6 +293,12 @@
                     <span>Base Amount:</span>
                     <span>₹{{ base_amount|floatformat:"2" }}</span>
                 </div>
+                {% if meal_plan %}
+                    <div class="price-row">
+                        <span>Meal Plan (per night):</span>
+                        <span>₹{{ meal_plan.price_per_night|floatformat:"2" }}</span>
+                    </div>
+                {% endif %}
                 {% if promo_discount > 0 %}
                     <div class="price-row text-success">
                         <span>Promo Discount:</span>
@@ -266,15 +309,40 @@
                         <span>₹{{ subtotal_after_promo|floatformat:"2" }}</span>
                     </div>
                 {% endif %}
-                <div class="price-row">
-                    <span>GST (18%):</span>
-                    <span>₹{{ gst_amount|floatformat:"2" }}</span>
+                <div class="price-row" style="align-items: center;">
+                    <span>
+                        Taxes &amp; Fees
+                        <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="tax-details-trigger-payment">View details</button>
+                    </span>
+                    <span>₹{{ taxes_and_fees|floatformat:"0" }}</span>
                 </div>
                 <div class="price-total">
                     <span>Total Payable:</span>
                     <span id="total-payable-amount">₹{{ total_payable|floatformat:"2" }}</span>
                 </div>
             </div>
+
+            <div id="tax-details-modal-payment" class="modal" tabindex="-1" role="dialog" style="display:none;">
+              <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">Taxes &amp; Fees Breakdown</h5>
+                    <button type="button" class="close" aria-label="Close" onclick="toggleTaxModalPayment(false)">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                  <div class="modal-body">
+                    <p class="mb-2 d-flex justify-content-between"><span>Service Fee</span><strong>₹{{ platform_fee|floatformat:"0" }}</strong></p>
+                    <p class="mb-0 d-flex justify-content-between"><span>GST ({{ gst_rate_percent }}%)</span><strong>₹{{ gst_amount|floatformat:"0" }}</strong></p>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="toggleTaxModalPayment(false)">Close</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cancellation policy removed from payment page per UX requirements -->
         </div>
 
         <!-- RIGHT: Payment Methods + Wallet + Button -->
@@ -290,7 +358,7 @@
                         <strong>Use Wallet Balance: ₹{{ wallet_balance|floatformat:"2" }}</strong>
                     </label>
                 </div>
-                <div id="wallet-breakdown" style="margin-top: 0.75rem; {% if not use_wallet %}display:none;{% endif %}">
+                <div id="wallet-breakdown" style="margin-top: 0.75rem;" {% if not use_wallet %}style="display:none;"{% endif %}>
                     <div class="price-row" style="background: #e8f5e9; padding: 8px; border-radius: 4px;">
                         <span>Wallet Applied:</span>
                         <span style="color: green;" id="wallet-applied-amount">-₹{{ wallet_applied|floatformat:"2" }}</span>
@@ -302,6 +370,19 @@
                 </div>
             </div>
             {% endif %}
+
+<script>
+function toggleTaxModalPayment(show) {
+    var modal = document.getElementById('tax-details-modal-payment');
+    if (!modal) return;
+    modal.style.display = show ? 'block' : 'none';
+}
+
+var taxTriggerPayment = document.getElementById('tax-details-trigger-payment');
+if (taxTriggerPayment) {
+    taxTriggerPayment.addEventListener('click', function() { toggleTaxModalPayment(true); });
+}
+</script>
 
             <!-- Payment Methods (CONDITIONAL: Only if gateway payment needed) -->
             {% if gateway_payable > 0 %}
@@ -364,7 +445,7 @@
 const RAZORPAY_KEY = "{{ razorpay_key }}";
 const ORDER_ID = "{{ order_id }}";
 const BOOKING_ID = "{{ booking.booking_id }}";
-const AMOUNT = parseFloat("{{ total_amount|default:'0' }}") || 0;
+const AMOUNT = parseFloat("{{ total_payable|default:'0' }}") || 0;
 const WALLET_BALANCE = parseFloat("{{ wallet_balance|default:'0' }}") || 0;
 const AVAILABLE_CASHBACK = parseFloat("{{ available_cashback|default:'0' }}") || 0;
 const GATEWAY_PAYABLE = parseFloat("{{ gateway_payable|default:'0' }}") || 0;
@@ -601,8 +682,13 @@ function updatePaymentButton() {
     const paymentMethod = paymentMethodRadio ? paymentMethodRadio.value : 'razorpay';
     
     const gatewayAmountEl = document.getElementById('gateway-payable-amount');
-    const gatewayAmount = gatewayAmountEl ? parseFloat(gatewayAmountEl.textContent.replace('₹', '').replace(',', '')) : {{ gateway_payable|default:total_payable }};
-    const totalAmount = parseFloat({{ total_payable }});
+    const gatewayPayableAmount = parseFloat("{{ gateway_payable|default:total_payable|floatformat:2 }}") || 0;
+    let gatewayAmount = gatewayPayableAmount;
+    if (gatewayAmountEl) {
+        gatewayAmount = parseFloat(gatewayAmountEl.textContent.replace('₹', '').replace(',', ''));
+    }
+    const totalPayableAmount = parseFloat("{{ total_payable|floatformat:2 }}") || 0;
+    const totalAmount = totalPayableAmount;
     
     const btnText = document.getElementById('payment-button-text');
     
@@ -616,30 +702,43 @@ function updatePaymentButton() {
 }
 
 // Attach payment button handler with idempotency guard
-document.getElementById('paymentBtn').addEventListener('click', function(e) {
-    e.preventDefault();
-    
-    // CRITICAL: Disable button to prevent double submission
-    if (this.disabled) {
-        showError('Payment processing... please wait');
-        return;
-    }
-    
-    this.disabled = true;
-    this.textContent = '⏳ Processing payment...';
-    this.style.opacity = '0.6';
-    this.style.cursor = 'not-allowed';
-    
-    // Call payment handler
-    initiatePayment();
-    
-    // Re-enable after timeout (in case of error)
-    setTimeout(() => {
-        this.disabled = false;
-        this.style.opacity = '1';
-        this.style.cursor = 'pointer';
-    }, 5000);
-});
+const paymentBtn = document.getElementById('paymentBtn');
+if (paymentBtn) {
+    paymentBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        // CRITICAL: Disable button to prevent double submission
+        if (this.disabled) {
+            showError('Payment processing... please wait');
+            return;
+        }
+
+        const countdownEl = document.getElementById('payment-countdown');
+        if (countdownEl && countdownEl.dataset.expired === 'true') {
+            showError('Reservation expired. Please start a new booking.');
+            return;
+        }
+        
+        this.disabled = true;
+        this.textContent = '⏳ Processing payment...';
+        this.style.opacity = '0.6';
+        this.style.cursor = 'not-allowed';
+        
+        // Route based on gateway payable
+        if (GATEWAY_PAYABLE <= 0.01) {
+            confirmWalletOnlyBooking();
+        } else {
+            initiatePayment();
+        }
+        
+        // Re-enable after timeout (in case of error)
+        setTimeout(() => {
+            this.disabled = false;
+            this.style.opacity = '1';
+            this.style.cursor = 'pointer';
+        }, 5000);
+    });
+}
 
 // Countdown timer for payment page
 (function() {
@@ -659,6 +758,7 @@ document.getElementById('paymentBtn').addEventListener('click', function(e) {
             }
             showError('Reservation time expired. Please start a new booking.');
             clearInterval(timerId);
+            countdownEl.dataset.expired = 'true';
             // Redirect after 3 seconds
             setTimeout(() => {
                 window.location.href = '/';
@@ -668,6 +768,9 @@ document.getElementById('paymentBtn').addEventListener('click', function(e) {
         const minutes = Math.floor(remaining / 60);
         const seconds = remaining % 60;
         countdownEl.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        if (remaining <= 120) {
+            countdownEl.classList.add('countdown-warning');
+        }
         remaining -= 1;
     }
 

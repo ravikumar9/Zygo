@@ -35,12 +35,20 @@
                                 {{ booking.get_status_display }}
                             </span>
                         </td>
-                        <td><strong>₹{{ booking.total_amount|floatformat:"2" }}</strong></td>
+                        <td>
+                            <strong>₹{{ booking.display_total_payable|default:booking.total_amount|floatformat:"2" }}</strong>
+                            <div class="text-muted small">Taxes &amp; Fees: ₹{{ booking.display_taxes_and_fees|floatformat:"2" }}</div>
+                        </td>
                         <td>{{ booking.created_at|date:"d M Y, H:i" }}</td>
                         <td>
                             <a href="{% url 'bookings:booking-detail' booking.booking_id %}" class="btn btn-sm btn-outline-primary">
                                 <i class="fas fa-eye"></i> View
                             </a>
+                            {% if booking.status in 'confirmed,reserved,payment_pending' %}
+                            <button type="button" class="btn btn-sm btn-danger cancel-booking-btn" data-booking-id="{{ booking.booking_id }}" data-bs-toggle="modal" data-bs-target="#refundPreviewModal">
+                                <i class="fas fa-times-circle"></i> Cancel
+                            </button>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -87,4 +95,280 @@
         </div>
     {% endif %}
 </div>
+
+<!-- REFUND PREVIEW MODAL -->
+<div class="modal fade" id="refundPreviewModal" tabindex="-1" aria-labelledby="refundPreviewLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title" id="refundPreviewLabel">Refund Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="refundPreviewContent">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-danger" id="confirmCancelBtn" style="display: none;">
+                    <i class="fas fa-trash-alt"></i> Proceed to Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CANCELLATION CONFIRMATION MODAL -->
+<div class="modal fade" id="confirmCancellationModal" tabindex="-1" aria-labelledby="confirmCancellationLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-bottom bg-danger text-white">
+                <h5 class="modal-title" id="confirmCancellationLabel">Confirm Cancellation</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning" role="alert">
+                    <i class="fas fa-exclamation-triangle"></i> <strong>Warning:</strong> This action cannot be undone.
+                </div>
+                <p><strong>Are you sure you want to cancel this booking?</strong></p>
+                <div class="card bg-light mb-3">
+                    <div class="card-body">
+                        <p class="mb-1"><strong>Booking ID:</strong> <code id="confirmBookingId"></code></p>
+                        <p class="mb-1"><strong>Paid Amount:</strong> <span id="confirmPaidAmount"></span></p>
+                        <p class="mb-0"><strong>Refund Amount:</strong> <span id="confirmRefundAmount" class="text-success fw-bold"></span></p>
+                    </div>
+                </div>
+                <p class="text-muted small mb-0"><i class="fas fa-info-circle"></i> The refund will be processed to your wallet immediately.</p>
+            </div>
+            <div class="modal-footer border-top">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Keep Booking</button>
+                <button type="button" class="btn btn-danger" id="executeCancelBtn">
+                    <i class="fas fa-times-circle"></i> Yes, Cancel Booking
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SUCCESS MODAL -->
+<div class="modal fade" id="cancellationSuccessModal" tabindex="-1" aria-labelledby="cancellationSuccessLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-bottom bg-success text-white">
+                <h5 class="modal-title" id="cancellationSuccessLabel">Booking Cancelled Successfully</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div class="mb-3">
+                    <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
+                </div>
+                <p><strong>Your booking has been cancelled.</strong></p>
+                <div class="card bg-light mb-3">
+                    <div class="card-body">
+                        <p class="mb-1"><strong>Refund Amount:</strong></p>
+                        <p class="text-success fw-bold" style="font-size: 1.5rem;" id="successRefundAmount">₹0.00</p>
+                        <p class="text-muted small mb-0">Refund processed to your wallet</p>
+                    </div>
+                </div>
+                <p class="text-muted small"><i class="fas fa-info-circle"></i> You can view your wallet balance in your profile.</p>
+            </div>
+            <div class="modal-footer border-top">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal" onclick="location.reload();">Back to My Bookings</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .cancel-booking-btn {
+        margin-top: 5px;
+    }
+    
+    @media (max-width: 768px) {
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+        
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+    }
+</style>
+
+<script>
+// Global variables to track current booking
+let currentBookingId = null;
+let currentRefundData = null;
+
+// Initialize modals
+const refundPreviewModal = new bootstrap.Modal(document.getElementById('refundPreviewModal'), { backdrop: 'static' });
+const confirmCancellationModal = new bootstrap.Modal(document.getElementById('confirmCancellationModal'), { backdrop: 'static' });
+const cancellationSuccessModal = new bootstrap.Modal(document.getElementById('cancellationSuccessModal'), { backdrop: 'static' });
+
+// Event listener for cancel buttons
+document.querySelectorAll('.cancel-booking-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        currentBookingId = this.dataset.bookingId;
+        fetchRefundPreview(currentBookingId);
+    });
+});
+
+// Fetch refund preview from API
+async function fetchRefundPreview(bookingId) {
+    const content = document.getElementById('refundPreviewContent');
+    content.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+    
+    try {
+        const response = await fetch(`/bookings/api/refund-preview/${bookingId}/`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        currentRefundData = data;
+        
+        if (data.status === 'success') {
+            displayRefundPreview(data);
+        } else {
+            content.innerHTML = `<div class="alert alert-danger">Error: ${data.message || 'Unable to fetch refund details'}</div>`;
+        }
+    } catch (error) {
+        console.error('Error fetching refund preview:', error);
+        content.innerHTML = `<div class="alert alert-danger">Error loading refund preview. Please try again.</div>`;
+    }
+}
+
+// Display refund preview
+function displayRefundPreview(data) {
+    const policyBadgeClass = {
+        'FREE': 'badge-success',
+        'PARTIAL': 'badge-warning',
+        'NON_REFUNDABLE': 'badge-danger'
+    }[data.policy_type] || 'badge-secondary';
+    
+    const policyBadgeText = {
+        'FREE': 'Free Cancellation',
+        'PARTIAL': 'Partial Refund',
+        'NON_REFUNDABLE': 'Non-Refundable'
+    }[data.policy_type] || data.policy_type;
+    
+    let warningHTML = '';
+    if (data.cancellation_warning) {
+        warningHTML = `<div class="alert alert-warning small mb-3"><i class="fas fa-exclamation-triangle"></i> ${data.cancellation_warning}</div>`;
+    }
+    
+    let freeWindowHTML = '';
+    if (data.is_free_cancellation && data.free_cancel_until) {
+        freeWindowHTML = `<p class="text-success mb-2"><i class="fas fa-check-circle"></i> <strong>Free cancellation available until:</strong> ${new Date(data.free_cancel_until).toLocaleString()}</p>`;
+    }
+    
+    const content = document.getElementById('refundPreviewContent');
+    content.innerHTML = `
+        <div>
+            <div class="mb-3">
+                <h6 class="text-muted mb-2">Policy Type</h6>
+                <span class="badge ${policyBadgeClass}" style="font-size: 0.95rem;">${policyBadgeText}</span>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-6">
+                    <p class="text-muted small mb-1">Paid Amount</p>
+                    <p class="fw-bold" style="font-size: 1.2rem;">₹${parseFloat(data.paid_amount).toFixed(2)}</p>
+                </div>
+                <div class="col-6">
+                    <p class="text-muted small mb-1">Refund %</p>
+                    <p class="fw-bold" style="font-size: 1.2rem;">${data.policy_refund_percentage}%</p>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <div class="mb-3">
+                <p class="text-muted small mb-1">Refund Amount</p>
+                <p class="text-success fw-bold" style="font-size: 1.5rem;">₹${parseFloat(data.refund_amount).toFixed(2)}</p>
+            </div>
+            
+            ${freeWindowHTML}
+            
+            <div class="mb-3">
+                <p class="text-muted small mb-1">Policy</p>
+                <p class="small">${data.policy_text || 'Standard cancellation policy applies'}</p>
+            </div>
+            
+            ${warningHTML}
+            
+            <div class="alert alert-info small">
+                <i class="fas fa-info-circle"></i> <strong>Formula:</strong> ${data.formula}
+            </div>
+        </div>
+    `;
+    
+    // Show confirm button
+    document.getElementById('confirmCancelBtn').style.display = 'inline-block';
+    document.getElementById('confirmCancelBtn').onclick = proceedToConfirmation;
+}
+
+// Proceed to confirmation modal
+function proceedToConfirmation() {
+    if (!currentRefundData) return;
+    
+    document.getElementById('confirmBookingId').textContent = currentBookingId.substring(0, 12) + '...';
+    document.getElementById('confirmPaidAmount').textContent = '₹' + parseFloat(currentRefundData.paid_amount).toFixed(2);
+    document.getElementById('confirmRefundAmount').textContent = '₹' + parseFloat(currentRefundData.refund_amount).toFixed(2);
+    
+    // Close refund preview, open confirmation
+    refundPreviewModal.hide();
+    confirmCancellationModal.show();
+}
+
+// Execute cancellation
+document.getElementById('executeCancelBtn').addEventListener('click', async function() {
+    if (!currentBookingId) return;
+    
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+    
+    try {
+        const response = await fetch(`/bookings/api/cancel/${currentBookingId}/`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success' || data.status === 'info') {
+            // Show success modal
+            document.getElementById('successRefundAmount').textContent = '₹' + parseFloat(currentRefundData.refund_amount).toFixed(2);
+            confirmCancellationModal.hide();
+            cancellationSuccessModal.show();
+        } else {
+            alert('Error: ' + (data.message || 'Cancellation failed'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-times-circle"></i> Yes, Cancel Booking';
+        }
+    } catch (error) {
+        console.error('Error executing cancellation:', error);
+        alert('Error: ' + error.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-times-circle"></i> Yes, Cancel Booking';
+    }
+});
+</script>
 {% endblock %}

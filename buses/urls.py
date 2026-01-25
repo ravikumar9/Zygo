@@ -17,6 +17,11 @@ urlpatterns = [
     path('operator/<int:pk>/completion/', operator_views.operator_completion_json, name='operator_completion'),
     path('operator/dashboard/', operator_views.operator_dashboard, name='operator_dashboard'),
     
+    # Sprint-1: Bulk CSV Schedule Import
+    path('operator/schedule/upload/', operator_views.upload_schedule_csv, name='upload_schedule_csv'),
+    path('operator/schedule/import/<int:import_id>/preview/', operator_views.preview_schedule_import, name='preview_schedule_import'),
+    path('operator/schedule/import/<int:import_id>/confirm/', operator_views.confirm_schedule_import, name='confirm_schedule_import'),
+    
     # API routes
     path('search/', views.BusSearchView.as_view(), name='bus-search'),
     path('routes/', views.BusRouteListView.as_view(), name='route-list'),

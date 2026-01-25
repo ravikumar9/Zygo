@@ -11,7 +11,7 @@ from django.template.loader import render_to_string
 @job
 def auto_expire_reservations():
     """
-    Auto-expire bookings that haven't been paid in 30 minutes.
+    Auto-expire bookings that haven't been paid in 10 minutes.
     Releases inventory and marks booking as EXPIRED.
     
     This task should be run every 5 minutes via RQ scheduler.
@@ -21,12 +21,12 @@ def auto_expire_reservations():
     from buses.models import BusSchedule, BusBookingSeat
     
     now = timezone.now()
-    thirty_min_ago = now - timedelta(minutes=30)
+    ten_min_ago = now - timedelta(minutes=10)
     
     # Find expired reservations
     expired_bookings = Booking.objects.filter(
         status='reserved',
-        reserved_at__lte=thirty_min_ago,
+        reserved_at__lte=ten_min_ago,
         is_deleted=False
     )
     
@@ -46,6 +46,16 @@ def auto_expire_reservations():
             booking.status = 'expired'
             booking.cancelled_at = now
             booking.save(update_fields=['status', 'cancelled_at', 'updated_at'])
+            try:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info("[BOOKING_EXPIRED] booking=%s status=expired reserved_at=%s", booking.booking_id, booking.reserved_at)
+                payload = {'booking_id': str(booking.booking_id), 'event': 'booking_expired'}
+                logger.info("[NOTIFICATION_EMAIL] payload=%s", payload)
+                logger.info("[NOTIFICATION_SMS] payload=%s", payload)
+                logger.info("[NOTIFICATION_WHATSAPP] payload=%s", payload)
+            except Exception:
+                pass
             
             # Send email to user
             send_booking_expired_email(booking)

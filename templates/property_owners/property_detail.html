@@ -210,18 +210,19 @@
             <div class="property-meta">
                 <span>📍 {{ property.city.name }}</span>
                 <span>🏠 {{ property.get_property_type_display }}</span>
+                <span>🛏️ {{ property.room_types.count }} type(s) / {{ property.total_room_inventory }} room(s)</span>
                 <span>Updated: {{ property.updated_at|date:"M d, Y" }}</span>
             </div>
         </div>
         <div>
-            <div class="status-badge status-{{ property.approval_status }}">
-                {% if property.approval_status == 'draft' %}
+            <div class="status-badge status-{{ property.status|lower }}">
+                {% if property.status == 'DRAFT' %}
                     📝 DRAFT
-                {% elif property.approval_status == 'pending_verification' %}
+                {% elif property.status == 'PENDING' %}
                     ⏳ PENDING REVIEW
-                {% elif property.approval_status == 'approved' %}
+                {% elif property.status == 'APPROVED' %}
                     ✅ APPROVED
-                {% elif property.approval_status == 'rejected' %}
+                {% elif property.status == 'REJECTED' %}
                     ❌ REJECTED
                 {% endif %}
             </div>
@@ -229,7 +230,7 @@
     </div>
     
     <!-- REJECTION NOTICE -->
-    {% if property.approval_status == 'rejected' and property.rejection_reason %}
+    {% if property.status == 'REJECTED' and property.rejection_reason %}
     <div class="rejection-box">
         <h4>❌ Property Rejected</h4>
         <p>{{ property.rejection_reason }}</p>
@@ -238,9 +239,58 @@
         </p>
     </div>
     {% endif %}
+
+    <!-- UPDATE REQUEST (post-approval changes) -->
+    <div class="info-section" id="updateSection">
+        <h3>🔄 Submit Update Request</h3>
+        <p style="color:#666;">Owners can request changes without re-registering. All changes require admin approval.</p>
+        <div class="form-row" style="display:flex; gap:10px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:220px;">
+                <label for="changeType">Change Type</label>
+                <select id="changeType" data-testid="owner-update-change-type" style="width:100%; padding:10px;">
+                    <option value="rules">Property Rules</option>
+                    <option value="amenities">Amenities</option>
+                    <option value="pricing">Room Pricing</option>
+                    <option value="meal_plans">Meal Plans</option>
+                    <option value="discount">Property Discount</option>
+                </select>
+            </div>
+            <div style="flex:1; min-width:220px;">
+                <label for="roomSelect">Room (optional)</label>
+                <select id="roomSelect" data-testid="owner-update-room-select" style="width:100%; padding:10px;">
+                    <option value="">Whole Property</option>
+                    {% for room in property.room_types.all %}
+                        <option value="{{ room.id }}">{{ room.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-row" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:220px;">
+                <label for="priceInput">New Base Price (₹)</label>
+                <input type="number" id="priceInput" style="width:100%; padding:10px;" placeholder="5000">
+            </div>
+            <div style="flex:1; min-width:220px;">
+                <label for="amenitiesInput">Amenities (comma separated)</label>
+                <input type="text" id="amenitiesInput" style="width:100%; padding:10px;" placeholder="WiFi, Parking, AC">
+            </div>
+        </div>
+        <div class="form-group" style="margin-top:10px;">
+            <label for="rulesInput">Property Rules / Notes</label>
+            <textarea id="rulesInput" rows="3" style="width:100%; padding:10px;" placeholder="Updated rules after renovation"></textarea>
+        </div>
+        <div class="form-group" style="margin-top:10px;">
+            <label for="ownerRemark">Reason / Remarks</label>
+            <textarea id="ownerRemark" rows="2" style="width:100%; padding:10px;" data-testid="owner-update-remarks" placeholder="Why are you requesting this change?"></textarea>
+        </div>
+        <div class="button-group">
+            <button class="btn-primary" id="submitUpdateBtn" data-testid="owner-update-submit">Submit Update Request</button>
+            <div id="updateAlert" class="alert" style="display:none; margin-left:10px;"></div>
+        </div>
+    </div>
     
     <!-- COMPLETION STATUS -->
-    {% if property.approval_status == 'draft' %}
+    {% if property.status == 'DRAFT' %}
     <div class="info-section" style="background: #f8f9fa; border: 1px solid #dee2e6;">
         <h3>📊 Completion Status</h3>
         <p style="color: #666;">
@@ -254,7 +304,7 @@
             {{ completion_percentage }}% Complete
         </div>
         <div class="completion-bar">
-            <div class="completion-fill" style="width: {{ completion_percentage }}%;"></div>
+            <div class="completion-fill" style="width: 100%;" data-percentage="{{ completion_percentage }}"></div>
         </div>
         
         <h4 style="margin-top: 20px; margin-bottom: 10px;">Required Fields:</h4>
@@ -364,6 +414,57 @@
             <div class="info-value">{{ property.gst_percentage }}%</div>
         </div>
     </div>
+
+    <!-- ROOM TYPES & INVENTORY -->
+    <div class="info-section">
+        <h3>🛏️ Room Types & Inventory</h3>
+        {% if property.room_types.all|length %}
+            {% for room in property.room_types.all %}
+            <div class="info-row" style="grid-template-columns: 200px 1fr;">
+                <div class="info-label">{{ room.name }}</div>
+                <div class="info-value">
+                    <div>Type: {{ room.get_room_type_display }} | Max {{ room.max_occupancy }} guest(s)</div>
+                    <div>Inventory: {{ room.total_rooms }} room(s)</div>
+                    <div>
+                        Price: ₹{{ room.base_price|floatformat:2 }}
+                        {% if room.has_discount %}
+                            <span class="text-decoration-line-through text-muted">₹{{ room.base_price|floatformat:2 }}</span>
+                            <strong class="text-success">₹{{ room.get_effective_price|floatformat:2 }}</strong>
+                            {% if room.discount_valid_to %}<small class="text-muted">valid till {{ room.discount_valid_to }}</small>{% endif %}
+                        {% endif %}
+                    </div>
+                    {% if room.amenities %}
+                    <div class="mt-2 small text-muted">Amenities:
+                        {% for amenity in room.amenities %}
+                            <span class="badge bg-light text-dark border">{{ amenity|title }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if room.images.all %}
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        {% for img in room.images.all|slice:':3' %}
+                        <img src="{{ img.image.url }}" alt="{{ room.name }} image" class="img-thumbnail" style="max-width:120px;" onerror="this.src='{% static 'images/room_placeholder.svg' %}'">
+                        {% endfor %}
+                        {% if room.images.count > 3 %}<small class="text-muted">+{{ room.images.count|add:'-3' }} more</small>{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if property.status == 'APPROVED' %}
+                    <div class="mt-2">
+                        <a href="{% url 'property_owners:edit-room-live' property.id room.id %}" class="btn btn-sm btn-warning" style="background: #ffc107; color: #333; border: none; padding: 0.5rem 1rem; border-radius: 4px; font-size: 0.9rem;">
+                            ⚡ Edit Price/Discount/Inventory
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="rejection-box" style="margin:0;">
+                <h4>🚫 No Room Types Added</h4>
+                <p>Add at least one room type with inventory to submit for approval.</p>
+            </div>
+        {% endif %}
+    </div>
     
     <!-- AMENITIES -->
     {% if property.has_wifi or property.has_parking or property.has_pool or property.has_gym or property.has_restaurant or property.has_spa or property.has_ac %}
@@ -423,4 +524,65 @@
         </a>
     </div>
 </div>
+
+<script>
+    (function() {
+        const btn = document.getElementById('submitUpdateBtn');
+        if (!btn) return;
+        const alertBox = document.getElementById('updateAlert');
+
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        }
+
+        btn.addEventListener('click', async () => {
+            alertBox.style.display = 'none';
+            const changeType = document.getElementById('changeType').value;
+            const roomId = document.getElementById('roomSelect').value;
+            const ownerRemark = document.getElementById('ownerRemark').value.trim();
+            const price = document.getElementById('priceInput').value;
+            const amenities = document.getElementById('amenitiesInput').value;
+            const rules = document.getElementById('rulesInput').value;
+
+            const newData = {};
+            if (price) newData.base_price = price;
+            if (amenities) newData.amenities = amenities;
+            if (rules) newData.property_rules = rules;
+
+            const payload = {
+                change_type: changeType,
+                room_id: roomId || null,
+                owner_remark: ownerRemark,
+                new_data: newData,
+            };
+
+            try {
+                const res = await fetch(`/properties/api/property-owners/properties/{{ property.id }}/updates/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alertBox.className = 'alert alert-danger';
+                    alertBox.textContent = data.error || 'Update request failed';
+                    alertBox.style.display = 'block';
+                    return;
+                }
+                alertBox.className = 'alert alert-success';
+                alertBox.textContent = 'Update request submitted and pending approval';
+                alertBox.style.display = 'block';
+            } catch (e) {
+                alertBox.className = 'alert alert-danger';
+                alertBox.textContent = 'Network error submitting update';
+                alertBox.style.display = 'block';
+            }
+        });
+    })();
+</script>
 {% endblock %}

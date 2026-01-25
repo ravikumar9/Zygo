@@ -1,6 +1,9 @@
+import io
+
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
+from django.core.files.base import ContentFile
 from core.models import TimeStampedModel, City
 from core.soft_delete import SoftDeleteMixin, SoftDeleteManager, AllObjectsManager
 from datetime import date
@@ -549,3 +552,56 @@ class SeatLayout(models.Model):
         elif self.reserved_for == 'disabled':
             return True  # Disabled passengers can book disabled seats
         return False
+
+
+class BusScheduleImport(TimeStampedModel):
+    """Track bulk CSV imports of bus schedules (Sprint-1)
+    
+    Operators can upload CSV with multiple schedules.
+    System validates, previews, and creates BusSchedule records on confirmation.
+    """
+    IMPORT_STATUS = [
+        ('pending', 'Pending Validation'),
+        ('validated', 'Validated - Ready to Import'),
+        ('importing', 'Importing...'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+    
+    operator = models.ForeignKey(
+        BusOperator,
+        on_delete=models.CASCADE,
+        related_name='schedule_imports'
+    )
+    csv_file = models.FileField(upload_to='buses/schedule_imports/')
+    status = models.CharField(max_length=20, choices=IMPORT_STATUS, default='pending')
+    
+    # Validation results
+    total_rows = models.IntegerField(default=0)
+    valid_rows = models.IntegerField(default=0)
+    invalid_rows = models.IntegerField(default=0)
+    validation_errors = models.JSONField(default=list, blank=True)
+    
+    # Import results
+    created_schedules = models.IntegerField(default=0)
+    skipped_schedules = models.IntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='bus_imports_uploaded'
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Import #{self.id} by {self.operator.name} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        if isinstance(self.csv_file, io.BytesIO):
+            self.csv_file = ContentFile(self.csv_file.getvalue(), name='import.csv')
+        super().save(*args, **kwargs)
+

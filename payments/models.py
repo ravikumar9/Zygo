@@ -62,7 +62,7 @@ class Payment(TimeStampedModel):
 
 
 class Invoice(TimeStampedModel):
-    """Invoice model"""
+    """User invoice model - immutable snapshot at booking confirmation"""
     booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='invoice')
     
     invoice_number = models.CharField(max_length=50, unique=True)
@@ -74,11 +74,25 @@ class Invoice(TimeStampedModel):
     billing_phone = models.CharField(max_length=15)
     billing_address = models.TextField()
     
+    # Immutable booking snapshot
+    property_name = models.CharField(max_length=200, blank=True)
+    check_in = models.DateField(null=True, blank=True)
+    check_out = models.DateField(null=True, blank=True)
+    num_rooms = models.IntegerField(default=1)
+    meal_plan = models.CharField(max_length=100, blank=True)
+    
     # Amounts
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    service_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    wallet_used = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    # Payment info
+    payment_mode = models.CharField(max_length=50, blank=True)
+    payment_timestamp = models.DateTimeField(null=True, blank=True)
     
     # Tax details
     cgst = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -92,15 +106,36 @@ class Invoice(TimeStampedModel):
     
     @classmethod
     def create_for_booking(cls, booking, payment=None):
-        """Create invoice after successful booking payment"""
+        """Create invoice after successful booking payment - immutable snapshot"""
         import random
         timestamp = timezone.now().strftime('%Y%m%d%H%M%S')
         random_suffix = random.randint(1000, 9999)
         invoice_number = f"INV-{timestamp}-{random_suffix}"
         
-        # Calculate tax (can be enhanced)
-        subtotal = booking.total_amount
-        tax_amount = Decimal('0')  # Add tax calculation if needed
+        # Get booking details
+        hotel_booking = getattr(booking, 'hotel_details', None)
+        property_name = ''
+        check_in = None
+        check_out = None
+        num_rooms = 1
+        meal_plan = ''
+        
+        if hotel_booking:
+            property_name = hotel_booking.room_type.hotel.name if hotel_booking.room_type else ''
+            check_in = hotel_booking.check_in
+            check_out = hotel_booking.check_out
+            num_rooms = hotel_booking.number_of_rooms or 1
+            if hotel_booking.meal_plan:
+                meal_plan = hotel_booking.meal_plan.name
+        
+        # Get pricing snapshot
+        price_snapshot = {}
+        service_fee = Decimal('0')
+        if hotel_booking and hasattr(hotel_booking, 'price_snapshot'):
+            price_snapshot = hotel_booking.price_snapshot or {}
+            service_fee = Decimal(str(price_snapshot.get('service_fee', 0)))
+        
+        wallet_used = booking.wallet_balance_before - booking.wallet_balance_after if (booking.wallet_balance_before and booking.wallet_balance_after) else Decimal('0')
         
         invoice = cls.objects.create(
             booking=booking,
@@ -108,17 +143,27 @@ class Invoice(TimeStampedModel):
             billing_name=booking.customer_name,
             billing_email=booking.customer_email,
             billing_phone=booking.customer_phone,
-            billing_address=booking.hotel_details.get('address', ''),
-            subtotal=subtotal,
-            tax_amount=tax_amount,
+            billing_address='',
+            property_name=property_name,
+            check_in=check_in,
+            check_out=check_out,
+            num_rooms=num_rooms,
+            meal_plan=meal_plan,
+            subtotal=booking.total_amount - service_fee,
+            service_fee=service_fee,
+            tax_amount=Decimal('0'),
+            wallet_used=wallet_used,
             total_amount=booking.total_amount,
+            paid_amount=booking.paid_amount,
+            payment_mode=payment.payment_method if payment else '',
+            payment_timestamp=booking.confirmed_at,
         )
         return invoice
 
 
 class Wallet(TimeStampedModel):
     """Closed-loop wallet for users to store balance and cashback"""
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wallet')
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='payment_wallet')
     
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     cashback_earned = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -329,3 +374,167 @@ class CashbackLedger(TimeStampedModel):
             description=description
         )
         return cashback
+
+
+class PayoutRequest(TimeStampedModel):
+    """Property Owner payout requests from wallet to bank (Sprint-1)
+    
+    Owners can request payouts from their wallet earnings.
+    Lifecycle: Requested → Processing → Completed/Failed
+    Admin manually approves and processes payouts.
+    """
+    STATUS_CHOICES = [
+        ('requested', 'Requested'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    # Property owner reference
+    owner = models.ForeignKey(
+        'property_owners.PropertyOwner',
+        on_delete=models.CASCADE,
+        related_name='payout_requests'
+    )
+    wallet = models.ForeignKey(
+        Wallet,
+        on_delete=models.CASCADE,
+        related_name='payout_requests'
+    )
+    
+    # Payout details
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Amount to payout (deducted from wallet)"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='requested')
+    
+    # Bank details (from PropertyOwner)
+    bank_account_name = models.CharField(max_length=200)
+    bank_account_number = models.CharField(max_length=20)
+    bank_ifsc = models.CharField(max_length=20)
+    
+    # Processing
+    requested_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    processed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payouts_processed'
+    )
+    
+    # Transaction tracking
+    transaction_id = models.CharField(max_length=200, blank=True)
+    wallet_transaction = models.ForeignKey(
+        WalletTransaction,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payout_requests'
+    )
+    
+    # Notes
+    notes = models.TextField(blank=True, help_text="Admin notes or failure reason")
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['owner', '-created_at']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self):
+        return f"Payout #{self.id} - {self.owner.business_name} - ₹{self.amount} ({self.status})"
+    
+    def clean(self):
+        """Validate payout request"""
+        from django.core.exceptions import ValidationError
+        
+        # Check wallet has sufficient balance
+        if self.wallet.balance < self.amount:
+            raise ValidationError(
+                f"Insufficient wallet balance. Available: ₹{self.wallet.balance}, Requested: ₹{self.amount}"
+            )
+        
+        # Minimum payout amount
+        if self.amount < Decimal('100'):
+            raise ValidationError("Minimum payout amount is ₹100")
+        
+        # Check bank details
+        if not all([self.bank_account_name, self.bank_account_number, self.bank_ifsc]):
+            raise ValidationError("Bank details are incomplete")
+    
+    def request_payout(self):
+        """Request payout - deduct from wallet and create transaction"""
+        from django.db import transaction
+        
+        with transaction.atomic():
+            # Validate
+            self.full_clean()
+            
+            # Deduct from wallet
+            previous_balance = self.wallet.balance
+            self.wallet.balance -= self.amount
+            self.wallet.save(update_fields=['balance', 'updated_at'])
+            
+            # Create wallet transaction
+            wallet_txn = WalletTransaction.objects.create(
+                wallet=self.wallet,
+                transaction_type='debit',
+                amount=self.amount,
+                balance_before=previous_balance,
+                balance_after=self.wallet.balance,
+                description=f"Payout request #{self.id}",
+                status='success',
+                payment_gateway='internal'
+            )
+            
+            self.wallet_transaction = wallet_txn
+            self.status = 'requested'
+            self.save()
+    
+    def approve_and_complete(self, admin_user, transaction_id=""):
+        """Admin approves and marks payout as completed"""
+        if self.status != 'requested':
+            raise ValueError("Only requested payouts can be approved")
+        
+        self.status = 'completed'
+        self.processed_at = timezone.now()
+        self.processed_by = admin_user
+        self.transaction_id = transaction_id
+        self.save()
+    
+    def reject(self, admin_user, reason=""):
+        """Admin rejects payout - refund to wallet"""
+        from django.db import transaction as db_transaction
+        
+        if self.status != 'requested':
+            raise ValueError("Only requested payouts can be rejected")
+        
+        with db_transaction.atomic():
+            # Refund to wallet
+            previous_balance = self.wallet.balance
+            self.wallet.balance += self.amount
+            self.wallet.save(update_fields=['balance', 'updated_at'])
+            
+            # Create refund transaction
+            WalletTransaction.objects.create(
+                wallet=self.wallet,
+                transaction_type='refund',
+                amount=self.amount,
+                balance_before=previous_balance,
+                balance_after=self.wallet.balance,
+                description=f"Payout request #{self.id} rejected: {reason}",
+                status='success',
+                payment_gateway='internal'
+            )
+            
+            self.status = 'failed'
+            self.processed_at = timezone.now()
+            self.processed_by = admin_user
+            self.notes = reason
+            self.save()

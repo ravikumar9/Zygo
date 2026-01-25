@@ -1,0 +1,245 @@
+{% load static %}
+<!-- 
+COMPONENT: Goibibo-Style Room Card
+PURPOSE: Rich room display with image carousel, capacity, meal plans, instant pricing
+FEATURES: 3+ image carousel, bed type/size/capacity icons, meal plan selector, refundable badge, instant price visibility
+-->
+
+<div class="row" id="room-types-list">
+    {% for room in hotel.room_types.all %}
+    <div class="col-12 mb-4">
+        <div class="card room-card" 
+             data-room-id="{{ room.id }}"
+             data-base-price="{{ room.base_price }}"
+             style="border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+            <div class="row no-gutters">
+                
+                <!-- LEFT: Image Carousel (40%) -->
+                <div class="col-md-5">
+                    {% if room.images.all %}
+                    <div id="roomCarousel{{ room.id }}" class="carousel slide" data-ride="carousel" style="height: 280px;">
+                        <div class="carousel-inner" style="height: 100%;">
+                            {% for image in room.images.all %}
+                            <div class="carousel-item {% if forloop.first %}active{% endif %}" style="height: 100%;">
+                                  <img src="{{ image.image.url }}" 
+                                     class="d-block w-100" 
+                                     alt="{{ room.name }}"
+                                      style="height: 100%; object-fit: cover;" onerror="this.src='{% static 'images/room_placeholder.svg' %}'">
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        {% if room.images.count > 1 %}
+                        <a class="carousel-control-prev" href="#roomCarousel{{ room.id }}" role="button" data-slide="prev">
+                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                        </a>
+                        <a class="carousel-control-next" href="#roomCarousel{{ room.id }}" role="button" data-slide="next">
+                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                        </a>
+                        {% endif %}
+                        
+                        <!-- Image Count Badge -->
+                        <div style="position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">
+                            <i class="fas fa-images"></i> {{ room.images.count }} Photos
+                        </div>
+                    </div>
+                    {% else %}
+                    <div style="height: 280px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; color: #999;">
+                        <img src="{% static 'images/room_placeholder.svg' %}" alt="No image available" style="height: 60%; opacity: 0.8;">
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- RIGHT: Room Details (60%) -->
+                <div class="col-md-7">
+                    <div class="card-body" style="padding: 1.5rem;">
+                        
+                        <!-- Room Name + Refundable Badge -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h5 style="color: #222; margin: 0; font-weight: 600;">{{ room.name }}</h5>
+                            {% if room.is_refundable %}
+                            <span class="badge badge-success" style="padding: 0.4rem 0.8rem;">
+                                <i class="fas fa-undo"></i> Refundable
+                            </span>
+                            {% else %}
+                            <span class="badge badge-secondary" style="padding: 0.4rem 0.8rem;">
+                                Non-Refundable
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Room Specs: Bed Type, Size, Capacity -->
+                        <div style="display: flex; gap: 1.5rem; margin-bottom: 1rem; font-size: 0.9rem; color: #666;">
+                            <!-- Bed Type -->
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <i class="fas fa-bed" style="color: #FF6B35;"></i>
+                                <span>{{ room.get_bed_type_display|default:"Standard Bed" }}</span>
+                            </div>
+                            
+                            <!-- Room Size -->
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <i class="fas fa-ruler-combined" style="color: #FF6B35;"></i>
+                                <span>{{ room.room_size|default:"280" }} sqft</span>
+                            </div>
+                            
+                            <!-- Capacity -->
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <i class="fas fa-users" style="color: #FF6B35;"></i>
+                                <span>{{ room.max_adults|default:2 }} Adults{% if room.max_children > 0 %}, {{ room.max_children }} Children{% endif %}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Meal Plan Selector -->
+                        <div style="margin-bottom: 1rem;">
+                            <label style="font-weight: 600; color: #444; margin-bottom: 0.5rem; display: block;">
+                                <i class="fas fa-utensils"></i> Select Meal Plan
+                            </label>
+                            <select class="form-control meal-plan-selector" 
+                                    style="border: 1px solid #ddd; border-radius: 4px; padding: 0.5rem;">
+                                {% for meal_plan_option in room.meal_plans.all %}
+                                <option value="{{ meal_plan_option.id }}" 
+                                        data-price-delta="{{ meal_plan_option.price_delta }}"
+                                        {% if meal_plan_option.is_default %}selected{% endif %}>
+                                    {{ meal_plan_option.meal_plan.get_plan_type_display }}
+                                    {% if meal_plan_option.price_delta > 0 %}
+                                        (+₹{{ meal_plan_option.price_delta }})
+                                    {% elif meal_plan_option.price_delta == 0 %}
+                                        (Included)
+                                    {% endif %}
+                                </option>
+                                {% empty %}
+                                <option value="" disabled>❌ Meal plans not configured - contact property</option>
+                                {% endfor %}
+                            </select>
+                            
+                            <!-- Meal Plan Inclusions -->
+                            {% for meal_plan_option in room.meal_plans.all %}
+                            {% if meal_plan_option.is_default %}
+                            <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
+                                <strong>Includes:</strong>
+                                {% if meal_plan_option.meal_plan.inclusions %}
+                                    {% for inclusion in meal_plan_option.meal_plan.inclusions %}
+                                        {{ inclusion }}{% if not forloop.last %}, {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    Room accommodation only
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        
+                        <!-- Price Display + Book Button -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; padding-top: 1rem;">
+                            <div>
+                                <div style="font-size: 0.85rem; color: #666;">Starting from</div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #FF6B35;" 
+                                     class="room-price-display" data-testid="room-price" data-room-price-id="room-{{ room.id }}">
+                                    ₹{{ room.base_price|floatformat:0 }}
+                                </div>
+                                <div style="font-size: 0.8rem; color: #999;">per night + taxes</div>
+                                {% if hotel_policy %}
+                                <div class="small" style="color:#666; margin-top:0.25rem;">
+                                    <strong>Cancellation:</strong> {{ hotel_policy.policy_text }}
+                                </div>
+                                {% endif %}
+                                {% with available=room.inventory_count|default:room.total_rooms %}
+                                {% if available and available|add:'0' > 0 %}
+                                    <div class="inventory-badge" data-testid="inventory-warning" data-inventory-id="inv-{{ room.id }}" style="font-size: 0.85rem; color: #e65100; margin-top: 0.25rem;">Only {{ available }} left</div>
+                                {% else %}
+                                    <div data-testid="sold-out-message" data-sold-out-id="sold-{{ room.id }}" style="font-size: 0.9rem; color: #999; margin-top: 0.25rem;">Sold Out</div>
+                                {% endif %}
+                                {% endwith %}
+                            </div>
+
+                            {% with available=room.inventory_count|default:room.total_rooms %}
+                            <button class="btn btn-primary" 
+                                    style="background-color: #FF6B35; border: none; padding: 0.75rem 2rem; font-weight: 600; border-radius: 4px;"
+                                    onclick="selectRoom({{ room.id }}, '{{ room.name|escapejs }}')"
+                                    {% if not available or available|add:'0' <= 0 %}disabled{% endif %}>
+                                {% if room.room_type == 'suite' %}
+                                    Suite
+                                {% elif room.room_type == 'deluxe' %}
+                                    Deluxe
+                                {% elif room.room_type == 'standard' %}
+                                    Select Room
+                                {% else %}
+                                    {{ room.get_room_type_display }}
+                                {% endif %}
+                                <i class="fas fa-arrow-right"></i>
+                            </button>
+                            {% endwith %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    
+    <!-- DEFENSIVE: No rooms available -->
+    <div class="col-12">
+        <div class="alert alert-warning" role="alert" style="border-left: 4px solid #FFA500;">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>No rooms available</strong>
+            <p style="margin: 0.5rem 0 0 0;">
+                This property currently has no available room types. Please check back later.
+            </p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+// GOIBIBO PRICE CALCULATION - No NaN allowed
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize all meal plan selectors
+    document.querySelectorAll('.meal-plan-selector').forEach(function(selector) {
+        var card = selector.closest('.room-card');
+        var basePrice = parseFloat(card.dataset.basePrice || 0);
+        var priceDisplay = card.querySelector('.room-price-display');
+        
+        // Initial price display
+        updatePrice(selector, basePrice, priceDisplay);
+        
+        // Update on change
+        selector.addEventListener('change', function() {
+            updatePrice(this, basePrice, priceDisplay);
+        });
+    });
+});
+
+function updatePrice(selector, basePrice, priceDisplay) {
+    if (!selector || !priceDisplay) return;
+    
+    var selectedOption = selector.options[selector.selectedIndex];
+    var priceDelta = parseFloat(selectedOption.dataset.priceDelta || 0);
+    var totalPrice = basePrice + priceDelta;
+    var roomId = selector.closest('.room-card').dataset.roomId;
+    var selectBtn = selector.closest('.room-card').querySelector('.btn-select-room');
+    
+    // RULE 3: FAIL-FAST - No silent NaN fallbacks
+    if (isNaN(basePrice) || basePrice <= 0) {
+        console.error('Invalid base price for room ' + roomId + ': ' + basePrice);
+        priceDisplay.textContent = 'Unavailable';
+        if (selectBtn) selectBtn.disabled = true;
+        return;
+    }
+    
+    if (isNaN(totalPrice) || totalPrice <= 0) {
+        console.error('Invalid total price for room ' + roomId + ': ' + totalPrice);
+        priceDisplay.textContent = 'Unavailable';
+        if (selectBtn) selectBtn.disabled = true;
+        return;
+    }
+    
+    priceDisplay.textContent = '₹' + Math.round(totalPrice).toLocaleString('en-IN');
+}
+
+function selectRoom(roomId, roomName) {
+    // Reload page with room_type parameter to populate pricing_data on server side
+    const url = new URL(window.location.href);
+    url.searchParams.set('room_type', roomId);
+    window.location.href = url.toString();
+}
+</script>

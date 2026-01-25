@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load json_script %}
+{% block title %}Admin Update Requests{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h1>Update Requests</h1>
+  <p class="text-muted">Review owner-submitted updates. Approve applies changes live; reject keeps existing data.</p>
+  <div class="table-responsive">
+    <table class="table table-bordered align-middle" data-testid="admin-update-table">
+      <thead>
+        <tr>
+          <th>ID</th><th>Property</th><th>Room</th><th>Type</th><th>Status</th><th>Owner Remark</th><th>Diff</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for req in requests %}
+        <tr data-request-id="{{ req.id }}">
+          <td>{{ req.id }}</td>
+          <td>{{ req.property.name if req.property }}</td>
+          <td>{% if req.room_type %}{{ req.room_type.name }}{% else %}-{% endif %}</td>
+          <td>{{ req.get_change_type_display }}</td>
+          <td><span class="badge bg-secondary">{{ req.get_status_display }}</span></td>
+          <td>{{ req.owner_remark|default:'-' }}</td>
+          <td style="max-width:320px;">
+            <div style="font-size:12px; white-space:pre-wrap;">
+              <strong>Old:</strong> {{ req.old_data }}
+              <br>
+              <strong>New:</strong> {{ req.new_data }}
+            </div>
+          </td>
+          <td>
+            {% if req.status == 'pending' %}
+            <div class="d-flex gap-2">
+              <button class="btn btn-success btn-sm admin-approve" data-testid="admin-approve-btn">Approve</button>
+              <button class="btn btn-danger btn-sm admin-reject" data-testid="admin-reject-btn">Reject</button>
+            </div>
+            {% else %}
+              <span class="text-muted">Completed</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-center">No update requests</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function() {
+  const csrf = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+  function handle(action, id) {
+    const remark = prompt('Admin remark (optional):', '');
+    fetch(`/properties/api/admin/update-requests/${id}/${action}/`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken': csrf},
+      body: JSON.stringify({admin_remark: remark || ''})
+    }).then(r => r.json().then(d => ({ok:r.ok, data:d}))).then(res => {
+      if (!res.ok) { alert(res.data.error || 'Action failed'); return; }
+      location.reload();
+    }).catch(() => alert('Network error'));
+  }
+  document.querySelectorAll('.admin-approve').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.closest('tr').dataset.requestId;
+      handle('approve', id);
+    });
+  });
+  document.querySelectorAll('.admin-reject').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.closest('tr').dataset.requestId;
+      handle('reject', id);
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -108,7 +108,10 @@
                                                 {{ booking.get_status_display }}
                                             </span>
                                         </td>
-                                        <td>₹{{ booking.final_amount_with_gst|floatformat:"2" }}</td>
+                                        <td>
+                                            ₹{{ booking.final_amount_with_gst|floatformat:"2" }}
+                                            <div class="text-muted small">Taxes &amp; Fees: ₹{{ booking.taxes_and_fees|floatformat:"2" }}</div>
+                                        </td>
                                         <td>{{ booking.created_at|date:"d M Y" }}</td>
                                         <td>
                                             <a href="{% url 'bookings:booking-detail' booking.booking_id %}" class="btn btn-sm btn-outline-primary">View</a>

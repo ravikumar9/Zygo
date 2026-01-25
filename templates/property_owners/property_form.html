@@ -238,8 +238,180 @@
             <h4 style="margin: 0;">📊 Property Completion Status</h4>
             <span style="font-size: 20px; font-weight: 700; color: #00BCD4;">{{ completion_percentage }}%</span>
         </div>
+
+        <!-- SECTION 9: ROOM TYPES (MANDATORY) -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">🛏️</span>
+                <h3>Room Types (At least one)</h3>
+            </div>
+
+            {{ formset.management_form }}
+            {% if formset.non_form_errors %}
+                <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
+            {% endif %}
+
+            {% for room_form in formset.forms %}
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong>Room #{{ forloop.counter }}</strong>
+                    {% if room_form.instance.id %}<span class="badge bg-success">Saved</span>{% endif %}
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label required-field">Room Name</label>
+                            {{ room_form.name }}
+                            {{ room_form.name.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label required-field">Room Type</label>
+                            {{ room_form.room_type }}
+                            {{ room_form.room_type.errors }}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label required-field">Description</label>
+                            {{ room_form.description }}
+                            {{ room_form.description.errors }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label required-field">Max Occupancy</label>
+                            {{ room_form.max_occupancy }}
+                            {{ room_form.max_occupancy.errors }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label required-field">Beds</label>
+                            {{ room_form.number_of_beds }}
+                            {{ room_form.number_of_beds.errors }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Room Size (sqft)</label>
+                            {{ room_form.room_size }}
+                            {{ room_form.room_size.errors }}
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label required-field">Base Price (₹)</label>
+                            {{ room_form.base_price }}
+                            {{ room_form.base_price.errors }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Discount Type</label>
+                            {{ room_form.discount_type }}
+                            {{ room_form.discount_type.errors }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Discount Value</label>
+                            {{ room_form.discount_value }}
+                            {{ room_form.discount_value.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Valid From</label>
+                            {{ room_form.discount_valid_from }}
+                            {{ room_form.discount_valid_from.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Valid To</label>
+                            {{ room_form.discount_valid_to }}
+                            {{ room_form.discount_valid_to.errors }}
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="form-check">
+                                {{ room_form.discount_is_active }}
+                                <label class="form-check-label">Activate Discount</label>
+                            </div>
+                            {{ room_form.discount_is_active.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label required-field">Total Rooms (Inventory)</label>
+                            {{ room_form.total_rooms }}
+                            {{ room_form.total_rooms.errors }}
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Room Amenities</label>
+                            <div class="d-flex flex-wrap gap-3">
+                                {% with selected=room_form.amenities_list.value %}
+                                    {% for value, label in room_form.amenities_list.field.choices %}
+                                    <label class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" name="{{ room_form.prefix }}-amenities_list" value="{{ value }}" {% if selected and value in selected %}checked{% endif %}>
+                                        <span class="form-check-label">{{ label }}</span>
+                                    </label>
+                                    {% endfor %}
+                                {% endwith %}
+                            </div>
+                            {{ room_form.amenities_list.errors }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Primary Image</label>
+                            {{ room_form.image }}
+                            {{ room_form.image.errors }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Gallery Images (multiple)</label>
+                            {{ room_form.extra_images }}
+                        </div>
+
+                        <!-- Meal Plans -->
+                        <div class="col-12">
+                            <div class="section-header" style="padding-left:0; border:none; margin-bottom:10px;">
+                                <span class="section-icon">🍽️</span>
+                                <h3 style="font-size:16px;">Meal Plans (per-night absolute pricing)</h3>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
+                                        {{ room_form.plan_room_only }} <label class="form-check-label">Room Only</label>
+                                    </div>
+                                    {{ room_form.price_room_only }}
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
+                                        {{ room_form.plan_room_breakfast }} <label class="form-check-label">Room + Breakfast</label>
+                                    </div>
+                                    {{ room_form.price_room_breakfast }}
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
+                                        {{ room_form.plan_room_half_board }} <label class="form-check-label">Room + Breakfast + Lunch/Dinner</label>
+                                    </div>
+                                    {{ room_form.price_room_half_board }}
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
+                                        {{ room_form.plan_room_full_board }} <label class="form-check-label">Room + All Meals</label>
+                                    </div>
+                                    {{ room_form.price_room_full_board }}
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if room_form.instance.id and room_form.instance.images.exists %}
+                        <div class="col-12">
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for img in room_form.instance.images.all %}
+                                <div class="text-center">
+                                    <img src="{{ img.image.url }}" alt="{{ room_form.instance.name }} image" class="img-thumbnail" style="max-width:120px;">
+                                    {% if img.is_primary %}<div class="small text-success">Primary</div>{% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if room_form.DELETE %}
+                        <div class="col-12 form-check">
+                            {{ room_form.DELETE }} <label class="form-check-label">Delete this room</label>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
         <div class="completion-bar">
-            <div class="completion-fill" style="width: {{ completion_percentage }}%;"></div>
+            <div class="completion-fill" style="width: 100%;" data-percentage="{{ completion_percentage }}"></div>
         </div>
         <p class="completion-text">
             {% if completion_percentage == 100 %}
@@ -463,6 +635,22 @@
                 </div>
             </div>
         </div>
+
+        <!-- SECTION 6B: COVER IMAGE -->
+        <div class="form-section">
+            <div class="section-header">
+                <span class="section-icon">🖼️</span>
+                <h3>Cover Image</h3>
+            </div>
+            <div class="form-group">
+                <label for="{{ form.image.id_for_label }}" class="required-field">Upload at least one cover image</label>
+                {{ form.image }}
+                {% if form.image.errors %}
+                    <ul class="errorlist">{{ form.image.errors }}</ul>
+                {% endif %}
+                <div class="form-text">Used on listings and detail pages. Minimum one image required to submit.</div>
+            </div>
+        </div>
         
         <!-- SECTION 7: AMENITIES -->
         <div class="form-section">
@@ -473,17 +661,19 @@
             
             <div class="form-group">
                 <label class="required-field">Select Available Amenities</label>
+                {% with selected=form.amenities_list.value %}
                 <div>
                     {% for value, label in form.amenities_list.field.choices %}
                     <div class="amenity-checkbox">
                         <label>
                             <input type="checkbox" name="amenities_list" value="{{ value }}" 
-                                {% if value in form.amenities_list.value %}checked{% endif %}>
+                                {% if selected and value in selected %}checked{% endif %}>
                             {{ label }}
                         </label>
                     </div>
                     {% endfor %}
                 </div>
+                {% endwith %}
                 {% if form.amenities_list.errors %}
                     <ul class="errorlist">{{ form.amenities_list.errors }}</ul>
                 {% endif %}
@@ -546,12 +736,18 @@
         </div>
         
         <!-- ACTION BUTTONS -->
+        {% if formset.total_form_count < 1 %}
+        <div class="alert alert-warning">
+            <strong>Rooms missing.</strong> Add at least one room type with base price before submitting.
+        </div>
+        {% endif %}
+
         <div class="button-group">
             <button type="submit" name="save_draft" class="btn-save-draft" title="Save progress as draft">
                 💾 Save as Draft
             </button>
             <button type="submit" name="submit_for_approval" class="btn-submit" 
-                {% if completion_percentage < 100 %}disabled title="Complete all sections first"{% endif %}>
+                {% if completion_percentage < 100 or formset.total_form_count < 1 %}disabled title="Complete all sections first"{% endif %}>
                 ✅ Submit for Approval
             </button>
         </div>

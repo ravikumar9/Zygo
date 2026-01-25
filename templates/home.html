@@ -17,6 +17,20 @@
             <div class="col-lg-10">
                 <div class="card shadow-lg border-0">
                     <div class="card-body p-4">
+                        <!-- Universal Search (City/Area/Hotel) -->
+                        <div class="mb-4">
+                            <label class="form-label">Quick Search</label>
+                            <div class="position-relative">
+                                <div class="input-group">
+                                    <input type="text" id="universalSearchBox" class="form-control" placeholder="Search city, area, or hotel name..." autocomplete="off">
+                                    <button type="button" class="btn btn-outline-primary" id="homeNearMeLink" aria-label="Use near me">
+                                        <i class="fas fa-location-arrow"></i> Near Me
+                                    </button>
+                                </div>
+                                <div id="universalSearchResults" class="list-group position-absolute w-100 mt-1" style="max-height: 300px; overflow-y: auto; display: none; z-index: 1000;"></div>
+                            </div>
+                        </div>
+                        
                         <ul class="nav nav-pills mb-4" id="searchTabs" role="tablist">
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link active" id="hotels-tab" data-bs-toggle="pill" data-bs-target="#hotels" type="button">
@@ -142,12 +156,89 @@
                                 </form>
                             </div>
                         </div>
+                        {% if show_location_prompt %}
+                        <div id="locationSoftPrompt" class="alert alert-info mt-3 mb-0 d-flex align-items-center" role="alert">
+                            <i class="fas fa-location-arrow me-2"></i>
+                            <div>
+                                Turn on location to find stays and buses near you. Click "Near Me" to grant access.
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="softPromptCta">Try Near Me</button>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </section>
+
+{% if recent_searches.hotels or recent_searches.buses or recent_searches.packages %}
+<section class="py-4 bg-light">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Recent searches</h4>
+            <small class="text-muted">Saved for this session</small>
+        </div>
+        <div class="row g-3">
+            {% if recent_searches.hotels %}
+            <div class="col-md-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-2"><i class="fas fa-hotel me-2 text-primary"></i><strong>Hotels</strong></div>
+                        <div class="list-group list-group-flush">
+                            {% for s in recent_searches.hotels %}
+                            <a class="list-group-item list-group-item-action" href="/hotels/?city_id={{ s.city_id|default:'' }}&checkin={{ s.checkin|default:'' }}&checkout={{ s.checkout|default:'' }}&q={{ s.query|default:'' }}">
+                                <div class="fw-semibold">{{ s.city_name|default:'Any city' }}</div>
+                                <div class="small text-muted">{{ s.checkin|default:'--' }} → {{ s.checkout|default:'--' }}</div>
+                                {% if s.query %}<div class="small">“{{ s.query }}”</div>{% endif %}
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if recent_searches.buses %}
+            <div class="col-md-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-2"><i class="fas fa-bus me-2 text-success"></i><strong>Buses</strong></div>
+                        <div class="list-group list-group-flush">
+                            {% for s in recent_searches.buses %}
+                            <a class="list-group-item list-group-item-action" href="/buses/search/?source={{ s.source_id|default:s.source_name }}&destination={{ s.destination_id|default:s.destination_name }}&travel_date={{ s.date|default:'' }}">
+                                <div class="fw-semibold">{{ s.source_name|default:'--' }} → {{ s.destination_name|default:'--' }}</div>
+                                <div class="small text-muted">{{ s.date|default:'Any date' }}</div>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if recent_searches.packages %}
+            <div class="col-md-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-2"><i class="fas fa-suitcase-rolling me-2 text-warning"></i><strong>Packages</strong></div>
+                        <div class="list-group list-group-flush">
+                            {% for s in recent_searches.packages %}
+                            <a class="list-group-item list-group-item-action" href="/api/packages/search/?type={{ s.package_type|default:'' }}&min_price={{ s.min_price|default:'' }}&max_price={{ s.max_price|default:'' }}&duration={{ s.duration|default:'' }}">
+                                <div class="fw-semibold">{{ s.package_type|default:'All types'|title }}</div>
+                                <div class="small text-muted">Budget {{ s.min_price|default:'-' }} - {{ s.max_price|default:'-' }}</div>
+                                {% if s.duration %}<div class="small">Duration {{ s.duration }} days</div>{% endif %}
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
 
 <!-- Featured Hotels -->
 <section class="py-5">
@@ -449,6 +540,13 @@
     font-size: 1.1rem;
 }
 
+.floating-near-me {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 1000;
+}
+
 input[type="date"] {
     color: #212529;
     background-color: #fff;
@@ -462,6 +560,8 @@ input[type="date"]::-webkit-input-placeholder {
 </style>
 
 <script>
+let nearMeRetry = false;
+
 // Hotel Search Validation
 function validateHotelSearch(event) {
     event.preventDefault();
@@ -525,6 +625,53 @@ function validateHotelSearch(event) {
     }
     
     return false;
+}
+
+function fallbackToCityCenter() {
+    const citySelect = document.getElementById('hotelCity');
+    const cityVal = citySelect && citySelect.value ? citySelect.value : (citySelect && citySelect.options.length > 1 ? citySelect.options[1].value : '');
+    const checkin = document.getElementById('hotelCheckin')?.value;
+    const checkout = document.getElementById('hotelCheckout')?.value;
+    const params = new URLSearchParams();
+    if (cityVal) params.set('city_id', cityVal);
+    if (checkin) params.set('checkin', checkin);
+    if (checkout) params.set('checkout', checkout);
+    params.set('fallback', 'city_center');
+    window.location.href = `/hotels/?${params.toString()}`;
+}
+
+function triggerNearMeSearch() {
+    const searchErrorEls = document.querySelectorAll('.text-danger');
+    searchErrorEls.forEach(el => el.style.display = 'none');
+
+    if (!navigator.geolocation) {
+        fallbackToCityCenter();
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition((pos) => {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        const params = new URLSearchParams();
+        const cityVal = document.getElementById('hotelCity')?.value;
+        const checkin = document.getElementById('hotelCheckin')?.value;
+        const checkout = document.getElementById('hotelCheckout')?.value;
+        params.set('near_me', '1');
+        params.set('lat', lat);
+        params.set('lng', lng);
+        params.set('radius', '10');
+        if (cityVal) params.set('city_id', cityVal);
+        if (checkin) params.set('checkin', checkin);
+        if (checkout) params.set('checkout', checkout);
+        window.location.href = `/hotels/?${params.toString()}`;
+    }, (err) => {
+        if (!nearMeRetry) {
+            nearMeRetry = true;
+            alert('Location permission denied. Tap Near Me again to retry, or we will show city center results.');
+        } else {
+            fallbackToCityCenter();
+        }
+    }, { enableHighAccuracy: true, timeout: 8000 });
 }
 
 // Bus Search with Validation
@@ -692,6 +839,64 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+    // Universal Search - City/Area/Hotel
+    const searchBox = document.getElementById('universalSearchBox');
+    const searchResults = document.getElementById('universalSearchResults');
+    
+    if (searchBox) {
+        searchBox.addEventListener('keyup', function() {
+            const query = this.value.trim();
+            
+            if (query.length < 1) {
+                searchResults.style.display = 'none';
+                searchResults.innerHTML = '';
+                return;
+            }
+            
+            fetch(`/hotels/api/universal-search/?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    searchResults.innerHTML = '';
+                    
+                    if (data.length === 0) {
+                        searchResults.innerHTML = '<div class="list-group-item text-muted">No results found</div>';
+                    } else {
+                        data.forEach(item => {
+                            const link = document.createElement('a');
+                            link.href = item.url;
+                            link.className = 'list-group-item list-group-item-action';
+                            
+                            let icon = '🏨';
+                            if (item.type === 'city') icon = '🏙️';
+                            if (item.type === 'area') icon = '📍';
+                            
+                            link.innerHTML = `<div>${icon} <strong>${item.label}</strong></div>`;
+                            searchResults.appendChild(link);
+                        });
+                    }
+                    
+                    searchResults.style.display = 'block';
+                })
+                .catch(err => {
+                    console.error('Search error:', err);
+                    searchResults.style.display = 'none';
+                });
+        });
+        
+        // Hide results when clicking outside
+        document.addEventListener('click', function(e) {
+            if (e.target !== searchBox && e.target !== searchResults) {
+                searchResults.style.display = 'none';
+            }
+        });
+    }
+
+
+    const nearMeLink = document.getElementById('homeNearMeLink');
+    const softPromptCta = document.getElementById('softPromptCta');
+    if (nearMeLink) nearMeLink.addEventListener('click', triggerNearMeSearch);
+    if (softPromptCta) softPromptCta.addEventListener('click', triggerNearMeSearch);
 });
 </script>
 {% endblock %}

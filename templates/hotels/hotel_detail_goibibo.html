@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ hotel.name }} - Hotel Booking | GoExplorer{% endblock %}
+
+{% block content %}
+<div style="background-color: #f9f9f9; min-height: 100vh;">
+    
+    <!-- ===================================================================== -->
+    <!-- TOP HERO SECTION - IMAGE GALLERY + KEY INFO (GOIBIBO STYLE) -->
+    <!-- ===================================================================== -->
+    <div class="container-fluid" style="padding: 2rem 0; background-color: #fff;">
+        <div class="container">
+            <div class="row mb-4">
+                
+                <!-- IMAGE GALLERY (LEFT) -->
+                <div class="col-md-7">
+                    <!-- Main Image -->
+                    <div style="border-radius: 8px; overflow: hidden; margin-bottom: 1rem; background-color: #f0f0f0;">
+                        <img id="mainImage" 
+                             src="{{ hotel.display_image_url }}" 
+                             alt="{{ hotel.name }}" 
+                             class="img-fluid"
+                             style="width: 100%; height: 400px; object-fit: cover;"
+                             onerror="this.src='{% static 'images/hotel_placeholder.svg' %}'">
+                    </div>
+                    
+                    <!-- Thumbnail Gallery -->
+                    {% if hotel.images.all %}
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
+                        {% for img in hotel.images.all|slice:":4" %}
+                        <img src="{{ img.image.url }}" 
+                             alt="{{ img.caption }}" 
+                             class="img-thumbnail cursor-pointer"
+                             style="height: 80px; object-fit: cover; cursor: pointer; border-radius: 4px; border: 2px solid transparent;"
+                             onclick="document.getElementById('mainImage').src='{{ img.image.url }}';"
+                             onerror="this.src='{% static 'images/room_placeholder.svg' %}'">
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- HOTEL INFO + BOOKING WIDGET (RIGHT) -->
+                <div class="col-md-5">
+                    <!-- Hotel Name -->
+                    <h1 style="color: #222; font-size: 2rem; margin-bottom: 0.5rem; font-weight: 700;">
+                        {{ hotel.name }}
+                    </h1>
+                    
+                    <!-- Rating Badges -->
+                    <div style="margin-bottom: 1rem;">
+                        <!-- Star Rating -->
+                        <span style="color: #FF6B35; font-size: 1.2rem; margin-right: 1rem;">
+                            {% for i in "12345" %}
+                                {% if forloop.counter <= hotel.star_rating %}
+                                <i class="fas fa-star"></i>
+                                {% else %}
+                                <i class="fas fa-star" style="color: #ddd;"></i>
+                                {% endif %}
+                            {% endfor %}
+                        </span>
+                        
+                        <!-- Review Rating Badge -->
+                        {% if hotel.review_rating %}
+                        <span style="background-color: #FF6B35; color: white; padding: 0.3rem 0.6rem; border-radius: 4px; font-weight: 600; font-size: 0.9rem;">
+                            {{ hotel.review_rating }} / 5.0 ({{ hotel.review_count }} reviews)
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Location -->
+                    <p style="color: #666; margin-bottom: 1rem; font-size: 0.95rem;">
+                        <i class="fas fa-map-marker-alt" style="color: #FF6B35; margin-right: 0.5rem;"></i>
+                        {{ hotel.address }}, {{ hotel.city.name }}
+                    </p>
+                    
+                    <!-- Trust Badge (GOIBIBO-STYLE) -->
+                    <div style="background-color: {% if hotel.inventory_source == 'internal_cm' %}#e8f5e9{% else %}#fff3e0{% endif %}; padding: 0.75rem; border-radius: 6px; margin-bottom: 1.5rem; border-left: 4px solid {% if hotel.inventory_source == 'internal_cm' %}#4caf50{% else %}#ff9800{% endif %};">
+                        {% if hotel.inventory_source == 'internal_cm' %}
+                        <span style="color: #2e7d32; font-weight: 600;">
+                            <i class="fas fa-check-circle"></i> Verified Property
+                        </span>
+                        {% else %}
+                        <span style="color: #e65100; font-weight: 600;">
+                            <i class="fas fa-sync-alt"></i> Live Inventory
+                            {% if hotel.channel_manager_name %}
+                            <span style="color: #666; font-size: 0.85rem;">(via {{ hotel.channel_manager_name }})</span>
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- PRICING WIDGET (CRITICAL - ONE-PAGE GOIBIBO PARITY) -->
+                    <div style="background-color: #fff; border: 2px solid #FF6B35; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem;">
+                        <h3 style="color: #222; font-size: 1.1rem; margin-bottom: 1rem; margin-top: 0;">Select Room & Dates</h3>
+                        
+                        {% include "hotels/includes/booking-form-goibibo.html" %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ===================================================================== -->
+    <!-- MAIN CONTENT SECTION (2 COLS: DETAILS + AMENITIES) -->
+    <!-- ===================================================================== -->
+    <div class="container" style="padding: 2rem 0;">
+        <div class="row">
+            
+            <!-- LEFT COLUMN: DETAILS -->
+            <div class="col-md-8">
+                
+                <!-- ABOUT THIS PROPERTY -->
+                <section style="background-color: #fff; padding: 2rem; border-radius: 8px; margin-bottom: 2rem;">
+                    <h2 style="color: #222; font-size: 1.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #FF6B35; padding-bottom: 0.75rem; display: inline-block;">
+                        <i class="fas fa-info-circle" style="color: #FF6B35; margin-right: 0.5rem;"></i>About This Property
+                    </h2>
+                    
+                    {% if hotel.description %}
+                    <p style="color: #555; line-height: 1.8; margin-bottom: 1.5rem;">{{ hotel.description }}</p>
+                    {% endif %}
+                    
+                    {% if hotel.property_rules %}
+                    <div style="background-color: #f9f9f9; padding: 1rem; border-left: 4px solid #FF6B35; border-radius: 4px; margin-bottom: 1rem;">
+                        <h5 style="color: #222; margin-bottom: 0.5rem; margin-top: 0;">House Rules</h5>
+                        <p style="color: #555; margin: 0; line-height: 1.6;">{{ hotel.property_rules }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if hotel.amenities_rules %}
+                    <div style="background-color: #f9f9f9; padding: 1rem; border-left: 4px solid #FF6B35; border-radius: 4px;">
+                        <h5 style="color: #222; margin-bottom: 0.5rem; margin-top: 0;">Amenities & Services</h5>
+                        <p style="color: #555; margin: 0; line-height: 1.6;">{{ hotel.amenities_rules }}</p>
+                    </div>
+                    {% endif %}
+                </section>
+                
+                <!-- AVAILABLE ROOMS (CRITICAL - GOIBIBO-STYLE CARDS) -->
+                <section style="background-color: #fff; padding: 2rem; border-radius: 8px; margin-bottom: 2rem;">
+                    <h2 style="color: #222; font-size: 1.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #FF6B35; padding-bottom: 0.75rem; display: inline-block;">
+                        <i class="fas fa-door-open" style="color: #FF6B35; margin-right: 0.5rem;"></i>Available Rooms
+                    </h2>
+                    
+                    {% if room_types %}
+                        {% for room in room_types %}
+                        <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 1.5rem; margin-bottom: 1rem; transition: all 0.3s ease; cursor: pointer;" 
+                             onmouseenter="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'; this.style.transform='translateY(-2px)';"
+                             onmouseleave="this.style.boxShadow='none'; this.style.transform='translateY(0)';">
+                            
+                            <!-- Room Header -->
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                                <div>
+                                    <h4 style="color: #222; font-weight: 700; margin: 0 0 0.5rem 0; font-size: 1.1rem;">{{ room.name }}</h4>
+                                    <p style="color: #666; margin: 0; font-size: 0.9rem;">
+                                        <i class="fas fa-expand" style="margin-right: 0.3rem;"></i>{{ room.room_size }} sqft &nbsp;•&nbsp;
+                                        <i class="fas fa-bed" style="margin-right: 0.3rem;"></i>{{ room.get_bed_type_display }} &nbsp;•&nbsp;
+                                        <i class="fas fa-users" style="margin-right: 0.3rem;"></i>Max {{ room.max_occupancy }}
+                                    </p>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="color: #FF6B35; font-size: 1.8rem; font-weight: 700;">₹{{ room.get_effective_price|floatformat:0 }}</div>
+                                    <p style="color: #999; font-size: 0.85rem; margin: 0.25rem 0 0 0;">per night</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Room Description -->
+                            {% if room.description %}
+                            <p style="color: #555; line-height: 1.6; margin-bottom: 1rem; font-size: 0.95rem;">{{ room.description }}</p>
+                            {% endif %}
+                            
+                            <!-- Room Image -->
+                            {% if room.display_image_url %}
+                            <div style="border-radius: 6px; overflow: hidden; margin-bottom: 1rem; background-color: #f0f0f0; height: 200px;">
+                                <img src="{{ room.display_image_url }}" alt="{{ room.name }}" class="img-fluid" style="width: 100%; height: 100%; object-fit: cover;" 
+                                     onerror="this.src='{% static 'images/room_placeholder.svg' %}'">
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Amenities Icons -->
+                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                                {% if room.has_balcony %}<span style="background-color: #e3f2fd; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.85rem; color: #1565c0;"><i class="fas fa-window-maximize"></i> Balcony</span>{% endif %}
+                                {% if room.has_tv %}<span style="background-color: #e3f2fd; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.85rem; color: #1565c0;"><i class="fas fa-tv"></i> TV</span>{% endif %}
+                                {% if room.has_minibar %}<span style="background-color: #e3f2fd; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.85rem; color: #1565c0;"><i class="fas fa-wine-glass"></i> Minibar</span>{% endif %}
+                                {% if room.has_safe %}<span style="background-color: #e3f2fd; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.85rem; color: #1565c0;"><i class="fas fa-lock"></i> Safe</span>{% endif %}
+                            </div>
+                            
+                            <!-- Meal Plans Dropdown (CRITICAL) -->
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; color: #222; font-weight: 600; margin-bottom: 0.5rem;">Select Meal Plan:</label>
+                                <select name="meal_plan_room_{{ room.id }}" class="form-control" style="padding: 0.75rem; border-radius: 4px; border: 1px solid #ddd; font-size: 0.95rem;">
+                                    {% for mp in room.meal_plans.all %}
+                                        <option value="{{ mp.id }}" {% if mp.is_default %}selected{% endif %} style="color: #333;">
+                                            {{ mp.meal_plan.name }} {% if mp.price_delta > 0 %}(+₹{{ mp.price_delta|floatformat:0 }}){% endif %}
+                                        </option>
+                                    {% empty %}
+                                    <option value="" disabled style="color: #f44336;">❌ No meal plans available</option>
+                                    {% endfor %}
+                                </select>
+                                <p style="color: #999; font-size: 0.85rem; margin: 0.5rem 0 0 0;">Meal plan price added to room rate</p>
+                            </div>
+                            
+                            <!-- Inventory Badge -->
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                {% with available=room.inventory_count %}
+                                <div style="font-size: 0.9rem;">
+                                    {% if available < 5 and available > 0 %}
+                                    <span style="background-color: #fff3e0; color: #e65100; padding: 0.4rem 0.8rem; border-radius: 4px; font-weight: 600;">
+                                        <i class="fas fa-exclamation-triangle"></i> Only {{ available }} left!
+                                    </span>
+                                    {% elif available == 0 %}
+                                    <span style="background-color: #ffebee; color: #c62828; padding: 0.4rem 0.8rem; border-radius: 4px; font-weight: 600;">
+                                        <i class="fas fa-times-circle"></i> Sold Out
+                                    </span>
+                                    {% else %}
+                                    <span style="color: #4caf50; font-size: 0.9rem;">✓ Rooms available</span>
+                                    {% endif %}
+                                </div>
+                                {% endwith %}
+                                
+                                <!-- Select Button -->
+                                <button class="btn" style="background-color: #FF6B35; color: white; padding: 0.6rem 1.5rem; border-radius: 4px; border: none; font-weight: 600; cursor: pointer; transition: background-color 0.3s;"
+                                        onclick="selectRoomAndScroll({{ room.id }});"
+                                        onmouseover="this.style.backgroundColor='#e05a25';"
+                                        onmouseout="this.style.backgroundColor='#FF6B35';">
+                                    Select Room
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                    <p style="color: #999; padding: 2rem; text-align: center;">No rooms available at this time.</p>
+                    {% endif %}
+                </section>
+                
+                <!-- PROPERTY POLICIES (ACCORDION - GOIBIBO STYLE) -->
+                {% if policies_by_category %}
+                <section style="background-color: #fff; padding: 2rem; border-radius: 8px; margin-bottom: 2rem;">
+                    <h2 style="color: #222; font-size: 1.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #FF6B35; padding-bottom: 0.75rem; display: inline-block;">
+                        <i class="fas fa-file-contract" style="color: #FF6B35; margin-right: 0.5rem;"></i>Property Policies
+                    </h2>
+                    
+                    <div class="accordion" id="policiesAccordion" style="border: none;">
+                        {% for category, policies in policies_by_category.items %}
+                        <div class="card" style="border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 0.75rem; overflow: hidden;">
+                            <div class="card-header" style="background-color: #f9f9f9; padding: 0;">
+                                <h5 style="margin: 0;">
+                                    <button class="btn btn-link" 
+                                            type="button" 
+                                            data-toggle="collapse" 
+                                            data-target="#collapse{{ forloop.counter }}" 
+                                            aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" 
+                                            aria-controls="collapse{{ forloop.counter }}"
+                                            style="width: 100%; text-align: left; text-decoration: none; color: #333; padding: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-weight: 600;">
+                                            <i class="{{ category.icon_class }}" style="color: #FF6B35; margin-right: 0.5rem;"></i>
+                                            {{ category.get_category_type_display }}
+                                        </span>
+                                        <i class="fas fa-chevron-down" style="transition: transform 0.3s;"></i>
+                                    </button>
+                                </h5>
+                            </div>
+                            
+                            <div id="collapse{{ forloop.counter }}" 
+                                 class="collapse {% if forloop.first %}show{% endif %}" 
+                                 aria-labelledby="heading{{ forloop.counter }}" 
+                                 data-parent="#policiesAccordion">
+                                <div class="card-body" style="padding: 1.5rem; background-color: #fff; border-top: 1px solid #e0e0e0;">
+                                    {% for policy in policies %}
+                                    <div style="margin-bottom: 1.25rem; {% if not forloop.last %}border-bottom: 1px solid #f0f0f0; padding-bottom: 1rem;{% endif %}">
+                                        <h6 style="color: #222; font-weight: 700; margin: 0 0 0.5rem 0;">
+                                            {% if policy.is_highlighted %}<i class="fas fa-star" style="color: #FF6B35; margin-right: 0.25rem;"></i>{% endif %}
+                                            {{ policy.label }}
+                                        </h6>
+                                        {% if policy.description %}
+                                        <p style="color: #555; margin: 0; line-height: 1.6; font-size: 0.95rem;">{{ policy.description }}</p>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </section>
+                {% endif %}
+                
+                <!-- CANCELLATION POLICY -->
+                <section style="background-color: #fff; padding: 2rem; border-radius: 8px;">
+                    {% include "hotels/includes/cancellation-policy.html" %}
+                </section>
+                
+            </div>
+            
+            <!-- RIGHT COLUMN: STICKY BOOKING WIDGET (MOBILE FRIENDLY) -->
+            <div class="col-md-4">
+                <div style="background-color: #fff; padding: 1.5rem; border-radius: 8px; position: sticky; top: 100px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <h3 style="color: #222; margin-top: 0; margin-bottom: 1rem; font-size: 1.1rem;">Quick Booking</h3>
+                    
+                    <!-- AMENITIES GRID -->
+                    <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid #e0e0e0;">
+                        <h5 style="color: #222; margin-bottom: 1rem; margin-top: 0; font-weight: 600;">Hotel Amenities</h5>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.9rem;">
+                            {% if hotel.has_wifi %}<span style="color: #555;"><i class="fas fa-wifi" style="color: #FF6B35; margin-right: 0.3rem;"></i>WiFi</span>{% endif %}
+                            {% if hotel.has_parking %}<span style="color: #555;"><i class="fas fa-parking" style="color: #FF6B35; margin-right: 0.3rem;"></i>Parking</span>{% endif %}
+                            {% if hotel.has_pool %}<span style="color: #555;"><i class="fas fa-swimmer" style="color: #FF6B35; margin-right: 0.3rem;"></i>Pool</span>{% endif %}
+                            {% if hotel.has_gym %}<span style="color: #555;"><i class="fas fa-dumbbell" style="color: #FF6B35; margin-right: 0.3rem;"></i>Gym</span>{% endif %}
+                            {% if hotel.has_restaurant %}<span style="color: #555;"><i class="fas fa-utensils" style="color: #FF6B35; margin-right: 0.3rem;"></i>Restaurant</span>{% endif %}
+                            {% if hotel.has_spa %}<span style="color: #555;"><i class="fas fa-spa" style="color: #FF6B35; margin-right: 0.3rem;"></i>Spa</span>{% endif %}
+                            {% if hotel.has_ac %}<span style="color: #555;"><i class="fas fa-snowflake" style="color: #FF6B35; margin-right: 0.3rem;"></i>A/C</span>{% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- CHECK-IN / CHECK-OUT -->
+                    <div style="background-color: #f9f9f9; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem;">
+                        <p style="margin: 0; color: #666; font-size: 0.9rem;">
+                            <strong style="color: #222;">Check-in:</strong> {{ hotel.checkin_time|time:"h:i A" }}<br/>
+                            <strong style="color: #222;">Check-out:</strong> {{ hotel.checkout_time|time:"h:i A" }}
+                        </p>
+                    </div>
+                    
+                    <!-- CONTACT BUTTON -->
+                    <button class="btn btn-block" style="background-color: #FF6B35; color: white; padding: 0.75rem; border-radius: 6px; border: none; font-weight: 600; margin-bottom: 1rem; cursor: pointer; transition: background-color 0.3s;"
+                            onmouseover="this.style.backgroundColor='#e05a25';"
+                            onmouseout="this.style.backgroundColor='#FF6B35';">
+                        <i class="fas fa-phone"></i> Call {{ hotel.contact_phone }}
+                    </button>
+                    
+                    <!-- CONTACT EMAIL -->
+                    <p style="color: #666; font-size: 0.9rem; text-align: center;">
+                        <i class="fas fa-envelope"></i> <a href="mailto:{{ hotel.contact_email }}" style="color: #FF6B35; text-decoration: none;">{{ hotel.contact_email }}</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function selectRoomAndScroll(roomId) {
+    // Scroll back to booking widget
+    const bookingWidget = document.querySelector('[name*="room_type"]');
+    if (bookingWidget) {
+        bookingWidget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+</script>
+{% endblock %}

@@ -204,11 +204,11 @@ def finalize_booking_payment(
                     # Record transaction
                     WalletTransaction.objects.create(
                         wallet=wallet,
-                        transaction_type='DEBIT',
+                        transaction_type='debit',
                         amount=wallet_applied,
                         description=f'Payment for booking {booking.booking_id}',
                         booking=booking,
-                        status='SUCCESS'
+                        status='success'
                     )
                     
                     # Store for audit
@@ -268,6 +268,16 @@ def finalize_booking_payment(
                     'mode': payment_mode
                 }
             )
+            payload = {
+                'event': 'booking_confirmed',
+                'booking_id': str(booking.booking_id),
+                'amount': float(total_paid),
+                'wallet': float(wallet_applied),
+                'gateway': float(gateway_amount),
+            }
+            logger.info("[NOTIFICATION_EMAIL] payload=%s", payload)
+            logger.info("[NOTIFICATION_SMS] payload=%s", payload)
+            logger.info("[NOTIFICATION_WHATSAPP] payload=%s", payload)
             
             logger.info(
                 "[PAYMENT_FINALIZE_SUCCESS] booking=%s mode=%s user=%s status=confirmed amount=%.2f wallet=%.2f gateway=%.2f",

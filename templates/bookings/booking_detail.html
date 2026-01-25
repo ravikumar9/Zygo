@@ -43,8 +43,16 @@
                         </tr>
                         {% endif %}
                         <tr>
-                            <td>GST (18%)</td>
-                            <td class="text-end">₹{{ gst_amount|floatformat:"2" }}</td>
+                            <td>
+                                Taxes &amp; Fees
+                                <span class="fees-hint" title="Platform fee 5% + tax slab {{ gst_rate_percent }}% on subtotal">ℹ</span>
+                            </td>
+                            <td class="text-end">₹{{ taxes_and_fees|floatformat:"2" }}</td>
+                        </tr>
+                        <tr class="text-muted small">
+                            <td colspan="2">
+                                Includes platform fee ₹{{ platform_fee|floatformat:"2" }} and tax slab {{ gst_rate_percent }}% applied on subtotal + platform fee.
+                            </td>
                         </tr>
                         <tr class="border-top" style="font-weight: 600;">
                             <td><strong>Total Payable</strong></td>
@@ -91,13 +99,29 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Keep Booking</button>
-                    <form method="post" action="{% url 'bookings:cancel-booking' object.booking_id %}" style="display:inline;">
+                    <form method="post" action="{% url 'bookings:cancel-booking' object.booking_id %}" style="display:inline;" id="cancel-booking-form">
                         {% csrf_token %}
-                        <button type="submit" class="btn btn-danger">Yes, Cancel Booking</button>
+                        <button type="submit" class="btn btn-danger" id="confirm-cancel-btn">Yes, Cancel Booking</button>
                     </form>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    const cancelForm = document.getElementById('cancel-booking-form');
+    if (cancelBtn && cancelForm) {
+        cancelBtn.addEventListener('click', (e) => {
+            cancelBtn.disabled = true;
+            cancelBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cancelling...';
+            cancelForm.submit();
+        });
+    }
+});
+</script>
 {% endblock %}

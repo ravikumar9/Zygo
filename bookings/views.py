@@ -30,6 +30,21 @@ class BookingListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         return Booking.objects.filter(user=self.request.user).order_by('-created_at')
 
+    def get_context_data(self, **kwargs):
+        from bookings.pricing_calculator import calculate_pricing
+        context = super().get_context_data(**kwargs)
+        for booking in context.get('object_list', []):
+            pricing = calculate_pricing(
+                booking=booking,
+                promo_code=booking.promo_code,
+                wallet_apply_amount=None,
+                user=self.request.user,
+            )
+            booking.display_total_payable = pricing['total_payable']
+            booking.display_taxes_and_fees = pricing['taxes_and_fees']
+            booking.gst_rate_percent = int(pricing['gst_rate'] * 100)
+        return context
+
 
 @login_required
 def my_bookings(request):
@@ -42,7 +57,10 @@ class BookingDetailView(LoginRequiredMixin, DetailView):
 
     def get_object(self, queryset=None):
         booking_id = self.kwargs.get('booking_id')
-        return get_object_or_404(Booking, booking_id=booking_id, user=self.request.user)
+        booking = get_object_or_404(Booking, booking_id=booking_id, user=self.request.user)
+        # Enforce expiry on access so UI reflects actual state
+        booking.check_reservation_timeout()
+        return booking
     
     def get_context_data(self, **kwargs):
         from bookings.pricing_calculator import calculate_pricing
@@ -76,22 +94,30 @@ class BookingDetailView(LoginRequiredMixin, DetailView):
             'base_amount': pricing['base_amount'],
             'promo_discount': pricing['promo_discount'],
             'subtotal_after_promo': pricing['subtotal_after_promo'],
+            'platform_fee': pricing['platform_fee'],
+            'gst_rate_percent': int(pricing['gst_rate'] * 100),
             'gst_amount': pricing['gst_amount'],
+            'taxes_and_fees': pricing['taxes_and_fees'],
             'total_payable': pricing['total_payable'],
             'wallet_balance': wallet_balance,
         })
         
         return context
 
-@login_required
+
+
 def booking_confirmation(request, booking_id):
     """Show booking confirmation and proceed to payment.
 
-    Accepts only UUID booking_id and ensures the booking belongs to the user.
-    CRITICAL: User must have email_verified_at (mobile optional/deferred).
-    POST from this page redirects to the payment page.
+    Accepts UUID booking_id. Works for both authenticated and unauthenticated users.
     
-    BLOCKER FIX: If booking is already confirmed, show detail view instead.
+    RULE: Guest booking does NOT require login
+    - Unauthenticated users can complete booking as guests
+    - Login shown as optional upsell (better offers, order history)
+    - Email-verified users see full confirmation page
+    - Guests see minimal confirmation + payment button
+    
+    POST from this page redirects to the payment page.
     """
     from django.contrib import messages
     from django.contrib.messages import get_messages
@@ -100,22 +126,35 @@ def booking_confirmation(request, booking_id):
     from payments.models import Wallet
     
     # Clear any auth/login messages before entering booking flow
-    storage = get_messages(request)
-    storage.used = True
+    if request.user.is_authenticated:
+        storage = get_messages(request)
+        storage.used = True
     
-    # ENFORCE EMAIL VERIFICATION (mobile optional/deferred)
-    if not request.user.email_verified_at:
-        messages.error(request, 'Please verify your email before booking. Check your inbox for OTP.')
-        request.session['pending_user_id'] = request.user.id
-        request.session['pending_email'] = request.user.email
-        request.session['pending_phone'] = getattr(request.user, 'phone', '')
-        return redirect('users:verify-registration-otp')
+    # Get booking (works for both authenticated and unauthenticated)
+    try:
+        booking = get_object_or_404(Booking, booking_id=booking_id)
+    except:
+        messages.error(request, 'Booking not found. Please check your booking ID.')
+        return redirect('hotels:hotel_list')
     
-    booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
-
+    # IMPORTANT: Ensure booking belongs to current user (if authenticated)
+    if request.user.is_authenticated and booking.user and booking.user != request.user:
+        messages.error(request, 'You do not have permission to view this booking.')
+        return redirect('hotels:hotel_list')
+    
+    # EMAIL VERIFICATION: OPTIONAL FOR GUESTS (not required)
+    # If user is authenticated but not email-verified, ask them to verify
+    if request.user.is_authenticated and not request.user.email_verified_at:
+        messages.warning(request, 'Verify your email to unlock exclusive offers and booking history.')
+        # Still allow booking continuation (don't block)
+    
     # BLOCKER FIX: If already confirmed, redirect to detail
     if booking.status == 'confirmed':
-        return redirect('bookings:booking-detail', booking_id=booking.booking_id)
+        if request.user.is_authenticated:
+            return redirect('bookings:booking-detail', booking_id=booking.booking_id)
+        else:
+            # For guests, show confirmation page anyway
+            pass
 
     if booking.check_reservation_timeout():
         messages.error(request, 'Reservation hold expired. Please start a new booking.')
@@ -176,25 +215,84 @@ def booking_confirmation(request, booking_id):
     if request.method == 'POST' and 'proceed_to_payment' in request.POST:
         return redirect(reverse('bookings:booking-payment', kwargs={'booking_id': booking.booking_id}))
 
+    # Build return URL preserving context (dates, room, guests, rooms, meal plan)
+    booking_return_url = None
+    hotel_booking = getattr(booking, 'hotel_details', None)
+    if hotel_booking and getattr(hotel_booking, 'room_type', None):
+        query_parts = [
+            f"checkin={hotel_booking.check_in}",
+            f"checkout={hotel_booking.check_out}",
+            f"room_type={hotel_booking.room_type.id}",
+            f"guests={hotel_booking.number_of_adults}",
+            f"rooms={hotel_booking.number_of_rooms}",
+        ]
+        if hotel_booking.meal_plan:
+            query_parts.append(f"meal_plan_id={hotel_booking.meal_plan.id}")
+        booking_return_url = f"/hotels/{hotel_booking.room_type.hotel_id}/?" + "&".join(query_parts)
+
+    # Derive line items for transparency
+    room_line_amount = pricing['base_amount']
+    meal_plan_total = Decimal('0.00')
+    meal_plan_name = None
+    nights = getattr(hotel_booking, 'total_nights', None) or 0
+    rooms = getattr(hotel_booking, 'number_of_rooms', None) or 0
+    base_room_amount = pricing['base_amount']
+    if hotel_booking and getattr(hotel_booking, 'room_type', None):
+        try:
+            base_room_amount = Decimal(str(hotel_booking.room_type.get_effective_price())) * rooms * nights
+        except Exception:
+            base_room_amount = pricing['base_amount']
+
+    room_line_amount = base_room_amount
+    if hotel_booking and hotel_booking.meal_plan:
+        try:
+            total_plan_price = hotel_booking.meal_plan.calculate_total_price(rooms, nights)
+            meal_plan_total = max(Decimal(str(total_plan_price)) - base_room_amount, Decimal('0.00'))
+        except Exception:
+            meal_plan_total = Decimal('0.00')
+        # CRITICAL FIX: meal_plan is RoomMealPlan object, access .meal_plan.name
+        meal_plan_name = hotel_booking.meal_plan.meal_plan.name if hasattr(hotel_booking.meal_plan, 'meal_plan') else str(hotel_booking.meal_plan)
+
+    # Normalize so room + meal plan equals base amount even after discounts
+    items_sum = room_line_amount + meal_plan_total
+    if items_sum != pricing['base_amount']:
+        room_line_amount = pricing['base_amount'] - meal_plan_total
+
     context = {
         'booking': booking,
         'base_amount': pricing['base_amount'],
         'promo_discount': pricing['promo_discount'],
         'subtotal_after_promo': pricing['subtotal_after_promo'],
+        'platform_fee': pricing['platform_fee'],
+        'gst_rate_percent': int(pricing['gst_rate'] * 100),
         'gst_amount': pricing['gst_amount'],
+        'taxes_and_fees': pricing['taxes_and_fees'],
         'total_payable': pricing['total_payable'],
         'wallet_balance': wallet_balance,
         'promo_code': promo_code,
         'promo_error': promo_error,
+        'booking_return_url': booking_return_url,
+        'room_line_amount': room_line_amount,
+        'meal_plan_total': meal_plan_total,
+        'meal_plan_name': meal_plan_name,
+        'line_nights': nights,
+        'line_rooms': rooms,
     }
     return render(request, 'bookings/confirmation.html', context)
 
 
-@login_required
+
+
 def payment_page(request, booking_id):
     """Render the payment page with a Razorpay order (test-friendly).
 
-    CRITICAL: User must have email_verified_at (mobile optional/deferred).
+    Works for both authenticated and guest users.
+    - Authenticated users can use wallet + other payment methods
+    - Guests can only use direct payment (card/UPI/net banking)
+    
+    RULE: Guest booking does NOT require login
+    Email verification is OPTIONAL (not required)
+    
     If Razorpay credentials are not configured, fall back to a dummy order id so
     the template renders without breaking local flows.
     
@@ -204,21 +302,24 @@ def payment_page(request, booking_id):
     from django.contrib.messages import get_messages
     from django.contrib import messages
     from bookings.pricing_calculator import calculate_pricing
-    storage = get_messages(request)
-    storage.used = True
-    
-    # ENFORCE EMAIL VERIFICATION (mobile optional/deferred)
-    if not request.user.email_verified_at:
-        messages.error(request, 'Please verify your email before booking. Check your inbox for OTP.')
-        request.session['pending_user_id'] = request.user.id
-        request.session['pending_email'] = request.user.email
-        request.session['pending_phone'] = getattr(request.user, 'phone', '')
-        return redirect('users:verify-registration-otp')
+    if request.user.is_authenticated:
+        storage = get_messages(request)
+        storage.used = True
     
     from payments.models import Wallet
     from decimal import Decimal
     
-    booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
+    # Get booking (works for both authenticated and unauthenticated)
+    try:
+        booking = get_object_or_404(Booking, booking_id=booking_id)
+    except:
+        messages.error(request, 'Booking not found.')
+        return redirect('hotels:hotel_list')
+    
+    # Ensure booking belongs to current user (if authenticated)
+    if request.user.is_authenticated and booking.user and booking.user != request.user:
+        messages.error(request, 'You do not have permission to access this booking.')
+        return redirect('hotels:hotel_list')
 
     # HARD GUARD: Block payment if booking is already confirmed/completed (403 Forbidden)
     if booking.status in ['confirmed', 'completed', 'cancelled', 'expired', 'refunded', 'deleted']:
@@ -246,12 +347,22 @@ def payment_page(request, booking_id):
     except Wallet.DoesNotExist:
         pass
 
-    # Check if wallet checkbox is checked (default: unchecked)
-    use_wallet = request.GET.get('use_wallet', 'false') == 'true'
-    if use_wallet and wallet_balance > Decimal('0.00'):
-        wallet_apply_amount = wallet_balance  # Will be capped in calculate_pricing
+    # Default behaviour: auto-apply wallet when available unless explicitly disabled
+    use_wallet_param = request.GET.get('use_wallet')
+    use_wallet = True if (use_wallet_param is None and wallet_balance > Decimal('0.00')) else use_wallet_param == 'true'
 
-    # Calculate unified pricing (ORDER: Base → Promo → GST → Wallet → Final)
+    # First pass: pricing without wallet to know payable
+    pricing_preview = calculate_pricing(
+        booking=booking,
+        promo_code=booking.promo_code,
+        wallet_apply_amount=Decimal('0.00'),
+        user=request.user
+    )
+
+    if use_wallet and wallet_balance > Decimal('0.00'):
+        wallet_apply_amount = min(wallet_balance, pricing_preview['total_payable'])
+
+    # Final pricing with wallet applied if any
     pricing = calculate_pricing(
         booking=booking,
         promo_code=booking.promo_code,
@@ -299,7 +410,10 @@ def payment_page(request, booking_id):
         'base_amount': pricing['base_amount'],
         'promo_discount': pricing['promo_discount'],
         'subtotal_after_promo': pricing['subtotal_after_promo'],
+        'platform_fee': pricing['platform_fee'],
+        'gst_rate_percent': int(pricing['gst_rate'] * 100),
         'gst_amount': pricing['gst_amount'],
+        'taxes_and_fees': pricing['taxes_and_fees'],
         'total_payable': pricing['total_payable'],
         'wallet_balance': wallet_balance,
         'wallet_applied': pricing['wallet_applied'],
@@ -308,6 +422,7 @@ def payment_page(request, booking_id):
         'razorpay_key': razorpay_key,
         'order_id': order_id,
         'use_wallet': use_wallet,
+        'reservation_seconds_left': booking.reservation_seconds_left,  # Timer persistence (property, not method)
     }
     return render(request, 'payments/payment.html', context)
 
@@ -398,6 +513,16 @@ def cancel_booking(request, booking_id):
             logger.info("[BOOKING_CANCELLED] booking=%s old_status=%s new_status=cancelled refund_amount=%.2f refund_mode=%s inventory_released=true",
                         booking.booking_id, booking.status, refund_amount, hotel.refund_mode)
 
+        payload = {
+            'event': 'booking_cancelled',
+            'booking_id': str(booking.booking_id),
+            'refund_amount': float(refund_amount),
+            'refund_mode': hotel.refund_mode,
+        }
+        logger.info("[NOTIFICATION_EMAIL] payload=%s", payload)
+        logger.info("[NOTIFICATION_SMS] payload=%s", payload)
+        logger.info("[NOTIFICATION_WHATSAPP] payload=%s", payload)
+
         messages.success(request, f'Booking cancelled. Refund of ₹{refund_amount} processed to wallet.')
         return redirect('bookings:booking-detail', booking_id=booking.booking_id)
 
@@ -478,30 +603,32 @@ def get_booking_timer(request, booking_id):
     
     try:
         booking = Booking.objects.get(booking_id=booking_id, user=request.user)
-        
-        if booking.status == 'reserved' and booking.expires_at:
+
+        if booking.status in ['reserved', 'payment_pending']:
+            deadline = booking.reservation_deadline
+            if not deadline:
+                return JsonResponse({'status': booking.status, 'remaining_seconds': 0})
+
             now = timezone.now()
-            if booking.expires_at > now:
-                remaining_seconds = int((booking.expires_at - now).total_seconds())
+            if deadline > now:
+                remaining_seconds = int((deadline - now).total_seconds())
                 return JsonResponse({
                     'status': 'active',
-                    'expires_at': booking.expires_at.isoformat(),
+                    'expires_at': deadline.isoformat(),
                     'remaining_seconds': remaining_seconds,
                     'formatted_time': f"{remaining_seconds // 60}:{remaining_seconds % 60:02d}"
                 })
-            else:
-                # Expired
-                booking.status = 'expired'
-                booking.save(update_fields=['status'])
-                return JsonResponse({
-                    'status': 'expired',
-                    'remaining_seconds': 0
-                })
-        
-        return JsonResponse({
-            'status': booking.status,
-            'remaining_seconds': 0
-        })
-    
+
+            # Expired – mark, release inventory, and log
+            booking.status = 'expired'
+            booking.expires_at = deadline
+            booking.save(update_fields=['status', 'expires_at'])
+            from hotels.channel_manager_service import release_inventory_on_failure
+            release_inventory_on_failure(booking)
+            logger.info("[BOOKING_EXPIRED] booking=%s status=expired deadline=%s", booking.booking_id, deadline)
+            return JsonResponse({'status': 'expired', 'remaining_seconds': 0})
+
+        return JsonResponse({'status': booking.status, 'remaining_seconds': 0})
+
     except Booking.DoesNotExist:
         return JsonResponse({'error': 'Booking not found'}, status=404)

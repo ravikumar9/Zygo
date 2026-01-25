@@ -121,16 +121,33 @@ class HotelDetailSerializer(serializers.ModelSerializer):
 
 
 class PricingRequestSerializer(serializers.Serializer):
-    """Serializer for pricing calculation requests"""
+    """Serializer for pricing calculation requests (backend-driven)"""
+
     room_type_id = serializers.IntegerField()
+    meal_plan_id = serializers.IntegerField(required=False, allow_null=True)
     check_in = serializers.DateField()
     check_out = serializers.DateField()
     num_rooms = serializers.IntegerField(default=1, min_value=1)
     discount_code = serializers.CharField(required=False, allow_blank=True)
-    
+    stay_type = serializers.ChoiceField(
+        choices=[('overnight', 'Overnight'), ('hourly', 'Hourly')],
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        default='overnight'
+    )
+    hourly_hours = serializers.IntegerField(required=False, allow_null=True)
+
     def validate(self, data):
-        if data['check_out'] <= data['check_in']:
-            raise serializers.ValidationError("Check-out must be after check-in")
+        if data['stay_type'] == 'hourly':
+            hours = data.get('hourly_hours') or 0
+            if hours not in [6, 12, 24]:
+                raise serializers.ValidationError('Hourly bookings support 6/12/24 hour slots only')
+            # For hourly, tolerate missing checkout by treating it as same-day
+            data['check_out'] = data['check_in']
+        else:
+            if data['check_out'] <= data['check_in']:
+                raise serializers.ValidationError("Check-out must be after check-in")
         return data
 
 
