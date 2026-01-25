@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}My Earnings{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <h1 class="mb-4">Owner Dashboard</h1>
+    
+    {% if error %}
+    <div class="alert alert-warning">{{ error }}</div>
+    {% else %}
+    
+    <!-- Earnings Summary -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h6>Total Bookings</h6>
+                    <h2>{{ total_bookings }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6>Gross Earnings</h6>
+                    <h2>₹{{ total_gross|floatformat:2 }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h6>Pending Payout</h6>
+                    <h2>₹{{ pending_payouts|floatformat:2 }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h6>Settled</h6>
+                    <h2>₹{{ settled_payouts|floatformat:2 }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Properties -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>My Properties</h5>
+        </div>
+        <div class="card-body">
+            {% for property in owned_properties %}
+            <span class="badge bg-secondary me-2">{{ property.name }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Recent Payouts -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Recent Payouts</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Property</th>
+                            <th>Booking</th>
+                            <th>Gross</th>
+                            <th>Net Payable</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payout in recent_payouts %}
+                        <tr>
+                            <td>{{ payout.created_at|date:"Y-m-d" }}</td>
+                            <td>{{ payout.property.name }}</td>
+                            <td>{{ payout.booking.booking_id }}</td>
+                            <td>₹{{ payout.gross_booking_value|floatformat:2 }}</td>
+                            <td>₹{{ payout.net_payable_to_owner|floatformat:2 }}</td>
+                            <td>
+                                <span class="badge bg-{% if payout.settlement_status == 'settled' %}success{% elif payout.settlement_status == 'pending' %}warning{% else %}secondary{% endif %}">
+                                    {{ payout.settlement_status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center">No payouts yet</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bookings -->
+    <div class="card">
+        <div class="card-header">
+            <h5>Recent Bookings</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Booking ID</th>
+                            <th>Property</th>
+                            <th>Date</th>
+                            <th>Customer</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Invoice</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in bookings %}
+                        <tr>
+                            <td>{{ booking.booking_id }}</td>
+                            <td>{{ booking.hotel_booking.room_type.hotel.name }}</td>
+                            <td>{{ booking.created_at|date:"Y-m-d" }}</td>
+                            <td>{{ booking.customer_name }}</td>
+                            <td>₹{{ booking.total_amount|floatformat:2 }}</td>
+                            <td>
+                                <span class="badge bg-{% if booking.status == 'confirmed' %}success{% else %}warning{% endif %}">
+                                    {{ booking.status }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if booking.invoice %}
+                                <a href="{% url 'finance:download_invoice' booking.invoice.id %}" class="btn btn-sm btn-primary">Download</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">No bookings yet</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    {% endif %}
+</div>
+{% endblock %}

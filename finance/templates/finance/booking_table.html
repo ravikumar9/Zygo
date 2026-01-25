@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Booking Table{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <h1 class="mb-4">All Bookings</h1>
+    
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">From Date</label>
+                    <input type="date" name="date_from" class="form-control" value="{{ filters.date_from }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">To Date</label>
+                    <input type="date" name="date_to" class="form-control" value="{{ filters.date_to }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Property</label>
+                    <select name="property" class="form-control">
+                        <option value="">All</option>
+                        {% for prop in properties %}
+                        <option value="{{ prop.id }}">{{ prop.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-control">
+                        <option value="">All</option>
+                        <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                    <a href="{% url 'finance:booking_table' %}" class="btn btn-secondary">Reset</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Booking ID</th>
+                            <th>Customer</th>
+                            <th>Email</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in bookings %}
+                        <tr>
+                            <td>{{ booking.booking_id }}</td>
+                            <td>{{ booking.customer_name }}</td>
+                            <td>{{ booking.customer_email }}</td>
+                            <td>{{ booking.created_at|date:"Y-m-d" }}</td>
+                            <td>
+                                <span class="badge bg-{% if booking.status == 'confirmed' %}success{% elif booking.status == 'cancelled' %}danger{% else %}warning{% endif %}">
+                                    {{ booking.status }}
+                                </span>
+                            </td>
+                            <td>₹{{ booking.total_amount }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center">No bookings</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

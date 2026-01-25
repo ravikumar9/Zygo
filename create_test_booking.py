@@ -18,8 +18,14 @@ from buses.models import BoardingPoint, DroppingPoint
 
 User = get_user_model()
 
-# Get admin user
-admin = User.objects.get(email='admin@example.com')
+# Get admin user (robust fallback)
+admin = (
+    User.objects.filter(email='admin@example.com').first()
+    or User.objects.filter(username='admin').first()
+    or User.objects.filter(email='admin@test.com').first()
+)
+if not admin:
+    admin = User.objects.create_user(username='admin', email='admin@test.com', password='admin123')
 
 # Get bus, route, schedule
 bus = Bus.objects.get(id=1)

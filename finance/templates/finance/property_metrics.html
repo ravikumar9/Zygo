@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Property Metrics{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <h1 class="mb-4">Property-Level Metrics</h1>
+    
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Property Name</th>
+                            <th>Total Bookings</th>
+                            <th>Confirmed</th>
+                            <th>Revenue</th>
+                            <th>Service Fee</th>
+                            <th>Total Payout</th>
+                            <th>Pending Payout</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for data in property_data %}
+                        <tr>
+                            <td>{{ data.hotel.name }}</td>
+                            <td>{{ data.hotel.total_bookings }}</td>
+                            <td>{{ data.hotel.confirmed_bookings }}</td>
+                            <td>₹{{ data.revenue|floatformat:2 }}</td>
+                            <td>₹{{ data.service_fee|floatformat:2 }}</td>
+                            <td>₹{{ data.total_payout|floatformat:2 }}</td>
+                            <td>₹{{ data.pending_payout|floatformat:2 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">No properties found</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

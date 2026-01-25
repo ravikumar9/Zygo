@@ -13,6 +13,12 @@ from django.utils import timezone
 from datetime import date, timedelta
 import json
 
+# Safely import optional test forms (may not be available in all contexts)
+try:
+    from users.forms import UserRegistrationForm
+except ImportError:
+    UserRegistrationForm = None
+
 print("\n" + "="*80)
 print("QA VERIFICATION TEST SUITE - GoExplorer 10 Fixes")
 print("="*80)
@@ -38,16 +44,19 @@ print("\n[TEST 1] Registration Mobile Validation")
 print("-" * 80)
 try:
     from users.views import RegisterView
-    from users.forms import UserRegistrationForm
     
-    # Test exactly 10 digits required
-    form = UserRegistrationForm(data={
-        'email': 'test_10digit@example.com',
-        'phone': '9876543210',  # Valid 10 digits
-        'password': 'SecurePass123!',
-        'password_confirm': 'SecurePass123!',
-        'terms': True
-    })
+    if UserRegistrationForm is None:
+        print("Skipping: UserRegistrationForm not available")
+        results["1_registration_mobile_validation"] = False
+    else:
+        # Test exactly 10 digits required
+        form = UserRegistrationForm(data={
+            'email': 'test_10digit@example.com',
+            'phone': '9876543210',  # Valid 10 digits
+            'password': 'SecurePass123!',
+            'password_confirm': 'SecurePass123!',
+            'terms': True
+        })
     
     if form.is_valid():
         print("✓ PASS: 10-digit validation accepts exactly 10 digits")
