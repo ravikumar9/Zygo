@@ -8,6 +8,7 @@ from decimal import Decimal
 from datetime import datetime, date
 from core.models import TimeStampedModel, City
 from core.soft_delete import SoftDeleteMixin, SoftDeleteManager, AllObjectsManager
+from django.core.exceptions import ValidationError
 
 
 class MealPlan(TimeStampedModel):
@@ -96,6 +97,11 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
         ('homestay', 'Homestay'),
         ('lodge', 'Lodge / Residency / Cottage'),
     ]
+
+    PRICING_STRATEGIES = [
+        ('SMART_NUDGE', 'Smart Nudge (Owner Recommendations)'),
+        ('NEGOTIATION_ONLY', 'Negotiation Only (Premium / Brand-Sensitive)'),
+    ]
     
     name = models.CharField(max_length=200)
     description = models.TextField()
@@ -109,6 +115,12 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
         choices=PROPERTY_TYPES,
         default='hotel',
         help_text="Property category (hotel/resort/villa/homestay/lodge)"
+    )
+    pricing_strategy = models.CharField(
+        max_length=20,
+        choices=PRICING_STRATEGIES,
+        default='SMART_NUDGE',
+        help_text="Pricing control strategy. SMART_NUDGE for 1–3★ & budget listings. NEGOTIATION_ONLY for premium/brand-sensitive listings."
     )
     property_rules = models.TextField(blank=True, help_text="House rules, check-in policies, ID requirements")
     amenities_rules = models.TextField(blank=True, help_text="Amenity details and usage rules shown as a paragraph")
@@ -205,6 +217,24 @@ class Hotel(SoftDeleteMixin, TimeStampedModel):
     
     def __str__(self):
         return f"{self.name} - {self.city.name}"
+
+    def get_pricing_strategy(self):
+        """
+        Resolve pricing strategy with safe defaults.
+
+        Defaults:
+        - 4★/5★ → NEGOTIATION_ONLY
+        - 1–3★, homestay/villa → SMART_NUDGE
+        """
+        if self.pricing_strategy == 'NEGOTIATION_ONLY':
+            return 'NEGOTIATION_ONLY'
+        if self.pricing_strategy == 'SMART_NUDGE':
+            if self.star_rating and self.star_rating >= 4:
+                return 'NEGOTIATION_ONLY'
+            return 'SMART_NUDGE'
+        if self.star_rating and self.star_rating >= 4:
+            return 'NEGOTIATION_ONLY'
+        return 'SMART_NUDGE'
 
     # Image helpers
     def _image_exists(self, image_field):
@@ -465,6 +495,31 @@ class RoomType(TimeStampedModel):
     )
     
     base_price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # Phase 2.7.3 — Revenue Protection & Pricing Safety Fields
+    cost_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Supplier/cost price — used for floor price calculations"
+    )
+    min_margin_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Minimum profit margin % (if set, overrides global config)"
+    )
+    min_safe_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text="Absolute minimum safe price (if set, overrides cost-based calculation)"
+    )
 
     # Hourly stays support (Goibibo-style)
     supports_hourly = models.BooleanField(
@@ -1052,3 +1107,1292 @@ class RoomBlock(TimeStampedModel):
             return False, f"Room unavailable: {reason} ({block.blocked_from} to {block.blocked_to})"
         
         return True, ""
+
+
+class CompetitorPriceSnapshot(TimeStampedModel):
+    """Logged-out competitor price capture with evidence for auditability."""
+
+    SOURCE_CHANNELS = [
+        ('desktop_web', 'Desktop Web'),
+        ('mobile_web', 'Mobile Web'),
+        ('android', 'Android'),
+        ('ios', 'iOS'),
+    ]
+
+    hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name='competitor_price_snapshots')
+    source_name = models.CharField(max_length=100, help_text="Competitor brand/source name")
+    source_url = models.URLField(help_text="Public, logged-out URL used for capture")
+    source_channel = models.CharField(max_length=20, choices=SOURCE_CHANNELS, default='desktop_web')
+    check_in_date = models.DateField()
+    check_out_date = models.DateField()
+    room_name = models.CharField(max_length=150, help_text="Visible room/plan name from competitor page")
+    occupancy = models.PositiveIntegerField(default=2, help_text="Number of guests covered by the price")
+    total_price = models.DecimalField(max_digits=12, decimal_places=2, help_text="All-in competitor price")
+    currency = models.CharField(max_length=5, default='INR')
+    includes_tax = models.BooleanField(default=True, help_text="Whether captured price is tax-inclusive")
+    evidence_url = models.URLField(help_text="Immutable evidence link (screenshot/PDF) stored in logged-out context")
+    evidence_storage_path = models.CharField(max_length=255, blank=True, help_text="Internal storage path for evidence")
+    playwright_trace_url = models.URLField(blank=True, help_text="Trace or HAR from headed Playwright run")
+    raw_payload = models.JSONField(default=dict, blank=True, help_text="Structured capture payload for replay")
+    source_requires_login = models.BooleanField(
+        default=False,
+        help_text="Flag capture as invalid if it required authentication (must stay False)",
+    )
+    is_eep = models.BooleanField(default=False, help_text="Explicit Exclusive/Early booking plan captured")
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['hotel', 'check_in_date', 'check_out_date']),
+            models.Index(fields=['source_name', 'created_at']),
+        ]
+
+    def clean(self):
+        if self.source_requires_login:
+            raise ValidationError("Competitor capture must be logged-out only (source_requires_login cannot be True).")
+        if not self.evidence_url:
+            raise ValidationError("Evidence URL is required for competitor price snapshots.")
+        if self.check_out_date <= self.check_in_date:
+            raise ValidationError("Check-out must be after check-in for competitor snapshot.")
+
+    @property
+    def has_evidence(self) -> bool:
+        return bool(self.evidence_url)
+
+
+class PricingDecisionAudit(TimeStampedModel):
+    """Audit log for competitive pricing decisions with guardrails."""
+
+    DECISION_CHOICES = [
+        ('MATCH', 'Match competitor'),
+        ('UNDERCUT', 'Undercut competitor'),
+        ('HOLD', 'Hold price'),
+        ('REJECT', 'Reject signal'),
+        ('BLOCKED', 'Blocked by guardrail'),
+    ]
+
+    hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, related_name='pricing_decision_audits')
+    snapshot = models.ForeignKey(
+        CompetitorPriceSnapshot,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pricing_audits'
+    )
+    eep = models.ForeignKey(
+        'hotels.EstimatedEffectivePrice',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pricing_audits'
+    )
+    decision = models.CharField(max_length=20, choices=DECISION_CHOICES)
+    baseline_price = models.DecimalField(max_digits=12, decimal_places=2, help_text="Current GoExplorer all-in price")
+    competitor_price = models.DecimalField(max_digits=12, decimal_places=2, help_text="Competitor all-in price considered")
+    final_price = models.DecimalField(max_digits=12, decimal_places=2, help_text="Price decided after guardrails")
+    margin_before_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        help_text="Margin % before decision"
+    )
+    margin_after_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        help_text="Margin % after decision",
+    )
+    rule_applied = models.CharField(max_length=120, help_text="Rule or policy that produced this decision")
+    notes = models.TextField(blank=True)
+    evidence_url = models.URLField(blank=True, help_text="Evidence URL used at publish time (usually snapshot's evidence)")
+    publish_block_reason = models.CharField(max_length=255, blank=True, help_text="If blocked, why")
+    playwright_run_id = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text="Playwright test run ID for evidence linkage"
+    )
+    cooldown_expires_at = models.DateTimeField(null=True, blank=True)
+    enforced_soft_coupon_only = models.BooleanField(default=True)
+    coupon_generated = models.ForeignKey(
+        'core.PromoCode',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pricing_audits_generated'
+    )
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pricing_decision_audits_created'
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['hotel', 'created_at']),
+            models.Index(fields=['decision', 'created_at']),
+        ]
+
+    @property
+    def is_publishable(self) -> bool:
+        return bool(self.evidence_url) and self.decision in {'MATCH', 'UNDERCUT', 'HOLD'} and not self.publish_block_reason
+
+
+class CompetitorDiscountBandConfig(TimeStampedModel):
+    """Configurable discount bands per competitor platform."""
+
+    PLATFORM_CHOICES = [
+        ('agoda', 'Agoda'),
+        ('mmt', 'MMT'),
+        ('goibibo', 'Goibibo'),
+        ('other', 'Other'),
+    ]
+
+    platform = models.CharField(max_length=50, choices=PLATFORM_CHOICES, unique=True, db_index=True)
+    min_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Minimum expected discount (e.g., 8%)"
+    )
+    max_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Maximum expected discount (e.g., 15%)"
+    )
+    enabled = models.BooleanField(default=True, help_text="Whether to use this band for EEP computation")
+    confidence_weight = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('1.0'),
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text="Weight for confidence scoring if multiple sources exist"
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='discount_band_updates'
+    )
+
+    class Meta:
+        verbose_name = 'Competitor Discount Band Config'
+        verbose_name_plural = 'Competitor Discount Band Configs'
+        ordering = ['platform']
+
+    def __str__(self):
+        return f"{self.get_platform_display()}: {self.min_percent}% - {self.max_percent}%"
+
+    def clean(self):
+        if self.max_percent < self.min_percent:
+            raise ValidationError("Maximum discount must be >= minimum discount")
+
+
+class EstimatedEffectivePrice(TimeStampedModel):
+    """Computed EEP from competitor snapshot using discount band config."""
+
+    snapshot = models.ForeignKey(
+        CompetitorPriceSnapshot,
+        on_delete=models.CASCADE,
+        related_name='estimated_effective_prices'
+    )
+    platform = models.CharField(max_length=50, help_text="Platform name (Agoda, MMT, Goibibo, etc.)")
+    band_config = models.ForeignKey(
+        CompetitorDiscountBandConfig,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='computed_eeps'
+    )
+    public_price = models.DecimalField(max_digits=12, decimal_places=2, help_text="Public price from snapshot")
+    discount_band_min = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        help_text="Minimum discount % used"
+    )
+    discount_band_max = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        help_text="Maximum discount % used"
+    )
+    discount_factor_used = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        help_text="Actual discount factor applied (e.g., 0.10 for 10%)"
+    )
+    eep_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Computed EEP = public_price × (1 - discount_factor_used)"
+    )
+    confidence_score = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Confidence % (0-100); <50% = unreliable"
+    )
+    ttl_expires_at = models.DateTimeField(help_text="EEP expires after this time (default: 30 min from creation)")
+    screenshot_path = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Reference to snapshot's evidence screenshot"
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['snapshot', 'platform']),
+            models.Index(fields=['ttl_expires_at']),
+            models.Index(fields=['confidence_score']),
+        ]
+
+    def __str__(self):
+        return f"EEP {self.platform}: ₹{self.eep_price} (confidence: {self.confidence_score}%)"
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.ttl_expires_at
+
+    @property
+    def is_reliable(self) -> bool:
+        return self.confidence_score >= Decimal('50') and not self.is_expired
+
+
+# ============================================================================
+# TRACK B: INVENTORY-AWARE PRICING LOCK
+# ============================================================================
+
+class RoomInventoryPriceLock(TimeStampedModel):
+    """TRACK B: Lock pricing for inventory units during booking flow
+    
+    Purpose: Prevent price changes after checkout hold is created
+    Frozen once: Hold created → price + coupon locked for that unit
+    Blocks: repricing, coupon changes, band re-eval
+    """
+    room = models.ForeignKey(
+        'RoomType',
+        on_delete=models.CASCADE,
+        related_name='price_locks'
+    )
+    check_in_date = models.DateField()
+    check_out_date = models.DateField()
+    guest_count = models.PositiveIntegerField(default=2)
+    
+    locked_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Frozen price for this unit during hold"
+    )
+    locked_coupon_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="AUTO-SAVE-* if coupon applied"
+    )
+    locked_coupon_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text="Discount amount if coupon locked"
+    )
+    
+    lock_reason = models.CharField(
+        max_length=50,
+        choices=[
+            ('hold_created', 'Room Hold Created'),
+            ('checkout_initiated', 'Checkout Initiated'),
+            ('manual_override', 'Admin Override'),
+        ],
+        default='hold_created'
+    )
+    lock_timestamp = models.DateTimeField(auto_now_add=True)
+    locked_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='room_locks_created'
+    )
+    locked_audit_id = models.ForeignKey(
+        'PricingDecisionAudit',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Which pricing decision locked this price"
+    )
+    
+    is_active = models.BooleanField(default=True, help_text="Lock remains active during hold")
+    unlock_reason = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Why lock was released (e.g., 'booking_completed', 'hold_expired')"
+    )
+    unlocked_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['room', 'check_in_date', 'is_active']),
+            models.Index(fields=['is_active', 'unlocked_at']),
+        ]
+        unique_together = ('room', 'check_in_date', 'check_out_date', 'guest_count', 'lock_timestamp')
+    
+    def __str__(self):
+        return f"Lock: {self.room.name} {self.check_in_date}–{self.check_out_date} @ ₹{self.locked_price}"
+
+
+# ============================================================================
+# TRACK C: DEMAND & PRICE WAR PROTECTION
+# ============================================================================
+
+class PriceWarAlert(TimeStampedModel):
+    """TRACK C: Detect competitor price oscillation & protect margin
+    
+    Purpose: Stop GoExplorer from chasing irrational competitors
+    Trigger: >3 price changes in 30 mins = price war
+    Response: Disable coupons, lock price, highlight value
+    """
+    hotel = models.ForeignKey(
+        'Hotel',
+        on_delete=models.CASCADE,
+        related_name='price_war_alerts'
+    )
+    
+    # Oscillation tracking
+    snapshot_count_30min = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of distinct competitor price snapshots in last 30 mins"
+    )
+    oscillation_detected = models.BooleanField(
+        default=False,
+        help_text="True if >3 changes detected"
+    )
+    oscillation_detected_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When price war was detected"
+    )
+    
+    # Response
+    RESPONSE_CHOICES = [
+        ('disabled_coupons', 'Coupons Disabled'),
+        ('locked_price', 'Price Locked'),
+        ('value_mode', 'Value Highlight Mode'),
+        ('hold', 'Price Hold (Manual Review)'),
+        ('resolved', 'Oscillation Resolved'),
+    ]
+    response_action = models.CharField(
+        max_length=50,
+        choices=RESPONSE_CHOICES,
+        default='disabled_coupons'
+    )
+    response_triggered_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When auto-response was applied"
+    )
+    
+    # Alert metadata
+    platform_source = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Which platform detected (e.g., 'agoda', 'mmt')"
+    )
+    price_range_min = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Min price in 30-min window"
+    )
+    price_range_max = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Max price in 30-min window"
+    )
+    volatility_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="(max - min) / min * 100"
+    )
+    
+    # Admin response
+    admin_reviewed = models.BooleanField(default=False)
+    admin_review_notes = models.TextField(blank=True)
+    admin_override = models.CharField(
+        max_length=50,
+        blank=True,
+        choices=[
+            ('resume_coupons', 'Resume Coupons'),
+            ('extend_hold', 'Extend Price Hold'),
+            ('escalate', 'Escalate to Management'),
+        ]
+    )
+    
+    # Resolution
+    is_resolved = models.BooleanField(default=False)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_reason = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Why was the price war resolved (oscillation stopped, manual override, etc.)"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['hotel', 'oscillation_detected']),
+            models.Index(fields=['is_resolved', 'created_at']),
+        ]
+    
+    def __str__(self):
+        status = "🔴 ACTIVE" if self.oscillation_detected and not self.is_resolved else "✅ RESOLVED"
+        return f"Price War {status}: {self.hotel.name} ({self.volatility_percent}% swing)"
+
+
+# ============================================================================
+# TRACK D: COUPON INTELLIGENCE & CANNIBALIZATION MONITOR
+# ============================================================================
+
+class CouponCannibalizationMonitor(TimeStampedModel):
+    """TRACK D: Track coupon impact on conversion & margin
+    
+    Purpose: Monitor coupon usage patterns, auto-adjust caps if harmful
+    Tracks: coupon vs non-coupon bookings, margin delta, conversion lift
+    """
+    hotel = models.ForeignKey(
+        'Hotel',
+        on_delete=models.CASCADE,
+        related_name='coupon_monitors'
+    )
+    
+    # Window (usually 24h or 7d)
+    window_start = models.DateTimeField(help_text="Start of monitoring window")
+    window_end = models.DateTimeField(help_text="End of monitoring window")
+    window_type = models.CharField(
+        max_length=20,
+        choices=[('daily', '24h'), ('weekly', '7d'), ('monthly', '30d')],
+        default='daily'
+    )
+    
+    # Coupon bookings
+    coupon_bookings_count = models.PositiveIntegerField(default=0)
+    coupon_bookings_revenue = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    coupon_bookings_avg_margin_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="Average margin % on bookings with coupons"
+    )
+    coupon_total_discount_given = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        help_text="Total discount amount across all coupon bookings"
+    )
+    
+    # Non-coupon bookings (baseline)
+    non_coupon_bookings_count = models.PositiveIntegerField(default=0)
+    non_coupon_bookings_revenue = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    non_coupon_bookings_avg_margin_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="Average margin % on bookings WITHOUT coupons"
+    )
+    
+    # Conversion impact
+    coupon_conversion_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="(coupon_bookings / sessions_with_coupon_shown) * 100"
+    )
+    non_coupon_conversion_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="(non_coupon_bookings / sessions_without_coupon_shown) * 100"
+    )
+    conversion_lift_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="(coupon_cr - non_coupon_cr) / non_coupon_cr * 100; negative = cannibalization"
+    )
+    
+    # Cannibalization flag
+    cannibalization_detected = models.BooleanField(
+        default=False,
+        help_text="True if margin loss exceeds conversion gain"
+    )
+    cannibalization_severity = models.CharField(
+        max_length=20,
+        choices=[('low', 'Low'), ('medium', 'Medium'), ('high', 'High'), ('critical', 'Critical')],
+        null=True,
+        blank=True
+    )
+    
+    # Auto-adjustment action
+    ADJUSTMENT_CHOICES = [
+        ('no_change', 'No Adjustment'),
+        ('reduce_cap', 'Reduced Cap'),
+        ('disable_per_hotel', 'Disabled for Hotel'),
+        ('extend_ttl_warning', 'Extended TTL Warning'),
+    ]
+    recommended_action = models.CharField(
+        max_length=50,
+        choices=ADJUSTMENT_CHOICES,
+        default='no_change'
+    )
+    action_applied = models.BooleanField(default=False)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    
+    # New cap (if reduced)
+    new_cap_flat = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Reduced flat cap if adjustment applied (default ₹500 → ?)"
+    )
+    new_cap_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Reduced percentage cap if adjustment applied (default 5% → ?)"
+    )
+    
+    # Report
+    report_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Full analysis report"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['hotel', 'window_start']),
+            models.Index(fields=['cannibalization_detected']),
+        ]
+        unique_together = ('hotel', 'window_start', 'window_type')
+    
+    def __str__(self):
+        status = "⚠️  CANNIBAL" if self.cannibalization_detected else "✅ HEALTHY"
+        return f"Coupon Monitor {status}: {self.hotel.name} ({self.conversion_lift_percent:+.1f}% lift)"
+
+
+# ============================================================
+# PHASE 2.7.3 — REVENUE PROTECTION & PRICING SAFETY LAYER
+# ============================================================
+
+class PricingSafetyConfig(TimeStampedModel):
+    """Singleton configuration for pricing safety guardrails
+    
+    This is the master control panel for all pricing safety rules.
+    Only one record should exist (enforced via singleton pattern).
+    """
+    
+    # Global floor pricing
+    global_min_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('100.00'),
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text="Global minimum price for any room (fallback)"
+    )
+    global_min_margin_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('5.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Global minimum profit margin % (if cost_price is set)"
+    )
+    absolute_min_price_hard_stop = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('50.00'),
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text="ABSOLUTE MINIMUM — Never allow prices below this (KILL switch)"
+    )
+    
+    # Competitor price sanity thresholds
+    competitor_drop_threshold_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('85.00'),
+        validators=[MinValueValidator(Decimal('0.00')), MaxValueValidator(Decimal('100.00'))],
+        help_text="Flag competitor prices dropping >X% from baseline"
+    )
+    competitor_hard_reject_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('95.00'),
+        validators=[MinValueValidator(Decimal('0.00')), MaxValueValidator(Decimal('100.00'))],
+        help_text="REJECT competitor prices dropping >X% (likely data error)"
+    )
+    competitor_floor_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.65'),
+        validators=[MinValueValidator(Decimal('0.01')), MaxValueValidator(Decimal('2.00'))],
+        help_text="Reject competitor prices < X × 7-day median (e.g., 0.65 = 65%)"
+    )
+    
+    # Circuit breaker settings
+    circuit_breaker_window_minutes = models.IntegerField(
+        default=10,
+        validators=[MinValueValidator(1)],
+        help_text="Time window for anomaly detection (minutes)"
+    )
+    circuit_breaker_trigger_count = models.IntegerField(
+        default=5,
+        validators=[MinValueValidator(1)],
+        help_text="Number of anomalies to trip circuit breaker"
+    )
+    
+    # Price velocity guards (rate of change limits)
+    velocity_max_drop_percent_per_hour = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('35.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Max allowed price drop per hour (%)"
+    )
+    velocity_max_rise_percent_per_hour = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('40.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Max allowed price rise per hour (%)"
+    )
+    
+    # Master kill switch
+    pricing_automation_enabled = models.BooleanField(
+        default=True,
+        help_text="Master switch: disable to use safe fallback prices only"
+    )
+    
+    # Phase 2.7.3.1 — Shadow Mode for Risk Observation
+    SAFETY_MODES = [
+        ('SHADOW', 'Shadow Mode - Observe Without Blocking'),
+        ('ENFORCE', 'Enforce Mode - Block Unsafe Prices'),
+        ('OFF', 'Off - No Safety Checks'),
+    ]
+    
+    pricing_safety_mode = models.CharField(
+        max_length=20,
+        choices=SAFETY_MODES,
+        default='SHADOW',
+        help_text="SHADOW: Log would-blocks without blocking | ENFORCE: Block unsafe prices | OFF: Disable all checks"
+    )
+    
+    shadow_mode_enabled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When shadow mode was started (for risk observation period)"
+    )
+    
+    # Metadata
+    last_modified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Admin who last modified this config"
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Admin notes for why settings were changed"
+    )
+    
+    class Meta:
+        verbose_name = "Pricing Safety Configuration"
+        verbose_name_plural = "Pricing Safety Configuration"
+    
+    def save(self, *args, **kwargs):
+        """Enforce singleton pattern"""
+        if not self.pk and PricingSafetyConfig.objects.exists():
+            raise ValidationError("Only one PricingSafetyConfig instance allowed (singleton)")
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_config(cls):
+        """Get singleton instance (create with defaults if missing)"""
+        config, created = cls.objects.get_or_create(pk=1)
+        return config
+    
+    def __str__(self):
+        status = "🟢 ENABLED" if self.pricing_automation_enabled else "🔴 DISABLED"
+        return f"Pricing Safety Config {status}"
+
+
+class PricingCircuitState(TimeStampedModel):
+    """Circuit breaker state tracker (per room type or global)
+    
+    Tracks whether pricing automation is currently tripped due to anomalies.
+    """
+    
+    room_type = models.ForeignKey(
+        'RoomType',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Specific room type (null = global circuit)"
+    )
+    
+    is_tripped = models.BooleanField(
+        default=False,
+        help_text="True if circuit breaker is currently tripped"
+    )
+    tripped_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When circuit breaker was tripped"
+    )
+    reason = models.TextField(
+        blank=True,
+        help_text="Why circuit breaker tripped"
+    )
+    safe_fallback_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Safe price to use while circuit is tripped"
+    )
+    
+    # Auto-recovery
+    auto_reset_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When circuit breaker will auto-reset (if configured)"
+    )
+    manual_reset_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Admin who manually reset the circuit"
+    )
+    
+    class Meta:
+        verbose_name = "Pricing Circuit State"
+        verbose_name_plural = "Pricing Circuit States"
+        indexes = [
+            models.Index(fields=['is_tripped']),
+            models.Index(fields=['room_type', 'is_tripped']),
+        ]
+    
+    def __str__(self):
+        target = f"Room {self.room_type_id}" if self.room_type else "Global"
+        status = "🔴 TRIPPED" if self.is_tripped else "🟢 OK"
+        return f"Circuit {target}: {status}"
+
+
+class PricingSafetyEvent(TimeStampedModel):
+    """Append-only audit log for all pricing safety actions
+    
+    Immutable record of every time a safety guard blocked/modified a price.
+    """
+    
+    EVENT_TYPES = [
+        ('FLOOR_BLOCK', 'Price Below Floor — Blocked'),
+        ('COMPETITOR_REJECT', 'Competitor Price Rejected — Sanity Failed'),
+        ('CIRCUIT_TRIP', 'Circuit Breaker Tripped — Too Many Anomalies'),
+        ('ADMIN_KILL', 'Admin Kill Switch Activated'),
+        ('VELOCITY_BLOCK', 'Price Velocity Exceeded — Blocked'),
+        ('ABSOLUTE_KILL_BLOCK', 'Absolute Minimum Violated — HARD STOP'),
+        ('SAFE_FALLBACK_USED', 'Safe Fallback Price Used'),
+        ('SANITY_WARNING', 'Competitor Price Warning — Not Blocked'),
+        ('SHADOW_FLOOR_BLOCK', 'Shadow: Would Block — Price Below Floor'),
+        ('SHADOW_COMPETITOR_REJECT', 'Shadow: Would Block — Competitor Price Failed'),
+        ('SHADOW_VELOCITY_BLOCK', 'Shadow: Would Block — Velocity Exceeded'),
+        ('SHADOW_ABSOLUTE_KILL', 'Shadow: Would Block — Absolute Minimum'),
+        ('SHADOW_CIRCUIT_TRIP', 'Shadow: Would Block — Circuit Breaker'),
+        ('OWNER_NEGOTIATION_OPPORTUNITY', 'Owner: Negotiation Opportunity Generated'),
+        ('OWNER_NEGOTIATION_PROPOSED', 'Owner: Negotiation Proposed'),
+        ('OWNER_NEGOTIATION_COUNTERED', 'Owner: Negotiation Countered'),
+        ('OWNER_NEGOTIATION_ACCEPTED', 'Owner: Negotiation Accepted'),
+        ('OWNER_NEGOTIATION_REJECTED', 'Owner: Negotiation Rejected'),
+        ('OWNER_INCENTIVE_GRANTED', 'Owner: Incentive Granted'),
+    ]
+    
+    event_type = models.CharField(
+        max_length=30,
+        choices=EVENT_TYPES,
+        db_index=True,
+        help_text="Type of safety event"
+    )
+    
+    # What was affected
+    room_type = models.ForeignKey(
+        'RoomType',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Room type involved (null if global event)"
+    )
+    hotel = models.ForeignKey(
+        'Hotel',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Hotel involved (denormalized for fast queries)"
+    )
+    
+    # Price data
+    observed_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Price that triggered the event"
+    )
+    safe_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Safe price used instead (if applicable)"
+    )
+    floor_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Calculated floor price at time of event"
+    )
+    
+    # Context
+    reason = models.TextField(
+        help_text="Human-readable explanation"
+    )
+    metadata_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional context (thresholds, calculations, etc.)"
+    )
+    
+    # Traceability
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Admin who triggered the event (if manual)"
+    )
+    source = models.CharField(
+        max_length=50,
+        default='system',
+        help_text="Event source (system, admin, api, booking_flow, etc.)"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['event_type', '-created_at']),
+            models.Index(fields=['room_type', '-created_at']),
+            models.Index(fields=['hotel', '-created_at']),
+            models.Index(fields=['-created_at']),
+        ]
+        verbose_name = "Pricing Safety Event"
+        verbose_name_plural = "Pricing Safety Events"
+    
+    def __str__(self):
+        return f"{self.get_event_type_display()} @ {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+
+class ShadowRiskEvent(TimeStampedModel):
+    """
+    Phase 2.7.3.1 — Shadow Mode Risk Observation
+    
+    Tracks "would have blocked" events during shadow mode observation period.
+    Enables risk assessment before enforcement mode is enabled.
+    """
+    
+    RISK_CATEGORIES = [
+        ('FLOOR_RISK', 'Would-Block: Below Cost Floor'),
+        ('ABSOLUTE_RISK', 'Would-Block: Below Absolute Minimum'),
+        ('COMPETITOR_RISK', 'Would-Block: Bad Competitor Feed'),
+        ('VELOCITY_RISK', 'Would-Block: Rapid Price Change'),
+        ('CIRCUIT_RISK', 'Would-Block: Circuit Breaker'),
+        ('MULTI_RISK', 'Would-Block: Multiple Violations'),
+    ]
+    
+    risk_category = models.CharField(
+        max_length=30,
+        choices=RISK_CATEGORIES,
+        help_text="Type of risk that would have been blocked"
+    )
+    
+    hotel = models.ForeignKey(
+        'Hotel',
+        on_delete=models.CASCADE,
+        help_text="Hotel affected"
+    )
+    room_type = models.ForeignKey(
+        'RoomType',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="Room type affected"
+    )
+    
+    # Price context
+    proposed_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Price that would have been blocked"
+    )
+    safe_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Safe fallback price"
+    )
+    
+    # Impact assessment
+    reason = models.TextField(
+        help_text="Why this price would have been blocked"
+    )
+    potential_revenue_impact = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Estimated revenue loss if this booking was blocked"
+    )
+    booking_count_impact = models.IntegerField(
+        default=1,
+        help_text="Estimated bookings that would be affected"
+    )
+    
+    # Severity tracking
+    severity = models.CharField(
+        max_length=20,
+        choices=[
+            ('LOW', 'Low Risk'),
+            ('MEDIUM', 'Medium Risk'),
+            ('HIGH', 'High Risk'),
+            ('CRITICAL', 'Critical Risk'),
+        ],
+        default='MEDIUM',
+        help_text="Risk severity level"
+    )
+    
+    # Metadata
+    metadata_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional context"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['risk_category', '-created_at']),
+            models.Index(fields=['hotel', '-created_at']),
+            models.Index(fields=['severity', '-created_at']),
+        ]
+        verbose_name = "Shadow Risk Event"
+        verbose_name_plural = "Shadow Risk Events"
+    
+    def __str__(self):
+        return f"{self.get_risk_category_display()} - {self.hotel.name} (₹{self.proposed_price})"
+
+
+class ShadowModeEvent(TimeStampedModel):
+    """
+    Shadow Mode Event - Tracks price anomalies detected without enforcement
+    
+    When shadow mode is enabled, detected price anomalies are logged
+    but not enforced. This model stores those events for analysis.
+    """
+    room_type = models.ForeignKey(
+        RoomType,
+        on_delete=models.CASCADE,
+        related_name='shadow_events'
+    )
+    booking = models.ForeignKey(
+        'bookings.Booking',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='shadow_events'
+    )
+    
+    # Price comparison
+    shadow_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Price that would have been enforced in enforcement mode"
+    )
+    actual_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Price actually used"
+    )
+    
+    # Anomaly details
+    anomaly_type = models.CharField(
+        max_length=50,
+        choices=[
+            ('price_too_high', 'Price too high'),
+            ('price_too_low', 'Price too low'),
+            ('capacity_violation', 'Capacity violation'),
+            ('inventory_mismatch', 'Inventory mismatch'),
+        ]
+    )
+    
+    anomaly_severity = models.CharField(
+        max_length=20,
+        choices=[
+            ('low', 'Low'),
+            ('medium', 'Medium'),
+            ('high', 'High'),
+            ('critical', 'Critical'),
+        ],
+        default='medium'
+    )
+    
+    # Context
+    detection_source = models.CharField(
+        max_length=50,
+        choices=[
+            ('ai_model', 'AI Model'),
+            ('rule_engine', 'Rule Engine'),
+            ('manual_review', 'Manual Review'),
+        ],
+        default='ai_model'
+    )
+    
+    confidence_score = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Confidence in anomaly detection (0.0-1.0)"
+    )
+    
+    metadata_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional detection metadata"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['room_type', '-created_at']),
+            models.Index(fields=['anomaly_type', '-created_at']),
+            models.Index(fields=['anomaly_severity', '-created_at']),
+        ]
+        verbose_name = "Shadow Mode Event"
+        verbose_name_plural = "Shadow Mode Events"
+    
+    def __str__(self):
+        return f"{self.get_anomaly_type_display()} - {self.room_type.name} (₹{self.shadow_price} vs ₹{self.actual_price})"
+
+
+class SafetyConfidenceScore(TimeStampedModel):
+    """
+    Safety Confidence Score - Tracks system confidence in enforcement
+    
+    Composite score based on:
+    - Data Quality (90-100 based on event count)
+    - Pattern Recognition (70-100 based on exception patterns)
+    - Risk Coverage (60-100 based on monitored hotels)
+    
+    Overall score >= 85% enables enforcement capability
+    """
+    
+    # Period
+    period_days = models.IntegerField(default=7)
+    
+    # Component scores
+    data_quality_score = models.FloatField(default=0.0)
+    pattern_recognition_score = models.FloatField(default=0.0)
+    risk_coverage_score = models.FloatField(default=0.0)
+    
+    # Overall
+    overall_score = models.FloatField(default=0.0)
+    
+    # Status
+    is_enforcement_ready = models.BooleanField(default=False)
+    
+    # Details
+    event_count = models.IntegerField(default=0)
+    hotel_count = models.IntegerField(default=0)
+    monitored_hotels = models.IntegerField(default=0)
+    
+    # Analysis metadata
+    analysis_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Detailed scoring breakdown"
+    )
+    
+    recommendation = models.TextField(
+        blank=True,
+        help_text="Admin-facing recommendation"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Safety Confidence Score"
+        verbose_name_plural = "Safety Confidence Scores"
+    
+    def __str__(self):
+        status = "READY" if self.is_enforcement_ready else "MONITORING"
+        return f"Confidence {self.overall_score}% - {status}"
+
+
+class EnforcementMode(TimeStampedModel):
+    """
+    Enforcement Mode - Tracks pricing enforcement mode changes
+    
+    Modes:
+    - SHADOW: Detect anomalies but don't enforce
+    - ENFORCEMENT: Apply confidence score and enforce decisions
+    - OFF: Disable pricing controls entirely
+    """
+    
+    MODE_CHOICES = [
+        ('SHADOW', 'Shadow Mode (detect only)'),
+        ('ENFORCEMENT', 'Enforcement Mode (apply rules)'),
+        ('OFF', 'Off (no controls)'),
+    ]
+    
+    mode = models.CharField(
+        max_length=20,
+        choices=MODE_CHOICES,
+        default='SHADOW'
+    )
+    
+    is_active = models.BooleanField(default=True)
+    
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='enforcement_mode_changes'
+    )
+    
+    reason = models.TextField(
+        blank=True,
+        help_text="Why was this mode change made?"
+    )
+    
+    metadata_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional context"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Enforcement Mode"
+        verbose_name_plural = "Enforcement Modes"
+    
+    @classmethod
+    def get_current_mode(cls):
+        """Get the current active enforcement mode"""
+        try:
+            return cls.objects.filter(is_active=True).latest('created_at')
+        except cls.DoesNotExist:
+            # Default to SHADOW mode
+            return cls.objects.create(
+                mode='SHADOW',
+                is_active=True,
+                reason='System initialization'
+            )
+    
+    def __str__(self):
+        return f"{self.get_mode_display()} (set {self.created_at.strftime('%Y-%m-%d %H:%M')})"
+
+
+class PricingException(TimeStampedModel):
+    """
+    Pricing Exception - Tracks pricing violations and rule exceptions
+    
+    Records instances where pricing rules were violated or needed exception handling.
+    Used for pattern analysis and confidence scoring.
+    """
+    
+    room_type = models.ForeignKey(
+        RoomType,
+        on_delete=models.CASCADE,
+        related_name='pricing_exceptions'
+    )
+    
+    booking = models.ForeignKey(
+        'bookings.Booking',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pricing_exceptions'
+    )
+    
+    exception_type = models.CharField(
+        max_length=50,
+        choices=[
+            ('margin_violation', 'Margin below threshold'),
+            ('occupancy_violation', 'Occupancy exceeded'),
+            ('price_gap_violation', 'Price gap too large'),
+            ('competitor_match_failure', 'Competitor match failed'),
+            ('inventory_mismatch', 'Inventory mismatch'),
+        ]
+    )
+    
+    violation_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="The problematic value (price, margin, etc.)"
+    )
+    
+    threshold_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="The expected/allowed threshold"
+    )
+    
+    severity = models.CharField(
+        max_length=20,
+        choices=[
+            ('low', 'Low'),
+            ('medium', 'Medium'),
+            ('high', 'High'),
+        ],
+        default='medium'
+    )
+    
+    is_resolved = models.BooleanField(default=False)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    
+    notes = models.TextField(blank=True)
+    metadata_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional context"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['room_type', '-created_at']),
+            models.Index(fields=['exception_type', '-created_at']),
+            models.Index(fields=['severity', '-created_at']),
+        ]
+        verbose_name = "Pricing Exception"
+        verbose_name_plural = "Pricing Exceptions"
+    
+    def __str__(self):
+        return f"{self.get_exception_type_display()} - {self.room_type.name} ({self.get_severity_display()})"
