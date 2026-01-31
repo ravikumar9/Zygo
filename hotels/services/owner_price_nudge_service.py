@@ -222,6 +222,30 @@ class OwnerPriceNudgeService:
                 competitor_context=competitor_trust,
                 confidence_score=confidence_score
             )
+
+            # Log event for owner mobile surface (event-sourced)
+            SafeQuery.execute(
+                lambda: PricingSafetyEvent.objects.create(
+                    event_type='OWNER_NUDGE_GENERATED',
+                    hotel=room_type.hotel,
+                    room_type=room_type,
+                    observed_price=current_price,
+                    safe_price=suggested_new_price,
+                    floor_price=floor_price,
+                    reason=reasoning,
+                    metadata_json={
+                        'suggested_discount_percent': float(suggested_discount_percent),
+                        'suggested_new_price': float(suggested_new_price),
+                        'duration_minutes': duration_minutes,
+                        'expected_revenue_gain': float(expected_revenue_gain),
+                        'confidence_score': confidence_score,
+                        'risk_level': risk_level,
+                    },
+                    source='system'
+                ),
+                fallback=None,
+                operation_name=f"OwnerNudgeGenerated_{room_type_id}"
+            )
             
             return {
                 'should_nudge': True,
