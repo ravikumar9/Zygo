@@ -73,6 +73,9 @@ class BookingDetailView(LoginRequiredMixin, DetailView):
 def booking_confirmation(request, booking_id):
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
 
+    if booking.check_reservation_timeout():
+        return HttpResponse("Reservation expired", status=400)
+
     pricing = freeze_pricing_for_booking(booking)
 
     return render(
@@ -92,6 +95,9 @@ def booking_confirmation(request, booking_id):
 @login_required
 def payment_page(request, booking_id):
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
+
+    if booking.check_reservation_timeout():
+        return HttpResponse("Reservation expired", status=400)
 
     # ❌ NEVER freeze here
     if booking.final_amount is None:

@@ -1,4 +1,7 @@
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 
 SERVICE_FEE_RATE = Decimal("0.05")
 SERVICE_FEE_CAP = Decimal("500")
@@ -34,12 +37,12 @@ class CorePricing:
         wallet = min(Decimal(wallet_amount or 0), total)
         payable = total - wallet
 
-        print(
-            "[CORE_PRICING] "
-            f"base={base.quantize(Decimal('1'))} "
-            f"fee={service_fee.quantize(Decimal('1'))} "
-            f"gst={gst.quantize(Decimal('1'))} "
-            f"total={total.quantize(Decimal('1'))}"
+        logger.info(
+            "[CORE_PRICING] base=%s fee=%s gst=%s total=%s",
+            base,
+            service_fee,
+            gst,
+            total,
         )
 
         return {
