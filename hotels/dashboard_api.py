@@ -6,6 +6,7 @@ Provides metrics, heatmaps, and enforcement simulation data.
 
 ARCHITECTURE: Event-sourced with service layer
   - Events (ShadowRiskEvent, PricingSafetyEvent) = source of truth
+  - Services (ConfidenceCalculator, etc.) = compute on-demand
   - No derived tables persisted (except EnforcementMode audit log)
   - Future-proof for realtime, streaming, ML
 """
@@ -19,14 +20,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from hotels.models import Hotel, PricingSafetyConfig, EnforcementMode, RoomType
-from hotels.services import (
-    MarginSuggestionService,
-    CompetitorFeedTrustService,
-    RiskAlertService,
-    OwnerPriceNudgeService,
-    OwnerNegotiationService,
-    OwnerMobileControlService,
-)
 
 
 class DashboardPermission(IsAdminUser):
@@ -58,6 +51,7 @@ def dashboard_executive_summary(request):
     if hotel_id:
         hotel = get_object_or_404(Hotel, id=hotel_id)
     
+    summary = RiskExecutiveSummaryBuilder.build(hotel=hotel)
     return Response(summary)
 
 
@@ -86,6 +80,7 @@ def dashboard_confidence_score(request):
     if hotel_id:
         hotel = get_object_or_404(Hotel, id=hotel_id)
     
+    score_data = ConfidenceCalculator.calculate(hotel=hotel)
     return Response(score_data)
 
 
@@ -120,6 +115,7 @@ def dashboard_risk_heatmap(request):
     dimension = request.query_params.get('dimension', 'hotel')
     days = int(request.query_params.get('days', 7))
     
+    heatmap = RiskHeatmapAggregator.build_heatmap(
         dimension=dimension,
         period_days=days
     )
@@ -152,6 +148,7 @@ def dashboard_enforcement_simulation(request):
     if hotel_id:
         hotel = get_object_or_404(Hotel, id=hotel_id)
     
+    simulation = EnforcementSimulationEngine.simulate(hotel=hotel)
     return Response(simulation)
 
 
@@ -206,11 +203,14 @@ def dashboard_enforcement_switch(request):
     
     # HARD RULE: Cannot enable without sufficient confidence
     if action == 'enable':
+        confidence = ConfidenceCalculator.calculate()
         if not confidence['is_enforcement_ready']:
             return Response(
                 {
                     'error': 'Cannot enable enforcement',
+                    'reason': f"Safety confidence {confidence['score']}/100 below minimum {ConfidenceCalculator.MIN_SCORE_FOR_ENFORCEMENT}",
                     'current_score': confidence['score'],
+                    'min_required': ConfidenceCalculator.MIN_SCORE_FOR_ENFORCEMENT,
                     'recommendation': confidence['recommendation'],
                 },
                 status=status.HTTP_403_FORBIDDEN
@@ -265,11 +265,13 @@ def dashboard_current_mode(request):
     current_mode_record = EnforcementMode.get_current_mode()
     current_mode = current_mode_record.mode if current_mode_record else 'SHADOW'
     
+    confidence = ConfidenceCalculator.calculate()
     
     return Response({
         'current_mode': current_mode,
         'confidence_score': confidence['score'],
         'is_enforcement_ready': confidence['is_enforcement_ready'],
+        'min_confidence_required': ConfidenceCalculator.MIN_SCORE_FOR_ENFORCEMENT,
         'confidence_details': confidence,
         'retrieved_at': timezone.now().isoformat(),
     })
@@ -300,6 +302,10 @@ def dashboard_full_status(request):
     current_mode_record = EnforcementMode.get_current_mode()
     current_mode = current_mode_record.mode if current_mode_record else 'SHADOW'
     
+    summary = RiskExecutiveSummaryBuilder.build(hotel=hotel)
+    confidence = ConfidenceCalculator.calculate(hotel=hotel)
+    simulation = EnforcementSimulationEngine.simulate(hotel=hotel)
+    heatmap = RiskHeatmapAggregator.build_heatmap(dimension='hotel', period_days=7)
     
     return Response({
         'current_mode': current_mode,
