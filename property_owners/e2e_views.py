@@ -315,19 +315,19 @@ def admin_property_approval_detail(request, property_id: int):
         prop.save(update_fields=["status", "approved_at"])
         hotel.is_active = True
         hotel.save(update_fields=["is_active"])
-                html = f"""
-                <html><body>
-                <h1>{prop.name}</h1>
-                <p>Status: {prop.status}</p>
-                <button type='button'>Mark as Complete</button>
-                <form method='post'>
-                    <label>approval_reason</label><textarea name='approval_reason'></textarea><br/>
-                    <label>approved_until</label><input name='approved_until'/><br/>
-                    <button type='submit'>Approve Property</button>
-                </form>
-                </body></html>
-                """
-                return HttpResponse(html)
+        html = f"""
+        <html><body>
+        <h1>{prop.name}</h1>
+        <p>Status: {prop.status}</p>
+        <button type='button'>Mark as Complete</button>
+        <form method='post'>
+            <label>approval_reason</label><textarea name='approval_reason'></textarea><br/>
+            <label>approved_until</label><input name='approved_until'/><br/>
+            <button type='submit'>Approve Property</button>
+        </form>
+        </body></html>
+        """
+        return HttpResponse(html)
 
     html = f"""
     <html><body>
