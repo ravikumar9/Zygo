@@ -62,6 +62,10 @@ class Booking(TimeStampedModel):
     
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     paid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    final_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    service_fee_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    gst_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    taxes_total = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
     # Promo code (optional)
     promo_code = models.ForeignKey(

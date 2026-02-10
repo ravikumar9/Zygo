@@ -16,20 +16,31 @@ class CorePricing:
         meal_delta = Decimal(meal_delta or 0)
         nights = max(int(nights), 0)
 
+        # -------- Base (room + meals) --------
         base = (room_price + meal_delta) * nights
 
-        service_fee = min(base * SERVICE_FEE_RATE, SERVICE_FEE_CAP)
+        # -------- Service Fee (ONLY on room base, capped) --------
+        room_base = room_price * nights
+        service_fee = min(room_base * SERVICE_FEE_RATE, SERVICE_FEE_CAP)
 
-        gst_rate = GST_LOW if room_price < GST_THRESHOLD else GST_HIGH
-        gst = service_fee * gst_rate
+        # -------- GST (ONLY on room base, slab on base) --------
+        gst_rate = GST_LOW if room_base < GST_THRESHOLD else GST_HIGH
+        gst = room_base * gst_rate
 
+        # -------- Totals --------
         taxes = service_fee + gst
         total = base + taxes
 
         wallet = min(Decimal(wallet_amount or 0), total)
         payable = total - wallet
 
-        print(f"[CORE_PRICING] base={base} fee={service_fee} gst={gst} total={total}")
+        print(
+            "[CORE_PRICING] "
+            f"base={base.quantize(Decimal('1'))} "
+            f"fee={service_fee.quantize(Decimal('1'))} "
+            f"gst={gst.quantize(Decimal('1'))} "
+            f"total={total.quantize(Decimal('1'))}"
+        )
 
         return {
             "base_amount": base,
