@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import BookingListView, BookingDetailView, my_bookings  # Import classes explicitly
+from .views import BookingListView, BookingDetailView  # Import classes explicitly
 from . import views  # Still import views for other view functions
 from .status_sync import get_booking_status
 from .cancellation_views import refund_preview_api, cancel_booking_with_refund
@@ -8,7 +8,6 @@ from .promo_api import validate_promo_code
 app_name = 'bookings'
 
 urlpatterns = [
-    path('my-bookings/', my_bookings, name='my_bookings'),
     path('', BookingListView.as_view(), name='booking-list'),
     path('<uuid:booking_id>/', BookingDetailView.as_view(), name='booking-detail'),
     path('<uuid:booking_id>/confirm/', views.booking_confirmation, name='booking-confirm'),
